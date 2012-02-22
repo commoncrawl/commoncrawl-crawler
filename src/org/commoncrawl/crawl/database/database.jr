@@ -1,0 +1,797 @@
+include "../../protocol/protocol.jr"
+
+module org.commoncrawl.crawl.database { 
+
+  class CrawlDBState [recordid] { 
+        
+    int   lastCrawlSegmentId = 1;
+    int   lastParseSegmentId = 2;
+    long  dbCookie  = 3;  
+    
+    
+    enum HadoopStatus { 
+
+      IDLE        = 0;
+      GENERATING  = 1;
+      PARSING     = 2;
+      UPDATING    = 3;
+    }    
+      
+    int lastHadoopStatus = 4;
+    int nextCrawlerId = 5;
+    //next available sequential list id
+    int lastUsedListId = 6;
+    // last generated list Id 
+    int lastGeneratedListId = 7;  
+    // active generated list id 
+    int activeGeneratedListId = 8;
+    // active list ids 
+    vector<int> activeListIdSet = 9;
+    
+    enum CrawlMasterState { 
+      
+      IDLE           = 0;
+      ACTIVE         = 1;
+      CHECKPOINTING  = 2;
+      CHECKPOINTED   = 3;
+      GENERATING     = 4;
+      GENERATED      = 5;
+      READY_TO_DISTRIBUTE = 6;
+      DISTRIBUTING   = 7;
+      DISTRIBUTED    = 8;
+    }
+    // crawl master state 
+    int crawlMasterState = 10;
+    int crawlerCrawlNumber = 11;
+    int historyServerCrawlNumber = 12;
+    int historyServerCheckpointState = 13;
+  }
+  
+  class CrawlDBSegment [recordid] { 
+    
+    enum Flags { 
+    
+      FLAG_DatumHasLogFilePath = 1;
+      FLAG_LinkDBGenerated = 2;
+      FLAG_LinkDBGenerated2 = 4;
+      FLAG_LinkDBGenerated3 = 8;
+      FLAG_LinkDBGenerated4 = 16;
+      FLAG_LinkDBGenerated5 = 32;
+      FLAG_ParseSegmentInfoGenerated = 64;
+      FLAG_ArcFileGenerated = 128;
+      FLAG_ArcFileGenerated2 = 256;
+      FLAG_Scanned = 512;
+      FLAG_Scanned2 = 1024;
+      FLAG_DedupeGenerated = 2048;
+      FLAG_MergeMetadataGenerated = 4096;
+    }
+      
+    [key] int segmentId = 1; 
+
+    
+    enum Type { 
+      Crawl = 1;
+      Parse = 2;
+    }
+    
+    int segmentType =2;
+    
+    enum Status { 
+      BAD         = 0;
+      GENERATING  = 1;
+      GENERATED   = 2;
+      PENDING     = 6;
+      PARSING     = 7;
+      PARSED      = 8;
+      MERGED      = 9;
+      TRANSFERRING = 10;
+      TRANSFERRED = 11;
+    }
+    
+    vector<ustring> crawlerList =3;
+    int       segmentStatus = 4;
+    long      statusChangeTime = 5;
+    boolean   segmentFailed = 6;
+    ustring   segmentFailureReason = 7;
+    int       flags = 8;
+    [key] int       listId = 9;
+  }
+  
+  
+  class CrawlerState [recordid] { 
+  
+    [key] ustring hostName    = 1;
+    boolean       online      = 2;
+    int           crawlerId   = 3;
+    vector<long>   activeCrawlSegments = 6;
+    vector<long>   completedCrawlSegments = 7;
+    
+  }
+  
+  class CrawlDBContentItemKey { 
+    [key] int   segmentId = 1;
+          byte  crawlerId = 2;
+          long  timestamp = 3;
+          long  pos = 4;
+  }
+  
+  class CrawlDBContentItem { 
+  
+    [key] ustring url = 1;
+    int           contentSegmentId = 2;
+    ustring       contentLogFilePath = 3;
+    long          contentLogFilePos = 4;
+	ustring		  signature = 5;
+  }
+  
+  class CrawlDBCompositeStatsKey { 
+	
+	enum KeyType { 
+	
+		CONTENTSIZE = 1;
+		CRAWLED = 2;
+		UPLOADED = 3;
+		MIME_TYPE = 4;
+		CONTENT_SEGMENT =5;
+		DOMAIN =6;
+		SIGNATURE=7;
+		SEGMENTDETAIL=8;
+		
+		LAST = 8;
+	}
+	
+	[key] int keyType = 1;
+	ustring secondaryId = 2;
+	long	sumValue=4;
+	ustring metadata =5;
+  }
+  
+  class CrawlDBStatsValue { 
+	long value = 1;
+	ustring metadata = 2; 
+  }
+  
+  class SegmentGeneratorItem { 
+  	[key] ustring url = 1;
+  	long urlFP = 2;
+    float  pageRank =3;
+    long domainFP = 4;
+    long rootDomainFP =5;
+    buffer urlAsBuffer = 6;
+    byte  modifiedStatus =7;
+    long  lastModifiedTime=8;
+    ustring etag=9;
+  }
+  
+  class SegmentGeneratorItemBundle { 
+	[key] long hostFP = 1;
+	ustring hostName = 2;
+	vector<SegmentGeneratorItem> urls = 3;
+  int hostIPAddressHint = 4;
+  boolean isSuperHost = 5;
+  float   maxPageRank = 6;
+  }
+  
+  class SegmentGeneratorHostKey { 
+	[key] long hostFP = 1;
+	ustring hostName = 2;
+  }
+
+  class SegmentGeneratorBundleKey { 
+    // domain this bundle is associated with 
+    long domainFP = 1;
+    // crawler this domain is associated with 
+    int crawlerId = 2;
+    // the bundle's primary record type 
+    [key] int recordType = 3;
+    // the bundle's relative id 
+    [key] int bundleId = 4;
+    // average page rank of items in bundle
+    float avgPageRank =5;
+  }
+  
+  class SegmentGeneratorSegmentKey { 
+	[key] int	 crawlerId = 1;
+	int  segmentId = 2;
+	SegmentGeneratorHostKey hostKey =3;
+  }
+
+
+  class CrawlDBDeDuperKey { 
+	enum KeyType { 
+		URL_KEY = 1;
+		SIGNATURE_KEY = 2;
+	}
+	
+	int keyType = 1;
+	[key] ustring urlKeyValue = 2;
+  buffer signatureKeyValue = 3;
+  }
+  
+  class CrawlDBDeDuperValue { 
+	[key] ustring url = 1;
+	buffer datum = 2;
+  }
+  
+  class CrawlDBLinkScores { 
+    vector<float> scores = 1;
+  }
+  
+  class CrawlDBMergeValue { 
+    buffer datumValue = 1;
+    CrawlDBLinkScores multiScoreValue = 2;
+    float singleScore = 3;
+  }
+  
+ 
+  class LinkData { 
+    int urlHash = 1;  
+    int outlinkCount = 2;
+    buffer outlinks = 3;
+    float pageRank = 4;
+  }
+  
+  class Outlinks { 
+    vector<ustring> links = 1;
+  }
+  
+  class CrawlDBDomainReportItem { 
+    int flags = 1;
+    ustring urlValue = 2;
+  }
+  
+  class PurgeItem { 
+    
+    int		contentFileSegNo = 3;
+    ustring contentFileNameAndPos = 4;
+    int		parseDataSegNo = 5;
+
+    int		crawlNumber = 11;
+    int		parseNumber = 12;
+    int		uploadNumber = 13;
+
+    long	arcFileDate = 14;
+    byte	arcFileIndex = 15;
+    int   arcFileOffset  = 17;
+    int   arcFileSize    = 18;
+    int   exclusionReason = 19;
+    ustring domainExclusionReason = 20;
+    
+    
+  }
+  
+  class DomainKey { 
+    [key] ustring name = 1;
+    long  modTime = 2;
+  }
+  
+  class DomainMetadata { 
+  
+    long id         = 1;
+    long modTime    = 2;
+    int urlCount    = 3;
+    int yahooURLCount = 4;
+    int crawlCount  = 5; 
+    int uploadCount = 6; 
+    int dupCount    = 8; 
+    ustring status  = 9;  
+    ustring robots  = 10;
+    ustring charset = 11;
+    ustring cname   = 12;
+    int     ipAddress = 13;
+    long    ipAddressTTL = 14;
+    int    metadataCount = 16;
+    int    blackListedCount = 19;
+    int    purgeCandidateCount = 20;
+    vector<int> ipAddressList = 22;
+    int    subDomainCount = 23;
+    boolean isBlackListed = 24;
+    int    assignedCrawlerIdx=25;
+    int    urlsWithZeroPageRank=26;
+    int    urlsWithBaselinePageRank=27;
+    int    urlsWithAboveBaselinePageRank=28;
+    int    urlsWith200Result=29;
+    int    urlsWithRedirectResult=30;
+    int    urlsWith400Result=31;
+    int    urlsWith500Result=32;
+    int    urlsRobotsExcluded=33;
+  }
+  
+  class DomainMetadataMinimal { 
+    int   urlCount = 1;
+    int   prAboveBaseline = 2;
+    ustring highestPRItemURL = 3;
+    float   highestPRItemRank  = 4;
+    ustring secondHighestPRItemURL = 5;
+    float   secondHighestPRItemRank  = 6;
+    boolean useWWWPrefix = 7;
+    ustring domainName = 8;
+  }
+  
+  class ShardStats { 
+  
+    /** Page was not fetched yet. */
+    int unfetchedCount = 1;
+    /** Page was successfully fetched. */
+    int fetchedCount   = 2;
+    /** Page no longer exists. */
+    int goneCount   = 3;
+    /** Page temporarily redirects to other page. */
+    int redirTempCount =4;
+    /** Page permanently redirects to other page. */
+    int redirPermCount =5; 
+    /** Page was successfully fetched and found not modified. */
+    int unmodifiedCount =6;
+    /** Items with Arc File Content */
+    int itemsWithArcFilesContent =7;
+    /** items that have a last fetch time */
+    int itemsWithLastFetchTime = 8;
+    /** items that have an http 200 status */
+    int itemsWithHTTP200Status = 9;
+    /** had http date */
+    int itemsWithHttpDate = 10;
+    /** items with last mod time */
+    int itemsWithlastModifiedTime = 11;
+    /** items with etag */
+    int itemsWithETag = 12;
+    /** Fetching was successful. */
+    int had_fetch_status_success = 20;
+    /** Fetching unsuccessful, needs to be retried (transient errors). */
+    int had_status_fetch_retry = 21;
+    /** Fetching temporarily redirected to other page. */
+    int had_status_fetch_redir_temp = 22;
+    /** Fetching permanently redirected to other page. */
+    int had_status_fetch_redir_perm = 23;
+    /** Fetching unsuccessful - page is gone. */
+    int had_status_fetch_gone = 24;
+    /** Fetching successful - page is not modified. */
+    int had_status_fetch_notmodified = 25;
+    /** had unknown status **/
+    int had_unknown_status = 26;
+
+  }
+  
+    class RobotsRecord { 
+    buffer  robotsData = 1;
+    buffer  md5Hash = 2;
+    ustring domain = 3;
+    int     hitCount = 4;
+    
+    enum RobotsParseResult { 
+      ROBOTS_VALID = 1;
+      ROBOTS_TEXT_DECODE_FAILED = 2;
+      ROBOTS_PARSE_FAILED = 3;
+    }
+    
+    byte robotsParseStatus = 5; 
+    ustring rootDomain =6;
+    long timestamp=7;
+    vector<buffer> patterns =8;
+  }
+  
+  // dns detail record 
+  class DNSDetailRecord { 
+    enum Type { 
+      SUCCEESS = 0;
+      FAILURE  = 1;
+    }
+    
+    byte type = 1;
+    long timestamp = 2;
+    
+    enum FailureCode { 
+      SERVFAIL = 0;
+      NXDOMAIN = 1;
+      NOERROR = 2;
+    }
+    
+    byte failureCode = 3;
+    // in the case of success, the ip addresses associated with this domain 
+    vector<int> ipList = 4;
+    // only valid during map-reduce pass
+    ustring domain = 5;
+    // final pattern 
+    buffer  pattern = 6;
+  }
+  
+  // top level dns record 
+  class DNSRecord { 
+    // detail record 
+    vector<DNSDetailRecord> details = 1;
+  }
+  
+  
+  class CrawlDBJoinKey { 
+    int recordType = 1;
+    [key] ustring domainName = 2;
+    ustring rootDomainName = 3;
+    boolean isSuperDomain = 4;
+    boolean alreadyCrawled = 5;
+    ustring url = 6;
+    float pageRank =7;
+    org.commoncrawl.protocol.CrawlURLMetadata metadata=8;
+  }
+  
+  class CrawlDBJoinValue { 
+    enum RecordType { 
+      SpamDomain_Value = 1;
+      DomainMetadata_Value = 2;
+      RobotsRecord_Value = 3;
+      DNSRecord_Value=4;
+      Datum_Value = 5;
+      URLMetadata_Value =6; 
+    }
+    
+    int recordType = 1;
+    ustring urlValue = 2;
+    buffer recordData = 3;
+    DomainMetadata domainMetadata = 4;
+    org.commoncrawl.protocol.CrawlDatumAndMetadata datumAndMetadata =5;
+    int     flags = 6;
+    
+    enum Flag { 
+      IsSuperDomain = 1;
+    }
+
+    long sortValue =7;
+    
+    RobotsRecord robotsRecord = 8;
+    DNSRecord    dnsRecord = 9;
+  }
+  
+  class PageRankJoinValue { 
+    ustring url = 1;
+    int     rank = 2;
+  }
+  
+  class CrawlSegmentStatsRecord { 
+    
+    ustring crawlerId     =1;
+    int     recordType    =2;
+    int     subRecordType =3;
+    int     count         =4;
+  }
+  
+  class RedirectRecord { 
+    
+    [key] ustring crawler    = 1;
+    [key] long    timestamp  = 2;
+    [key] long    lineNumber = 3;
+    ustring redirectedURL    = 4;
+  }
+  
+  class RedirectRecordV2 { 
+    
+    enum Type { 
+      ParseSegmentRecord = 1;
+      RedirectInfoRecord = 2;
+      MergedRecord = 3;
+    }
+    
+    int     type           = 1;
+    ustring redirectURL    = 2;
+    int     segmentId      = 3;
+    ustring originalURL    = 4;
+  }
+  
+  class BulkLoadMergeValue { 
+    enum Type { 
+      BulkLoadURL = 1;
+      MetadataRecord = 2;
+    }
+    
+    byte  type = 1;
+    vector<org.commoncrawl.protocol.ArchiveInfo> archiveInfo = 2;
+    ustring originalURL = 3;
+  }
+  
+  class CompressedHTMLStream { 
+    buffer data = 1;
+  }
+  
+  class LinkDataRecord { 
+    enum Type { 
+      RedirectRecord = 1;
+      VersionRecord  = 2;
+      LinkListRecord  = 10;
+      URLFPRecord    = 11;
+    }
+    
+    [key]  int   type = 1;
+           org.commoncrawl.protocol.URLFPV2 urlfp = 2;
+           buffer linkList = 4;
+           int    parseSegNo = 5;
+           ustring url = 6;
+           org.commoncrawl.protocol.CrawlDatumAndMetadata datumAndMetadata =7;
+           vint  dataFilePartNo = 8; // part number
+           vlong dataFileOffset = 9;
+           org.commoncrawl.protocol.InlinkData inlinkData = 10;
+           vlong timestamp = 11;
+  }
+  
+  class LinkDataMergeKey[nodirty] { 
+  
+    enum Type { 
+      CrawlDatumRecord = 1;
+      MergeDBRecord    = 2;
+      LinkDBRecord     = 3;
+      InLinkData       = 4;
+    }
+  
+    [key] long  domainHash = 1;
+    [key] long  urlfp      = 2;
+    [key] int   recordType  = 3;
+  }
+  
+  class InverseLinkDataMergeKey[nodirty] { 
+    // the outlink target 
+    org.commoncrawl.protocol.URLFPV2 targetFP = 1;
+    // the originating source 
+    [key] org.commoncrawl.protocol.URLFPV2 source = 2;
+  }
+  
+  class ProxyDataScanItem { 
+    enum Type { 
+      ProxyListRecord =1;
+      CacheItemDataRecord = 2;
+      DNSRecord = 3;
+    }
+    
+    int     type = 1;
+    int     ipAddress = 2;
+    ustring cname =3;
+    org.commoncrawl.protocol.CacheItem cacheItem =4;
+    ustring realName = 5;
+    ustring path = 6;
+  }
+    
+    
+  class RobotsInfoRecord { 
+    enum RobotsFetchResult { 
+      FailedWithException = 1;
+      FailedWithHTMLContentType = 2;
+      Succcess = 3;
+    }
+    
+    int fetchResult = 1;
+    ustring exceptionResult = 2;
+    int httpResult = 3;
+    ustring contentType = 4;
+    buffer  robotsContent = 5;
+    ustring serverName = 6;
+  }
+  
+  class ArcFileContentItem { 
+    ustring url = 1;
+    buffer  content = 2;
+    long    simhash = 3;
+    ustring contentType = 4;
+    int     parseSegmentId = 5;
+    buffer  md5Hash = 6;
+   }
+  
+  class BlackListSimilarityMatch { 
+    ustring document1URL =1;
+    ustring document1Locaiton =2;
+    ustring document2URL =3;
+    ustring document2Location =4;
+    int hammingDistance =5;
+    float jsc = 6;
+  }
+  
+  class BlackListURLPattern { 
+    [key] ustring pattern = 1;
+    enum Status { 
+      unmodified = 0;
+      blacklist = 1;
+    }
+    int status = 2;
+    int totalMatchCount = 3;
+    float avgJSC = 4;
+    vector<BlackListSimilarityMatch> matches = 5;
+  }
+    
+    
+  class BlackListRecord [recordid] { 
+    [key] ustring domainName = 1;
+    enum Status { 
+      unmodified = 0;
+      modified   = 1;
+      blacklisted = 2;
+     }
+     int status = 2;
+     int urlCount = 3;
+     int logFileCount = 4;
+     vector<BlackListURLPattern> patterns = 5;
+  }
+  
+  class ArcFileStatsCheckRecord { 
+    enum RecordType { 
+      MatchRecord = 1;
+      StatsRecord = 2;
+    }
+    int recordType = 1;
+    int logFileCount = 2;
+    int documentCount = 3;
+    vector<BlackListURLPattern> patterns=4;
+  }
+  
+  class SubDomainInfo { 
+    [key] ustring subDomainName = 1;
+    int count = 2;
+  }
+  
+  class DomainStatsRecord { 
+    enum RecordType { 
+      RecrodType_PageRankRecord = 1;
+      RecordType_SuccessLogRecord = 2;
+      RecordType_FailureLogRecord = 3;
+      RecordType_FinalRecord = 10;
+    }
+    int       recordType  = 1;
+    enum Flags { 
+      HasDNSData = 1;
+      HasRobotsData = 2;
+      HasContentData = 4;
+    }
+    int       flags  = 2;
+    org.commoncrawl.protocol.CacheItem contentItem = 3;
+    org.commoncrawl.protocol.CacheItem robotsItem  = 4;
+    int       ipAddress = 5;
+    ustring   cname     = 6;  
+    ustring   realName  = 7;
+    float     pageRank    = 10;
+    long      modTime = 11;
+    
+    ustring   robotsGETResult = 20;
+    ustring   robotsParseReuslt = 21;
+    boolean   excludesCCBot   = 22;
+    boolean   excludesGoogleBot  = 23;
+    boolean   hasSitemapURL = 24;
+    ustring   robotsMD5 = 26;
+    boolean   excludesOthers = 27;
+
+
+    ustring   contentGETResult = 30;
+    ustring   contentType      = 31;
+    ustring   server           = 32;
+    ustring   charset          = 33;
+    boolean   isGZIPEncoded    = 34;
+    boolean   hasAdSense       = 35;
+    boolean   hasFlash         = 36;
+    boolean   hasFacebookConnect = 37;
+    boolean   hasRSSFeed       = 38;
+    boolean   hasSnapPreview   = 39;
+    boolean   hasComScoreBeacon = 40;
+    boolean   hasQuantcastBeacon = 41;
+    boolean   hasGoogleAnalytics = 42;
+    boolean   hasGoogleSiteVerification = 43;
+    boolean   usesGoogleFeedProxy = 44;
+    boolean   hasTwitterURL = 45;
+    boolean   hasFacebookURL = 46;
+    boolean   hasCCLicense = 47;
+   }
+   
+   class PageRankJoinRecord {
+   
+    enum Type { 
+      DomainRecord = 1;
+      PageRankRecord = 2;
+    }
+    
+    int     type      = 1; 
+    float   pageRank  = 2;
+    DomainStatsRecord domainStatsRecord = 3;
+    ustring originalDomainName = 4;
+   } 
+   
+   
+   class ContentMatchRecord {
+   
+    ustring url1 = 1;
+    ustring url2 = 2;
+    int hammingDistnace = 3;
+    float jsc = 4;
+    
+   }
+   
+   class PatternMatchDetails[recordid] { 
+    ustring regEx = 1; 
+    vector<ustring> urls = 2;
+    vector<ContentMatchRecord> contentMatchRecords = 3;
+    boolean outputPattern = 4;
+    float avgJSC = 5;
+    enum Status {
+      UnModified = 0; 
+      Apply = 1;
+      Ignore = 2;
+      SessionID=3;
+    }
+    int status = 6;
+    ustring modifiedRegEx = 7;
+    boolean patternIsBad = 8;
+    int flags = 9;
+    enum Flags { 
+      Flag_IsFromOldDatabase = 1;
+    }
+  }
+  
+  class DomainPatternMatchDetails { 
+    int totalCandidateCount = 1;
+    int totalQueryURLCount = 2;
+    vector<PatternMatchDetails> detailRecords = 3;
+    ustring domainName = 4;
+    int status = 5;
+    enum Status { 
+      Unknown = 0;
+      Blocked = 1;
+    }
+  } 
+  
+  class ProxyCrawlHistoryItem { 
+    int crawlStatus = 1;
+    int httpResultCode = 2;
+    ustring originalURL = 3;
+    // 0 for success, otherwise as specified in CrawlURL.FailureReason
+    int redirectStatus = 4;
+    int redirectHttpResult = 5;
+    ustring redirectURL = 6;
+    long lastModifiedTime =7;
+  }
+  
+  class PRTesterData { 
+    ustring seedDataPath = 1;
+    [key] int     nodeIdx = 2;
+    int     nodeCount = 3;
+    ustring  intermediateOutputPath=4;
+  }
+  
+  class Entity { 
+    [key] ustring domain = 1;
+    [key] ustring type   = 2;
+    [key] ustring id     = 3;
+    vector<ustring> urls = 4;
+    
+  }
+  
+  class HitsByMonth {
+      [key] int year = 1;
+      [key] int month = 2;
+      int hitCount=3;
+      int flags =4;
+
+  }
+  
+  class PostFrequencyInfo { 
+    ustring blogPath = 1;
+    int avgPostsPerMonth = 2;
+    int minPostsPerMonth = 3;
+    int maxPostsPerMonth = 4;
+    int monthsWithPosts  = 5;
+    int lastYearWithPosts = 6;
+    int flags = 7;
+
+    enum Flags { 
+      HAS_INDEX_HTML_AFTER_DATE = 1;
+      HAS_YEAR_MONTH_SLASH_INDEX = 2;
+    }    
+  }
+  
+  class BlogGeneratorInfo { 
+    ustring blogPath = 1;
+    ustring generatorId = 2;
+  }
+  
+  class DomainDNSFailureStats { 
+      int nxDomainCount   =1;
+      int serverFailCount =2;
+      int noErrorCount    =3;
+      int otherErrorCount =4;
+      int totalFailures   =5;
+  }
+  
+  class TypeAndData { 
+    ustring typeId = 1;
+    buffer  data   = 2;
+  }
+}
