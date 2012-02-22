@@ -1,0 +1,63 @@
+/*
+ * Copyright 2008 - CommonCrawl Foundation
+ * 
+ * CommonCrawl licenses this file to you under the Apache License, 
+ * Version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ 
+  Data Structures used by the Crawler Service 
+  
+  @author rana 
+
+*/
+module org.commoncrawl.crawl.crawler {
+
+  class CrawlerState [recordid] { 
+
+    int   crawlerId = 1;  
+    long  lastDBCookieValue = 2;
+    vector<int> activeListIds = 3;
+    int   currentCrawlNumber = 4;
+  }
+  
+  
+  class CrawlTargetHTTPData { 
+	ustring headers = 1;
+	int     resultCode = 2;
+	int		serverIP = 3;
+  long  serverIPTTL =4;
+  }
+  
+  class PersistentCrawlTarget { 
+  
+  	long     urlFP =1;
+  	ustring  url =2;
+  	ustring	 redirectURL = 3;
+  	buffer   crawlDatum = 4; 
+  	long     hostFP = 5;
+  	int      hostIPAddress = 6;
+  	long     hostIPTTL =7;
+  	ustring  hostCName = 8;
+  	byte     retryCount = 9;
+  	byte     redirectCount = 10;
+  	byte     flags = 11;
+  	int		   segmentId=12;
+  
+  	CrawlTargetHTTPData activeRequestData = 13;
+  	CrawlTargetHTTPData originalRequestData = 14;
+    long    lastModifiedTime = 15;
+    ustring etag = 16;
+    
+    ustring crawlDirectiveJSON = 17;  
+  
+  }
+
+}

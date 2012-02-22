@@ -1,0 +1,111 @@
+/**
+ * Copyright 2008 - CommonCrawl Foundation
+ * 
+ * CommonCrawl licenses this file to you under the Apache License, 
+ * Version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+include "../../../protocol/protocol.jr"
+
+module org.commoncrawl.crawl.crawler.listcrawler {
+
+  class DiskCacheItem {
+    ustring url = 1;
+    long fetchTime = 2;
+    int responseCode = 3;
+    ustring responseDesc = 4;
+    // parsed header items ... 
+    vector<org.commoncrawl.protocol.shared.ArcFileHeaderItem> headerItems =5;
+    // content (if available)
+    buffer   content =6;
+  }
+
+  class CrawlListMetadata { 
+    int urlCount = 1;
+    int http200Count = 3;
+    int http301Count = 4;
+    int http403Count = 5;
+    int http404Count = 6;
+    int http500Count = 7;
+    int httpOtherCount = 8;
+    int RobotsExcludedCount = 9;
+    int TimeoutErrorCount = 10;
+    int IOExceptionCount = 11;
+    int DNSErrorCount = 12;
+    int OtherErrorCount = 13;
+    
+    int redirectHttp200Count = 23;
+    int redirectHttp301Count = 24;
+    int redirectHttp403Count = 25;
+    int redirectHttp404Count = 26;
+    int redirectHttp500Count = 27;
+    int redirectHttpOtherCount = 28;
+    int redirectRobotsExcludedCount = 29;
+    int redirectTimeoutErrorCount = 30;
+    int redirectIOExceptionCount = 31;
+    int redirectInCacheCount = 32;
+    int redirectOtherErrorCount = 33;
+    
+    
+    enum Flags { 
+      Flag_HasSubDomainMetadata = 1;
+    }
+    
+    int flags = 34;
+    
+    
+    [transient] long subDomainDataOffset = 35;
+    
+    long firstRecordOffset = 36;
+    long lastRecordOffset  = 37;
+    ustring domainName = 38;
+    long    domainHash = 39;
+     
+    enum Constants { 
+      HeaderDataSize = 5;
+      FixedDataSize = 400;
+    }
+    // version field 
+    int version = 40;
+    // refresh interval in seconds
+    int refreshInterval = 41;
+    int queuedItemCount = 42;
+  }
+  
+  class CrawlListDomainItem { 
+    ustring domainName = 1;
+    int     urlCount = 2;
+    int     urlsCrawled = 3;
+    int     http200Count = 4;
+    int     errorCount = 5;
+    int     robotsExcludedCount = 6;
+    int     inCacheItemsCount = 7;
+    long    firstItemOffset = 8;
+    long    lastItemOffset = 9;
+    int     hashCode = 10;
+    long    listId = 11;
+    ustring listName = 12;
+    int     queuedCount = 13;
+  }
+    
+  
+  class CrawlListDatabaseRecord [recordid] { 
+    ustring listName = 1;
+    ustring customerName = 2;
+    ustring sourceFileName = 3;
+    ustring tempFileName = 4;
+    long    listId = 5;
+    int     refreshInterval = 6;
+  }
+}
+    
+        

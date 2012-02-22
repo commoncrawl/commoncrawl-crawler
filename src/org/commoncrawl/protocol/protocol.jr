@@ -1,0 +1,1065 @@
+/**
+ * Copyright 2008 - CommonCrawl Foundation
+ * 
+ * CommonCrawl licenses this file to you under the Apache License, 
+ * Version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ 
+  Internal Data Structures used by the CC Code 
+  @author rana
+  
+ */
+ 
+include "./shared/protocol.jr"
+
+module org.commoncrawl.protocol {
+
+  class URLFP [nodirty] { 
+    
+    // the hash of the fully qualified domain name
+    [key] vint   domainHash = 1;
+    // the 64bit fingerprint of the normalized (vs. canonicalized) url 
+    [key] vlong  urlHash    = 2;
+    // the hash of the root domain name (may be same as sub domain hash)
+    vint rootDomainHash     = 3;
+    // optional parse segment id 
+    vint parseSegmentId    = 4;
+    // optional flags 
+    vint flags = 5;
+    // link count (transient variable)
+    [transient] int linkCount =6;
+    // intra domain link count
+    //[transient] int intraDomainLinkCount = 7;
+    // timestamp
+    vlong timestamp = 8;
+    
+    
+    enum Flag { 
+      // this link source is a redirect
+      IsRedirect = 1;
+      // is intradomain link
+      IsIntraDomainLink  = 2;
+    }
+  }
+  
+  
+  class URLFPV2  { 
+    [key] vlong domainHash = 1;
+    [key] vlong urlHash = 2;
+    vlong rootDomainHash = 3;
+    // optional flags 
+    vint flags = 4;
+    // timestamp
+    vint timestampInSeconds = 5;
+    // optional parse segment id 
+    vint parseSegmentId    = 6;
+   
+    enum Flag { 
+      // this link source is a redirect
+      IsRedirect = 1;
+      // is intradomain link
+      IsIntraDomainLink  = 2;
+    }
+           
+  }
+ 
+  class URLHashAndText [nodirty] { 
+    vlong     urlHash = 1;
+    ustring   urlText = 2;
+  }
+  
+  class CompressedOutlink  [nodirty] { 
+        
+    byte  flags      =1;
+    URLFP outlinkId  =2;
+  }
+  
+  class CompressedOutlinkList [nodirty]  { 
+    vector<URLFP> outlinks = 1;
+  }
+  
+  class CompressedInlinkList [nodirty]  { 
+    buffer inlinks = 1;
+  }
+
+  class InlinkData { 
+    // record type 
+    enum RecordType { 
+      LinkListRecord  = 1;
+      SingleURLFPRecord = 2;
+      IntraDomainLinkCountRecord = 3;
+    }
+    byte recordType = 1;
+    
+    // we only track external domain links, and store them in a compressed list
+    buffer inlinks = 2;
+    // and we keep a count of external domain inlinks here
+    vint   externalDomainLinkCount = 3;
+    // we count the number of intra domain inlinks
+    vint   intraDomainLinkCount = 4;
+    // optional single urlfp record 
+    URLFP combinerURLFP = 5;
+  }
+  
+
+  class Outlink { 
+  
+    enum Type { 
+      
+      HREF  = 1;
+      FRAME = 2;
+      JAVASCRIPT = 3;
+      META_REFRESH = 4;
+    }
+    
+    byte      anchorType =1;
+
+    enum Flags { 
+      NoFollow = 1;
+    }
+    
+    byte      flags      =2;
+    ustring   url        =3;
+    ustring   text       =4;
+  }
+  
+  // data structure describing the location of 
+  // a document within the s3 document cache
+  
+  class ArchiveInfo { 
+    vlong arcfileDate    = 1; // date arc file was generated (used to construct arc file name)
+    vint  arcfileIndex   = 2; // part number of arc file (used to construct arc file name) 
+    vint  arcfileOffset  = 3; // offset into the arc file where document data resides 
+    vint  compressedSize = 4; // compressed size of document data     
+    vint  crawlNumber    = 5; // used to identify the folder (bucket) in which referenced arc files resides
+    vint  documentVersion = 6;
+    vint  parseSegmentId  = 7;
+    buffer signature = 8; // signature of last uploaded item
+    vlong simhash = 9;
+    ustring cacheItemSrc = 10;// only valid when imported via cache 
+  }
+  
+  // tuple associating a parse segment with 
+  // a document version 
+  class ParseSegmentInfo { 
+    vint  crawlNumber    = 1;  // crawl number 
+    vint  documentVersion = 2; // doc version 
+    vint  parseSegmentId = 3;  // segment id 
+    byte  domStreamFilePartNo = 4; // part number
+    vlong domStreamOffset = 5;
+    vint  domStreamSize = 6;
+    vint  parseDataStreamFilePartNo = 7; // part number
+    vlong parseDataStreamOffset = 8;
+    
+  }
+  
+  class CrawlURLMetadata { 
+
+    [key] long    urlFP   = 1;
+    long	hostFP =2;
+    int		contentFileSegNo = 3;
+    ustring contentFileNameAndPos = 4;
+    int		parseDataSegNo = 5;
+    ustring headers = 6;
+    ustring signature = 7;
+    int		serverIP = 8;
+    long	lastFetchTimestamp = 9;
+    long	lastFetchSize = 10;
+    int		crawlNumber = 11;
+    int		parseNumber = 12;
+    int		uploadNumber = 13;
+    long	arcFileDate = 14;
+    byte	arcFileIndex = 15;
+    
+    enum Flags { 
+      Flag_ContentDuplicated = 1;
+      Flag_IsWikipediaURL = 2;
+      Flag_IsPurgeCandidate = 4;
+      Flag_IsBlackListed    = 8;
+      Flag_IsMarkedAsGone   = 16;
+      Flag_IsUploadCandidate = 32;
+      // this url was discovered in a sitemap 
+      Flag_InSitemap = 64;
+    }
+    
+    int		flags = 16;
+    int   arcFileOffset  = 17;
+    int   arcFileSize    = 18;
+    ustring contentType = 19;
+    ustring urlText = 20;
+    
+    enum BlackListReason { 
+      InSpamDomainList = 1;
+      DomainMetadataStatus = 2;
+      DomainURLCountVSYahooCount = 3;      
+    }
+    
+    int     blacklListReason = 21;
+    ustring domainExclusionReason = 22;  
+    ustring arcFileName = 23;
+    int     contentLength = 24;
+    long    superDomainId = 25;
+    long    pageRankTimestamp = 27;
+    float   pageRank = 28;
+    vlong   linkDBTimestamp = 29;
+    vint    linkDBFileNo = 30;
+    vlong   linkDBOffset = 31;
+
+    vlong   inverseDBTimestamp = 32;
+    vint    inverseDBFileNo = 33;
+    vlong   inverseDBOffset = 34;
+    
+    vint    linkDBSegmentNo = 35; 
+    // number of inlinks from same domain    
+    vint    inverseDBIntraDomainInLinkCount = 36;
+    // number of inlinks from outside of domain
+    vint    inverseDBExtraDomainInLinkCount = 37;
+        
+    // http result information 
+    enum HTTPResponseFlags{ 
+      HEADER_MISSING = 1;
+      VERSION_MISSING = 2;
+      VERSION_0_9 = 4;
+      VERSION_1_0 = 8;
+      VERSION_1_1 = 16;
+      ENCODED_IS_GZIP = 32;
+    }
+    byte    httpResponseFlags = 40;
+    vint    httpResultCode = 41;
+    ustring charset=42;
+    vint    httpContentLength=43;
+    vint    downloadedContentLength=44;
+    
+    // cache information 
+    vlong   httpDate = 50;
+    vlong   lastModifiedTime = 51;
+    ustring eTag = 52;
+    vlong   maxAge = 53;
+    vlong   expires = 54;
+    vlong   age  = 55;
+    
+    enum CacheControlFlags { 
+      
+      NO_CACHE = 1;
+      NO_STORE = 2;
+      VARY = 4;
+      MUST_REVALIDATE= 8;
+      PRIVATE = 16;
+    }
+    
+    byte    cacheControlFlags = 56; 
+    byte    nutchProtocolStatus = 57;
+    float   pageRankValueOld=58;
+    float   boostPageRankValue=59;
+    vector<ArchiveInfo> archiveInfo = 60;       // list of arc files where this document can be located
+    vector<ParseSegmentInfo> parseSegmentInfo = 61;  // list of parse segments where this document can be found 
+    vint    lastDocumentVersion = 62;           // incremented with every version of this document
+    
+    enum SitemapChangeFrequency { 
+      ALWAYS = 0;
+      HOURLY = 1;
+      DAILY = 2;
+      WEEKLY = 3;
+      MONTHLY = 4;
+      YEARLY = 5;
+      NEVER = 6;      
+    }
+    
+    // sitemap change frequencey (if available)
+    byte sitemapChangeFreq = 63;
+    // relative priority (0-9)
+    byte sitemapPriority = 64;
+    // sitemap last modified time
+    long sitemapLastModifiedTime = 65;
+  }
+  
+  class CrawlDatumAndMetadata { 
+
+    ustring url = 1;
+    byte    status = 2;
+    long    fetchTime = 3;
+    byte    retries =4;
+    int     fetchInterval = 5;
+    buffer  signature = 6;
+    long    modifiedTime =7;
+    CrawlURLMetadata metadata = 8;
+    int     slaveIdx = 9;
+    
+    enum Flags { 
+      FLAG_DatumIsValid = 1;
+      FLAG_MetadataIsValid = 2;
+      FLAG_IsHighPriority = 3;
+    }
+    
+    int     flags = 10;
+    long    generateTime=11;
+    byte    protocolStatus=12;
+    int     recordContext=13;
+    ustring redirectLocation=14;
+    byte    isValid = 15;
+    // discovery date of this url in seconds
+    int     discoveryDateSecs = 16;
+    // number of failed attempts to fetch document
+    vint    failedAttemptsCounter = 17;
+    long    optionalURLHash = 18;
+    byte    optionalModifiedStatus = 19;
+  }
+  
+  class CrawlURL { 
+	
+    ustring url                 = 1;
+    [key] long    fingerprint   = 2;
+    long  hostFP                = 3;
+    long	updateTime            = 4;
+    
+    enum Flags { 
+      
+      IsRobotsURL = 1;
+      IsRedirected = 2;
+      IsHighPriorityURL = 4;
+      TruncatedDuringDownload = 8;
+      TruncatedDuringInflate  = 16;
+      InParseQueue = 32;
+    }
+    
+    int		flags                 = 5;
+    int   redirectCount         = 6;
+    ustring redirectURL         = 7;
+    long    crawlSegmentId      = 8;
+    buffer  crawlDatumData      =9;
+
+      
+    ustring lastAttemptCrawlerId        = 10;
+    int			lastAttemptCrawlSegmentId   = 11;
+    long		lastAttemptTime             = 13;
+    int     lastAttemptServerIP         = 14;
+    
+    enum CrawlResult { 
+        
+      PENDING  = 1;  
+      SUCCESS  = 2;
+      FAILURE  = 3;
+    }
+    
+    byte		lastAttemptResult     = 15;
+
+    enum FailureReason { 
+      NONE              = 0;
+      UNKNOWN           = 1;
+      UnknownProtocol   = 2;
+      MalformedURL      = 3;
+      Timeout           = 4;
+      DNSFailure        = 5;
+      ResolverFailure   = 6;
+      IOException       = 7;
+      RobotsExcluded    = 8;
+      NoData            = 9;
+      RobotsParseError  = 10;
+      RedirectFailed    = 11;
+      RuntimeError      = 12;
+      ConnectTimeout    = 13;
+      BlackListedHost   = 14;
+      BlackListedURL    = 15;
+      TooManyErrors     = 16;
+      InCache           = 17;
+      InvalidResponseCode = 18;
+      BadRedirectData   = 19;
+    }
+    
+    byte		lastAttemptFailureReason		= 18;
+    ustring lastAttemptFailureDetail   = 19; 
+    
+    long    lastCrawlTime   = 20;
+    int     resultCode      = 21;
+    ustring	headers         = 22;
+    int			serverIP        = 23;
+    
+    buffer  contentRaw    = 24;
+    int			contentSize   = 25;
+    ustring	contentPath   = 26;
+    ustring mimeType      = 27;
+    ustring contentEncoding = 28;
+    
+    enum MetaDataFlags { 
+    
+      NO_ARCHIVE = 1;
+      NO_FOLLOW  = 2;
+      NO_INDEX   = 4;
+    }
+    
+    long    serverIPTTL             = 29;
+    ustring serverCName             = 30;
+    
+    int     originalResultCode      = 31;
+    ustring	originalHeaders         = 32;
+    int			originalServerIP        = 33;
+    buffer  originalContentRaw      = 34;
+    
+    byte    metaDataFlags = 40;
+      
+    enum CacheControlFlags { 
+      
+      NO_CACHE = 1;
+      NO_STORE = 2;
+      EXPIRES_ZERO = 4;
+      EXPIRES = 8;
+      LAST_MODIFIED = 16;
+    }
+    
+    byte		cacheControlFlags = 41;
+    
+    long		lastModifiedTime = 42;
+    
+    enum CacheStrategy { 
+    
+      LAST_MODIFIED = 1;
+      ETAG = 2;
+      
+      NONE = 10;
+    }
+    
+    byte		cacheStrategy = 43;
+    ustring		etag		 = 44;
+
+    float		pageRank = 60;
+    long		lastPageRankTime = 61;
+    float   pageRankStrict = 62;
+    
+    enum ParseStatus { 
+    
+      PARSE_SKIPPED = 1;
+      PARSE_PENDING = 2;
+      PARSE_SUCCESS = 3;
+      PARSE_FAILURE = 4;
+    }
+    
+    byte      parseStatus	= 80;
+    ustring		parseFailureDesc = 81;
+    
+    vector<Outlink> outlinks = 82;
+    vector<long>    inlinks  = 83;
+    // CrawlDatumAndMetadata crawDatumAndMetadata = 84;
+    int       listId = 85;
+    ustring   crawlDirectiveJSON = 86;    
+  }
+  
+  
+    
+  class CrawlURLItemAndMetadata { 
+	
+    CrawlURL urlItem = 1;
+    CrawlURLMetadata urlMetadata = 2;
+  }
+  
+  
+  
+  class CrawlURLHost { 
+  
+    [key] long hostFP       = 1;
+    ustring hostName        = 2;    
+    int crawlDelay          = 10;
+  }  
+  
+  
+  class CrawlSegmentURLFP { 
+	[key] long urlFP       = 1;
+  boolean crawled        = 2;
+  }
+  
+  class CrawlSegmentURL { 
+    
+    [key] long urlFP       = 1;
+    ustring   url          = 2;
+    buffer    crawlDatumData   = 3;
+    long      crawlSegmentId   = 4;
+    // CrawlDatumAndMetadata crawlDatumAndMetadata = 5;    
+    long      lastModifiedTime = 6;
+    ustring   etag = 7;
+    vint      originalPosition = 9;
+    ustring   crawlDirectiveJSON = 10;
+  }
+  
+  
+  class CrawlSegmentHostFPInfo {
+	
+	[key] long hostFP       = 1;
+	int originalTargetCount = 2;
+	vector<CrawlSegmentURLFP> urlTargets = 10;
+  }
+  
+  class CrawlSegmentHost { 
+  
+    [key] long hostFP       = 1;
+    ustring hostName        = 2;    
+    int crawlDelay          = 3;
+    int ipAddress           = 4;
+    long ttl                = 5;
+    ustring cname           = 6;
+
+    vector<CrawlSegmentURL> urlTargets = 10;
+	
+    int segmentId = 11;
+    boolean isSuperHost = 12;
+    int listId = 13;
+  }  
+      
+  class CrawlSegment [recordid] { 
+    
+    [key] int segmentId   = 1;
+    long  dbCookie        = 2;
+    long  genTime         = 3;
+    boolean IsCrawling = 4;
+    boolean IsComplete = 5;
+    [key] int listId = 6;
+    
+  }
+
+  class CrawlSegmentDetailFPInfo { 
+	[key] int segmentId = 1;
+    int urlCount = 2; 
+    int urlsComplete = 3;
+	int originalHostCount = 4;
+    vector<CrawlSegmentHostFPInfo>  hosts   = 5;
+  }
+  
+  class CrawlSegmentDetail { 
+  
+    [key] int  segmentId   = 1;
+    int urlCount = 2; 
+    int urlsComplete = 3;
+    vector<CrawlSegmentHost>  hosts   = 4;
+  }
+  
+  class CrawlSegmentList { 
+  
+    vector<int> segments = 1;
+    long  dbCookie = 2;
+  }
+  
+  
+  class CrawlSegmentStatus { 
+  
+    [key]   int segmentId = 1;
+    long      dbCookie = 2;
+    boolean   isDirty  = 3;
+    
+    enum LoadStatus { 
+      
+      LOAD_PENDING = 0;
+      LOADING = 0;
+      LOAD_SUCCEEDED  = 1;
+      LOAD_FAILED =2;
+    }
+    
+    int     loadStatus = 4;
+    
+    
+    enum CrawlStatus { 
+      UNKNOWN   = 0;
+      RESOLVING = 1;
+      CRAWLING  = 2;
+      CRAWL_COMPLETE = 3;
+    }
+    
+    int     crawlStatus = 5;
+    
+    int     urlCount = 6;
+    int     urlsComplete = 7;
+    
+    boolean IsComplete = 8;
+	
+    float	loadHint = 9;
+    [key] int     listId = 10;
+  }
+  
+  class CrawlStatus { 
+    int currentCrawlNumber = 1;
+  }
+      
+  class RegisterCrawlerRequest { 
+    
+    ustring hostName = 1;
+    int     crawlerId = 2;
+    ustring connectionString = 3;
+    ustring dbUUID  = 4;
+    long    dbCookie = 5;
+    long    connectCookie = 6;
+  }
+
+  class RegisterCrawlerResponse { 
+  
+    int     crawlerId         = 1;
+    long    dbCookie          = 2;
+    vector<int> activeLists = 3;
+    CrawlStatus   crawlStatus = 4;
+  }
+ 
+  class MasterStatus {
+    
+    int registeredCrawlersCount = 1;
+    int activeCrawlersCount     = 2;
+    vector<int> crawledSegments = 4;
+  }
+  
+  class RegisterMasterRequest { 
+    
+    long  connectCookie = 1;
+  }
+  
+  class RegisterCrawlDBResponse { 
+    
+    long lastCrawlDBCookie = 1;
+    MasterStatus  masterStatus = 2;
+  }
+  
+  class ParseSegment { 
+    [key] int segmentId = 1;
+  }  
+  
+  class OutlinkData { 
+    
+    enum FLAG { 
+      HAS_OUTLINK_FLAGS = 1;
+    }
+    enum OUTLINK_FLAG { 
+      PLACEHOLDER = 1;
+    }
+    
+    int flags = 0;
+    int linkCount = 1;
+    buffer outlinkBuffer = 2; 
+  }
+  
+  class SubDomainStats { 
+  
+    int    urlCount    = 1;
+    int    crawlCount  = 2; 
+    int    parsedCount = 3;
+    int    uploadCount = 4; 
+    int    dupCount    = 5; 
+    int    blackListedCount = 7;
+    int    purgeCandidateCount = 8;
+    vector<int> ipAddressList = 9;
+    ustring lastCrawledBy = 10;
+    long    lastCrawlTime = 11;
+    int   crawlCountLast7Days = 12;
+    int   crawlCountLast30Days = 13;    
+    int   crawlCountLast60Days = 14;    
+    int   crawlCountLast90Days = 15;        
+    
+  }
+  
+  class CacheItem { 
+  
+    // doucment url 
+    ustring url = 1;
+    // url fingerprint 
+    long urlFingerprint = 2;
+    
+    enum Source { 
+        WebRequest = 1;
+        S3Cache    = 2;
+    }
+    // document source 
+    byte source = 3;
+    
+    // flags 
+    enum Flags { 
+      Flag_IsTemporaryRedirect = 1;
+      Flag_IsPermanentRedirect = 2;
+      Flag_IsCompressed  = 4;
+      Flag_WasTruncatedDuringDownload = 8;
+      Flag_WasTruncatedDuringInflate  = 16;
+    }
+    int flags = 4;
+    
+    // if this was a redirect, the final url 
+    ustring finalURL = 5;
+    
+    // parsed header items ... 
+    vector<org.commoncrawl.protocol.shared.ArcFileHeaderItem> headerItems =6;
+    // content (if available)
+    buffer   content =7;
+    // item source (optional)
+    ustring  contentSource=8;
+  }  
+  
+  class MapReduceTaskIdAndData { 
+    ustring jobId  = 1;
+    [key] ustring taskId = 2;
+    ustring dataKey   = 3;
+    ustring dataValue = 4;
+  }
+
+  class CountedIntegerValue { 
+    vint value = 1;
+    vint count = 2;
+  }
+  
+  class MergeStatsRecord { 
+    
+    [key] long timestamp = 1;
+
+    ustring  crawlDBPath   = 2;
+    ustring  parseSegments = 3;
+    
+    int unchangedCount = 4;
+    int newLinksCount = 5;
+    int oldRecordWithMetadata = 6;
+    int newRecordWithMetadata = 7;
+    int fetchSuccessCount = 8;
+    int fetchRedirectTemporaryCount = 9;
+    int fetchRedirectPermanentCount = 10;
+    int fetchNotModifiedCount       = 11;
+    
+    int dbUnFetchedCount = 12;
+    int dbFetchedCount   = 13;
+    int dbGoneCount      = 14;
+    int dbRedirectTemporaryCount  =15;
+    int dbRedirectPermanentCount  = 16;
+    int dbNotModifiedCount = 17;
+  }
+
+  class ParseStatsRecord { 
+    enum Flag { 
+      Flag_IsBlacklistedURL = 1;
+      Flag_HasValidCrawlResult = 2;
+      Flag_HasUknownCrawlResult = 4;
+      Flag_IsTempRedirect = 8;
+      Flag_IsPermRedirect = 16;
+      Flag_IsBadRedirect = 32;
+    }
+    
+    int   flags = 1;
+    byte  crawlResult = 2;
+    byte  crawlURLFailureReason = 3;
+    int   httpResultCode = 5;
+    
+    enum HeaderFlags { 
+      HasStatusLine = 1;
+      HasContentType = 2;
+      HasETag   = 4;
+      HasAge    = 8;
+      HasDate   = 16;
+      HasLastModified = 32;
+      HasExpires = 64;
+      HasCacheControl = 128;
+      IsHttpVersion_0_9 = 256;
+      IsHttpVersion_1_0 = 512;
+      IsHttpVersion_1_1 = 1024;
+      HasContentLength  = 2048;
+      IsGZipEncoded     = 4096;
+      HasCharsetViaHeader = 8192;
+      HasCharsetViaMetadata = 16384;
+      DetectedNonASCIICharset = 32768;
+      HasRedirectViaMetadata = 65536;
+      FoundConverterForCharset = 131072;
+    }
+    
+    
+    int headerFlags = 6;
+    ustring contentType = 7;
+    ustring charset     = 8;
+    ustring server      = 9;
+    int     contentLength = 10;
+    int     downloadContentLength = 11;
+    int     finalContentBufferLength  = 12;
+    
+    enum ParseFlags { 
+      FailedScoringFilter = 1;
+      AttemptedParse = 2;
+      ParseThrewException = 4;
+      ParseReturnedNull   = 8;
+      ParseReturnedContent = 16;
+      ParseReturnedNoTitle = 32;
+      ParseReturnedNoOutlinks = 64;
+    }
+    
+    int parseFlags = 13;
+    ustring parseException = 14;
+    int parseContentLength = 15;
+    int outlinkCount = 16;
+    
+    
+    enum Constants { 
+      OUTLINK_LENGTH_SCALE_FACTOR = 10;
+    }
+    vector<CountedIntegerValue> outlinkLengths = 17;
+    
+    vint urlsWithQueryString = 18;
+    vint urlsWithReference   = 19;
+    vint sameDomainURLs        = 20;
+    vint differentSubDomainURLS = 21;
+    vint differentRootDomainURLS  = 22;
+    vint titleLength = 23;
+    vector<ustring> metatags = 24;
+  }
+  
+  class ArcFileGeneratorStats { 
+    [key] long recordTimestamp = 1;
+    vint recordRejectedNoCrawlNumber = 2;
+    vint recordRejectedFetcedButNotMarkedForUpload = 3;
+    vint recordRejectedFetcedButNoParseSegmentOffsetInfo = 4;
+    vint recordRejectedFetcedButBlacklisted = 5;
+    vint recordRejectedFetcedButMimeTypeExcluded = 6;
+    vint recordRejectedFetcedButNoContentType = 7;
+    vint uploadCandidates = 8;
+    vint uploadCandidatesWithContentLocation = 9;
+    vint uploadCandidatesProcessed = 10;
+  }
+  
+  class MimeTypeCount { 
+    ustring mimeType = 1;
+    int     count = 2;
+  }
+  
+  class ArcFileWriterStats { 
+    [key] long recordTimestamp = 1;
+    vector<MimeTypeCount> mimeTypeCounts = 2;
+    // number of arc files written 
+    vint arcFilesWritten = 3;
+    // items written 
+    vint  totalItemsWritten = 4;
+    // average items per files
+    float averageItemsPerFile = 5;        
+    // uncompressed header bytes written 
+    vlong headerBytesWritten = 6;
+    // uncompressed content bytes written 
+    vlong contentBytesWritten = 7;
+    // compressed bytes written 
+    vlong compressedBytesWritten = 8;
+  }
+  
+  class SingleItemHistoryQueryResponse { 
+    boolean wasCrawled = 1;
+  }
+  
+  class BulkItemHistoryQuery { 
+    buffer fingerprintList = 1;
+  }
+
+  class BulkItemHistoryQueryResponse { 
+    buffer responseList = 1;
+  }
+ 
+  class BulkUpdateData { 
+    buffer fingerprintList = 1;
+  }
+
+   
+  class CrawlerStatus[recordid] { 
+    enum CrawlerState { 
+      IDLE    = 0;
+      ACTIVE  = 1;
+      FLUSHING = 2;
+      FLUSHED  = 3;
+      PURGING = 4;
+      PURGED  = 5;
+    }
+    int   crawlerState = 1;
+    int   activeListNumber = 2;
+  }
+
+  class CrawlerAction { 
+
+    enum ActionType { 
+      FLUSH = 1;
+      PURGE = 2;
+      RESUME_CRAWL    = 3;
+    }
+
+    int actionType       = 1;
+    int activeListNumber = 2;
+  }
+  
+  class CrawlHistoryStatus { 
+    enum CheckpointState { 
+      ACTIVE = 0;
+      TRANSITIONING = 1;
+    }
+    int checkpointState   = 1;
+    int activeCrawlNumber = 2;
+  }
+  
+  class SimpleBooleanResult { 
+    boolean booleanResult = 1;
+  }
+  
+  class SimpleByteResult [nodirty] { 
+    byte byteResult = 1;
+  }
+  
+  class PageRankOutlink { 
+    [key] vint  destinationDomainId = 1;
+    [key] vlong destinationURLHash  = 2; 
+  }
+  
+  class PageRankLinkSource { 
+    [key] vint  sourceDomainId = 1;
+    [key] vlong sourceURLHash  = 2;
+    vint  outlinkCount   = 3;
+  }
+    
+  class RootDomainMetadata { 
+    vint subDomainCount = 1;
+    vint urlCount = 2;
+  }
+  
+  class SubDomainMetadata { 
+    long domainHash      = 1;
+    long rootDomainHash  = 2;
+    ustring domainText   = 3;
+    vint urlCount      = 9;    
+    vint unfetchedCount = 10;
+    vint fetchedCount  = 11;
+    vint goneCount     = 12;
+    vint redirectTemporaryCount = 13;
+    vint redirectPermCount = 14;
+    vint unmodifiedCount = 15;
+    vint hasPageRankCount = 20;
+    vint hasLinkListCount = 21;
+    vint hasInverseLinkListCount = 22;
+    vint hasArcFileInfoCount = 23;
+    vint hasParseSegmentInfoCount = 24;
+    vint hasSignatureCount = 25;
+    vlong latestFetchTime = 26;
+  }
+    
+  class DomainMetadataV2 { 
+  
+    long id         = 1;
+    long modTime    = 2;
+    int urlCount    = 3;
+    int crawlCount  = 5; 
+    int uploadCount = 6; 
+    int dupCount    = 8; 
+    ustring status  = 9;  
+    ustring robots  = 10;
+    ustring charset = 11;
+    ustring cname   = 12;
+    int     ipAddress = 13;
+    long    ipAddressTTL = 14;
+    int    metadataCount = 16;
+    int    blackListedCount = 19;
+    int    purgeCandidateCount = 20;
+    vector<int> ipAddressList = 22;
+    int    subDomainCount = 23;
+    boolean isBlackListed = 24;
+    int    urlsWithPageRank=26;
+    int    urlsWithBaselinePageRank=27;
+    int    urlsWithAboveBaselinePageRank=28;
+    int    urlsWith200Result=29;
+    int    urlsWithRedirectResult=30;
+    int    urlsWith400Result=31;
+    int    urlsWith500Result=32;
+    int    urlsRobotsExcluded=33;
+  }
+  
+  class ActiveHostInfo { 
+    // a buffer containing a count and the ip addresses of the active hosts on the master 
+    buffer activeHostIds = 1;
+    // incremental timestamp 
+    int    pauseStateTimestamp = 2;
+   }
+   
+   
+   // DocSignatureData - data structure used to collect some signature information for each html doc we have processed to date 
+   class DocSignatureData { 
+    // the parse segment this content was found in
+    vint  parseSegmentId = 1;
+    // the content2 file offset where this content resides  
+    vlong contnet2DataOffset = 2;   
+    // the content2 text length
+    vint  textContentLength = 3;
+    // the text content signature 
+    buffer textContentSignature = 4;
+    // the text content simhash value 
+    long   textContentSimhashValue = 5;
+   }
+   
+   // a record of a crawled item that was discarded during deduping
+   class DiscardedCrawlItem { 
+     enum DiscardReason { 
+      OTHER_DOCUMENT_SIGNATURE_MATCH = 1;
+      OTHER_DOCUMENT_FUZZY_MATCH = 2;
+      PREV_VERSION_SIGNATURE_MATCH = 4;
+      PREV_VERSION_FUZZY_MATCH = 8;
+     }
+     
+     byte discardReason = 1;
+     long simHash =2;
+     buffer signature =3;
+     // fetch time ? 
+     long timestamp =5;
+     ustring headerItems = 6;
+     vint contentSize =7;
+   }
+   
+   class LongQueryParam {
+    
+    ustring parameterName = 1;
+    long    parameterResult = 2;
+   }
+      
+  
+  service CrawlDBService { 
+    // map reduce job state support 
+    method updateMapReduceTaskValue(in MapReduceTaskIdAndData,out NullMessage);
+    method queryMapReduceTaskValue(in MapReduceTaskIdAndData,out MapReduceTaskIdAndData);
+    method purgeMapReduceTaskValue(in MapReduceTaskIdAndData,out NullMessage);
+    method queryDuplicateStatus(in URLFPV2,out SimpleByteResult);
+    method queryLongValue(in LongQueryParam, out LongQueryParam);
+    method queryFingerprintStatus(in URLFPV2,out SimpleByteResult);
+  }
+  
+  service CrawlerService {
+
+    method doAction(in CrawlerAction, out CrawlerStatus);
+  
+    method queryStatus(in NullMessage, out CrawlerStatus);
+    
+    method queryActiveHosts(in NullMessage,out ActiveHostInfo);
+  }
+  
+  
+  service CrawlerHistoryService { 
+    
+    // query the current crawl number of this history server
+    method queryStatus(in NullMessage,out CrawlHistoryStatus);
+    // checkpoint / advance the crawl number of this history server
+    method checkpoint(in CrawlHistoryStatus, out CrawlHistoryStatus);
+    // bring the server up to date with any file system changes
+    method sync(in CrawlHistoryStatus,out NullMessage);
+    // query the server for a single url fingerprint item 
+    method singleItemQuery(in URLFPV2, out SingleItemHistoryQueryResponse);
+    // initiate a bulk fingerprint query 
+    method bulkItemQuery(in BulkItemHistoryQuery, out BulkItemHistoryQueryResponse);
+    // do a bulk update of the bloom filter 
+    method bulkUpdateHistory(in BulkUpdateData,out NullMessage);
+    // update the history server's bloom filter with single crawled url 
+    method updateHistory(in URLFPV2,out NullMessage);
+    //
+  }
+  
+  service CrawlerHistoryServiceV2 { 
+    // query the server for a single url fingerprint item 
+    method singleItemQuery(in URLFPV2, out SingleItemHistoryQueryResponse);
+    // initiate a bulk fingerprint query 
+    method bulkItemQuery(in BulkItemHistoryQuery, out BulkItemHistoryQueryResponse);
+    // do a bulk update of the bloom filter 
+    method bulkUpdateHistory(in BulkUpdateData,out NullMessage);
+    // update the history server's bloom filter with single crawled url 
+    method updateHistory(in URLFPV2,out NullMessage);
+    //
+  }
+  
+ 
+}
