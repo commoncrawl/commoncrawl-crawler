@@ -1,3 +1,23 @@
+/**
+ * Copyright 2008 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *    @author rana
+ *
+ **/
+
 include "../../protocol/protocol.jr"
 
 module org.commoncrawl.crawl.database { 
@@ -759,7 +779,12 @@ module org.commoncrawl.crawl.database {
       [key] int month = 2;
       int hitCount=3;
       int flags =4;
-
+     enum Flags { 
+      FLAG_GENERATOR_IS_WORDPRESS = 1;
+      FLAG_GENERATOR_IS_TYPEPAD = 2;
+      FLAG_GENERATOR_IS_BLOGGER = 4;
+      FLAG_GENERATOR_IS_TUMBLR = 8;
+     }
   }
   
   class PostFrequencyInfo { 
@@ -774,6 +799,11 @@ module org.commoncrawl.crawl.database {
     enum Flags { 
       HAS_INDEX_HTML_AFTER_DATE = 1;
       HAS_YEAR_MONTH_SLASH_INDEX = 2;
+      FLAG_GENERATOR_IS_WORDPRESS = 4;
+      FLAG_GENERATOR_IS_TYPEPAD = 8;
+      FLAG_GENERATOR_IS_BLOGGER = 16;
+      FLAG_GENERATOR_IS_TUMBLR = 32;
+      
     }    
   }
   
