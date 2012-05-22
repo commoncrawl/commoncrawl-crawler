@@ -26,8 +26,8 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
-import org.commoncrawl.crawl.database.crawlpipeline.JobConfig;
 import org.commoncrawl.protocol.ParseOutput;
+import org.commoncrawl.util.internal.JobBuilder;
 import org.commoncrawl.util.shared.CCStringUtils;
 
 import com.google.common.collect.ImmutableList;
@@ -185,7 +185,7 @@ public class EC2ParserTask {
     Path outputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH+Long.toString(segmentId));
     LOG.info("Starting Map-Reduce Job. SegmentId:" + segmentId + " OutputPath:" + outputPath);
     // run job...
-    JobConf jobConf = new JobConfig("parse job",conf)
+    JobConf jobConf = new JobBuilder("parse job",conf)
       
       .inputs(paths)
       .inputFormat(SequenceFileInputFormat.class)
@@ -306,5 +306,4 @@ public class EC2ParserTask {
       writer.close();
     }
   }
-  
 }

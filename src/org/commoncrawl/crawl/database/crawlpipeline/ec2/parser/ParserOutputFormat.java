@@ -1,3 +1,22 @@
+/**
+ * Copyright 2012 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
+
 package org.commoncrawl.crawl.database.crawlpipeline.ec2.parser;
 
 import java.io.IOException;
@@ -64,7 +83,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
   public static final Log LOG = LogFactory.getLog(ParserOutputFormat.class);
   
   public static final String METADATA_FILE_PREFIX   = "metadata-";
-  public static final String TEXTDATA_FILE_PREFIX   = "textContent-";
+  public static final String TEXTDATA_FILE_PREFIX   = "textData-";
   public static final String ARC_FILE_PREFIX        = "arcContent-";
   public static final String ARCMETA_FILE_PREFIX    = "arcMetadata-";
   public static final String RAW_FILE_PREFIX    = "rawContent-";
@@ -305,7 +324,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
       _metadataWriter.append(new TextBytes(key),value.getMetadataAsTextBytes());
 
       if (value.getTextContentAsTextBytes().getLength() != 0) { 
-        _textWriter.append(new TextBytes(key),value.getMetadataAsTextBytes()); 
+        _textWriter.append(new TextBytes(key),value.getTextContentAsTextBytes()); 
       }
       
       if (value.getRawContent().getCount() != 0) {
