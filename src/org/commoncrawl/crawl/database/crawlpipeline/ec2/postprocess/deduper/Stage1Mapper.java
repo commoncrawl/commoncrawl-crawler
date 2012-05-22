@@ -1,3 +1,21 @@
+/**
+ * Copyright 2012 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
 package org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.deduper;
 
 import java.io.IOException;
@@ -125,7 +143,7 @@ public class Stage1Mapper implements Mapper<TextBytes,TextBytes,LongWritable, De
                             long simhashValue = selectedCrawlStatus.get("text_simhash").getAsLong();
                             
                             // emit it
-                            emitItem(key,simhashValue,serverIP,reporter,output);
+                            emitItem(key,simhashValue,serverIP,contentLength,reporter,output);
                           }
                           else { 
                             reporter.incrCounter(Counters.REJECTED_BAD_MIME_TYPE, 1);
@@ -152,7 +170,7 @@ public class Stage1Mapper implements Mapper<TextBytes,TextBytes,LongWritable, De
   LongWritable writableKeyToEmit = new LongWritable();
   DeduperValue valueOut = new DeduperValue();
   
-  void emitItem(TextBytes key,long simhashValue,int serverIP,Reporter reporter,OutputCollector<LongWritable, DeduperValue> collector)throws IOException {
+  void emitItem(TextBytes key,long simhashValue,int serverIP,int contentLen,Reporter reporter,OutputCollector<LongWritable, DeduperValue> collector)throws IOException {
     URLFPV2 fp = URLUtils.getURLFPV2FromURL(key.toString());
     
     if (fp == null) { 
@@ -166,7 +184,7 @@ public class Stage1Mapper implements Mapper<TextBytes,TextBytes,LongWritable, De
         // ok setup the writable key 
         DeduperUtils.DeduperKey.setKey(writableKeyToEmit, i, keyBitsOut);
         // and the value ... 
-        valueOut.setValue(simhashValue,fp.getRootDomainHash(), fp.getUrlHash(),serverIP, key);
+        valueOut.setValue(simhashValue,fp.getRootDomainHash(), fp.getUrlHash(),serverIP,contentLen, key);
         // emit it ... 
         //Log.info("KeyBits:" + keyBitsOut + "Key:" + writableKeyToEmit.get());
         collector.collect(writableKeyToEmit, valueOut);

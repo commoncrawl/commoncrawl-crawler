@@ -1,3 +1,21 @@
+/**
+ * Copyright 2012 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
 package org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.deduper;
 
 import java.io.DataInput;
@@ -92,22 +110,24 @@ public class DeduperUtils {
     public long        _rootHash;
     public long        _urlHash;
     public int         _srcIP;
+    public int         _srcContentLen;
     public TextBytes   _urlText = new TextBytes();
     
     public DeduperValue() { 
       
     }
     
-    public DeduperValue(long simhashValue,long rootHash,long urlHashValue,int srcIP, TextBytes urlText) { 
-      setValue(simhashValue, rootHash, urlHashValue,srcIP,urlText);
+    public DeduperValue(long simhashValue,long rootHash,long urlHashValue,int srcIP,int srcContentLen, TextBytes urlText) { 
+      setValue(simhashValue, rootHash, urlHashValue,srcIP,srcContentLen,urlText);
     }
     
-    public void setValue(long simHashValue,long rootHash,long urlHashValue,int srcIP,TextBytes urlText) { 
+    public void setValue(long simHashValue,long rootHash,long urlHashValue,int srcIP,int srcContentLen,TextBytes urlText) { 
       _simHashValue = simHashValue;
       _rootHash = rootHash;
       _urlHash = urlHashValue;
       _urlText.set(urlText);
       _srcIP = srcIP;
+      _srcContentLen = srcContentLen;
     }
     
     @Override
@@ -116,6 +136,7 @@ public class DeduperUtils {
       _rootHash  = in.readLong();
       _urlHash = in.readLong();
       _srcIP = in.readInt();
+      _srcContentLen = in.readInt();
       _urlText.readFields(in);
     }
     
@@ -125,6 +146,7 @@ public class DeduperUtils {
       out.writeLong(_rootHash);
       out.writeLong(_urlHash);
       out.writeInt(_srcIP);
+      out.writeInt(_srcContentLen);
       _urlText.write(out);
     }
   }
@@ -433,7 +455,7 @@ public class DeduperUtils {
     
     URLFPV2 fp = new URLFPV2();
     
-    public void add(long rootDomainHash,long urlHash,int ipAddress,TextBytes urlData)throws IOException  { 
+    public void add(long rootDomainHash,long urlHash,long ipAddressAndLenPacked,TextBytes urlData)throws IOException  { 
       fp.setRootDomainHash(rootDomainHash);
       fp.setDomainHash(rootDomainHash);
       fp.setUrlHash(urlHash);
@@ -443,7 +465,9 @@ public class DeduperUtils {
         writer.name("dh").value(rootDomainHash);
         writer.name("uh").value(urlHash);
         writer.name("url").value(urlData.toString());
-        writer.name("ip").value(Integer.toString(ipAddress));
+        // high word is ip address
+        writer.name("ip").value((int)((ipAddressAndLenPacked >> 32) & 0xFFFFFFFF));
+        writer.name("length").value((int)(ipAddressAndLenPacked & 0xFFFFFFFF));
         writer.endObject();
       }
     }
@@ -482,7 +506,7 @@ public class DeduperUtils {
     public static final int SIMHASH_COMPONENT_IDX = 0;
     public static final int ROOTHASH_COMPONENT_IDX = 1;
     public static final int URLHASH_COMPONENT_IDX = 2;
-    public static final int IP_COMPONENT_IDX = 3;
+    public static final int IP_AND_LEN_COMPONENT_IDX = 3;
     public static final int TEXT_DATA_COMPONENT_IDX = 4;
 
     
@@ -569,7 +593,8 @@ public class DeduperUtils {
         _dataBuffer.writeLong(value._simHashValue);
         _dataBuffer.writeLong(value._rootHash);
         _dataBuffer.writeLong(value._urlHash);
-        _dataBuffer.writeLong(value._srcIP);
+        _dataBuffer.writeInt(value._srcIP);
+        _dataBuffer.writeInt(value._srcContentLen);
         int originalSize = _textDataBuffer.size();
         // write offset 
         _dataBuffer.writeInt(originalSize);
@@ -636,7 +661,7 @@ public class DeduperUtils {
                     setBuilder.add( 
                         readLongComponent(_dataBuffer, j, ROOTHASH_COMPONENT_IDX),
                         readLongComponent(_dataBuffer, j, URLHASH_COMPONENT_IDX),
-                        (int) readLongComponent(_dataBuffer, j, IP_COMPONENT_IDX),
+                        readLongComponent(_dataBuffer, j, IP_AND_LEN_COMPONENT_IDX),
                         textFromPackedLongInfo(urlSampler,readLongComponent(_dataBuffer, j,TEXT_DATA_COMPONENT_IDX)));
                   }
                   else { 
@@ -644,7 +669,7 @@ public class DeduperUtils {
                       setBuilder.add( 
                           readLongComponent(_dataBuffer, j, ROOTHASH_COMPONENT_IDX),
                           readLongComponent(_dataBuffer, j, URLHASH_COMPONENT_IDX),
-                          (int) readLongComponent(_dataBuffer, j, IP_COMPONENT_IDX),
+                          readLongComponent(_dataBuffer, j, IP_AND_LEN_COMPONENT_IDX),
                           textFromPackedLongInfo(urlSampler,readLongComponent(_dataBuffer, j,TEXT_DATA_COMPONENT_IDX)));
                     }
                   }
@@ -722,7 +747,7 @@ public class DeduperUtils {
     
     public static final int ROOTHASH_COMPONENT_IDX = 0;
     public static final int URLHASH_COMPONENT_IDX = 1;
-    public static final int IP_ADDRESS_COMPONENT = 2;
+    public static final int IP_ADDRESS_AND_LEN_COMPONENT = 2;
     public static final int TEXT_DATA_COMPONENT_IDX = 3;
     
     
@@ -740,7 +765,7 @@ public class DeduperUtils {
       }
     }
     
-    private int insertItemGetId(long domainHash,long urlHash,int ipAddress,String url)throws IOException {
+    private int insertItemGetId(long domainHash,long urlHash,int ipAddress,int length,String url)throws IOException {
       Integer existingId = hashToIdMap.get(urlHash);
 
       if (existingId == null) { 
@@ -749,7 +774,8 @@ public class DeduperUtils {
         // write out id info 
         _dataBuffer.writeLong(domainHash);
         _dataBuffer.writeLong(urlHash);
-        _dataBuffer.writeLong(ipAddress);
+        _dataBuffer.writeInt(ipAddress);
+        _dataBuffer.writeInt(length);
         // and string 
         int originalSize = _textDataBuffer.size();
         // write offset 
@@ -801,9 +827,10 @@ public class DeduperUtils {
             long urlHash    = data.get("uh").getAsLong();
             String url      = data.get("url").getAsString();
             int  ipAddress  = data.get("ip").getAsInt();
+            int  length     = data.get("length").getAsInt();
             
             // insert the item into meta set, get back an id ...  
-            int id = insertItemGetId(domainHash, urlHash,ipAddress, url);
+            int id = insertItemGetId(domainHash, urlHash,ipAddress,length, url);
             
             // add id to local set 
             setIdArray.add(id);
@@ -869,7 +896,7 @@ public class DeduperUtils {
               setBuilder.add( 
                   readLongComponent(_dataBuffer, j, ROOTHASH_COMPONENT_IDX),
                   readLongComponent(_dataBuffer, j, URLHASH_COMPONENT_IDX),
-                  (int)readLongComponent(_dataBuffer, j, IP_ADDRESS_COMPONENT),
+                  readLongComponent(_dataBuffer, j, IP_ADDRESS_AND_LEN_COMPONENT),
                   textFromPackedLongInfo(urlSampler,readLongComponent(_dataBuffer, j,TEXT_DATA_COMPONENT_IDX)));
             }
           }
@@ -955,11 +982,11 @@ public class DeduperUtils {
     
     ImmutableList<DeduperValue> values = new ImmutableList.Builder<DeduperValue>()
       
-      .add(new DeduperValue(key1,1000,2000,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.1"),new TextBytes("http://adomain.com/")))
-      .add(new DeduperValue(key2,1001,2001,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),new TextBytes("http://bdomain.com/")))
-      .add(new DeduperValue(key3,1002,2002,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.3"),new TextBytes("http://cdomain.com/")))
-      .add(new DeduperValue(key4,1003,2003,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.4"),new TextBytes("http://ddomain.com/")))
-      .add(new DeduperValue(key5,1004,2004,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.5"),new TextBytes("http://edomain.com/")))
+      .add(new DeduperValue(key1,1000,2000,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.1"),1000,new TextBytes("http://adomain.com/")))
+      .add(new DeduperValue(key2,1001,2001,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),1000,new TextBytes("http://bdomain.com/")))
+      .add(new DeduperValue(key3,1002,2002,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.3"),1000,new TextBytes("http://cdomain.com/")))
+      .add(new DeduperValue(key4,1003,2003,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.4"),1000,new TextBytes("http://ddomain.com/")))
+      .add(new DeduperValue(key5,1004,2004,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.5"),1000,new TextBytes("http://edomain.com/")))
       .build();
     
     SimhashMatcher unionFinder = new SimhashMatcher();
@@ -994,10 +1021,10 @@ public class DeduperUtils {
     
     ImmutableList<DeduperValue> secondSetValues = new ImmutableList.Builder<DeduperValue>()
     
-    .add(new DeduperValue(key1,1000,2000,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),new TextBytes("http://adomain.com/")))
-    .add(new DeduperValue(key1,1007,2007,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),new TextBytes("http://z1domain.com/")))
-    .add(new DeduperValue(key2,1008,2008,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),new TextBytes("http://z2domain.com/")))
-    .add(new DeduperValue(key3,1009,2009,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),new TextBytes("http://z3domain.com/")))
+    .add(new DeduperValue(key1,1000,2000,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),1000,new TextBytes("http://adomain.com/")))
+    .add(new DeduperValue(key1,1007,2007,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),1000,new TextBytes("http://z1domain.com/")))
+    .add(new DeduperValue(key2,1008,2008,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),1000,new TextBytes("http://z2domain.com/")))
+    .add(new DeduperValue(key3,1009,2009,IPAddressUtils.IPV4AddressStrToInteger("10.0.0.2"),1000,new TextBytes("http://z3domain.com/")))
     .build();
     
     unionFinder.emitMatches(3,secondSetValues.iterator(),new OutputCollector<TextBytes, TextBytes>() {
