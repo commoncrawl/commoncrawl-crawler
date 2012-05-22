@@ -1,18 +1,22 @@
 /**
  * Copyright 2008 - CommonCrawl Foundation
  * 
- * CommonCrawl licenses this file to you under the Apache License, 
- * Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
+
 
 package org.commoncrawl.crawl.crawler;
 
@@ -31,8 +35,8 @@ import javax.servlet.jsp.JspWriter;
 
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.WritableUtils;
-import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.async.Timer;
+import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.common.Environment;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.crawl.crawler.CrawlLog.CheckpointCompletionCallback;
@@ -41,12 +45,10 @@ import org.commoncrawl.crawl.filter.DomainFilterData;
 import org.commoncrawl.crawl.filter.FilterResults;
 import org.commoncrawl.crawl.filters.CrawlRateOverrideFilter;
 import org.commoncrawl.crawl.filters.DomainFilter;
-import org.commoncrawl.crawl.filters.Filter.FilterResult;
 import org.commoncrawl.crawl.filters.IPAddressBlockFilter;
+import org.commoncrawl.crawl.filters.Filter.FilterResult;
 import org.commoncrawl.crawl.segment.SegmentLoader.LoadProgressCallback;
 import org.commoncrawl.crawl.statscollector.CrawlerStatsService;
-import org.commoncrawl.db.RecordStore;
-import org.commoncrawl.db.RecordStore.RecordStoreException;
 import org.commoncrawl.directoryservice.DirectoryServiceCallback;
 import org.commoncrawl.directoryservice.DirectoryServiceItemList;
 import org.commoncrawl.directoryservice.DirectoryServiceRegistrationInfo;
@@ -70,18 +72,18 @@ import org.commoncrawl.protocol.CrawlerStatus;
 import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
 import org.commoncrawl.rpc.base.internal.AsyncContext;
 import org.commoncrawl.rpc.base.internal.AsyncRequest;
-import org.commoncrawl.rpc.base.internal.AsyncRequest.Callback;
-import org.commoncrawl.rpc.base.internal.AsyncRequest.Status;
 import org.commoncrawl.rpc.base.internal.AsyncServerChannel;
 import org.commoncrawl.rpc.base.internal.NullMessage;
+import org.commoncrawl.rpc.base.internal.AsyncRequest.Callback;
+import org.commoncrawl.rpc.base.internal.AsyncRequest.Status;
 import org.commoncrawl.rpc.base.shared.RPCException;
-import org.commoncrawl.rpc.base.shared.RPCStructWithId;
 import org.commoncrawl.server.AsyncWebServerRequest;
 import org.commoncrawl.server.CommonCrawlServer;
 import org.commoncrawl.util.internal.RuntimeStatsCollector;
 import org.commoncrawl.util.internal.URLUtils;
 import org.commoncrawl.util.shared.CCStringUtils;
 import org.commoncrawl.util.shared.FlexBuffer;
+
 
 /**
  * Crawler Server (CommonCrawlerServer derived class)
@@ -144,7 +146,6 @@ public class CrawlerServer extends CommonCrawlServer
   private CrawlRateOverrideFilter _crawlRateOverrideFilter = null;
   
   /** record store **/
-  protected RecordStore _recordStore = new RecordStore();
   static final String CrawlerStateKey = "CrawlerState2";
 
   /** master crawl controller support **/
@@ -235,27 +236,9 @@ public class CrawlerServer extends CommonCrawlServer
       if (databasePath.exists()) 
         databasePath.delete();
     }    
-    // initialize the recorstore ... 
-    try {
-      _recordStore.initialize(databasePath, null);
-    } catch (RecordStoreException e1) {
-      LOG.error(CCStringUtils.stringifyException(e1));
-      return false;
-    }
 
-    try {
-      _crawlerStatus = (CrawlerStatus) _recordStore.getRecordByKey(CrawlerStateKey);
-      if (_crawlerStatus == null) { 
-        _crawlerStatus = new CrawlerStatus();
-        _recordStore.beginTransaction();
-        _recordStore.insertRecord("", CrawlerStateKey, _crawlerStatus);
-        _recordStore.commitTransaction();
-      }
-    } catch (RecordStoreException e1) {
-      LOG.error(CCStringUtils.stringifyException(e1));
-      return false;
-    }
-    
+    _crawlerStatus = new CrawlerStatus();
+        
     // default to IDLE STATE  
     _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.IDLE);
 
@@ -333,13 +316,6 @@ public class CrawlerServer extends CommonCrawlServer
 	  return true;
   }
 
-  /** generic helper routine to persist RPCStruct to disk **/
-  protected void _insertUpdatePersistentObject ( RPCStructWithId object,String  parentKey,String keyPrefix,boolean update) throws RecordStoreException  { 
-    if (update)
-      _recordStore.updateRecordByKey(keyPrefix+object.getKey(), object);
-    else 
-      _recordStore.insertRecord(parentKey, keyPrefix+object.getKey(), object);
-  }
   
   private boolean initializeEngine(int activeListId) { 
     // initialize the crawl engine ... 
@@ -356,7 +332,7 @@ public class CrawlerServer extends CommonCrawlServer
       }
     }
     
-    if (!_engine.initialize(_recordStore,_crawlInterface)) { 
+    if (!_engine.initialize(_crawlInterface)) { 
       LOG.fatal("Crawl Engine initialization failed!. Exiting... ");
       return false;
     }    

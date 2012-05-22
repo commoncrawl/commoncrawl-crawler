@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 package org.commoncrawl.crawl.crawler;
 
 
@@ -28,8 +29,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.common.Environment;
 import org.commoncrawl.crawl.crawler.RobotRulesParser.RobotRuleSet;
-import org.commoncrawl.crawl.filters.Filter.FilterResult;
 import org.commoncrawl.crawl.filters.IPAddressBlockFilter;
+import org.commoncrawl.crawl.filters.Filter.FilterResult;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.commoncrawl.util.internal.HttpCookieUtils.CookieStore;
 import org.commoncrawl.util.shared.CCStringUtils;

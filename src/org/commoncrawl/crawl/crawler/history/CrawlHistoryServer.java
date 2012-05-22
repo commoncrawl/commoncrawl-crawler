@@ -1,18 +1,20 @@
 /**
  * Copyright 2008 - CommonCrawl Foundation
  * 
- * CommonCrawl licenses this file to you under the Apache License, 
- * Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
 
 package org.commoncrawl.crawl.crawler.history;
 
@@ -21,6 +23,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +51,7 @@ import org.commoncrawl.protocol.CrawlHistoryStatus;
 import org.commoncrawl.protocol.CrawlerHistoryService;
 import org.commoncrawl.protocol.SingleItemHistoryQueryResponse;
 import org.commoncrawl.protocol.URLFPV2;
+import org.commoncrawl.protocol.CrawlHistoryStatus.CheckpointState;
 import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
 import org.commoncrawl.rpc.base.internal.AsyncContext;
 import org.commoncrawl.rpc.base.internal.AsyncServerChannel;
@@ -54,12 +60,13 @@ import org.commoncrawl.rpc.base.internal.AsyncRequest.Status;
 import org.commoncrawl.rpc.base.shared.RPCException;
 import org.commoncrawl.server.CommonCrawlServer;
 import org.commoncrawl.util.internal.URLFPBloomFilter;
+import org.commoncrawl.util.internal.time.Hour;
 import org.commoncrawl.util.shared.CCStringUtils;
 import org.commoncrawl.util.shared.ImmutableBuffer;
 import org.commoncrawl.util.shared.BitUtils.BitStream;
 
 /**
- * A bloom-filter server that tracks crawl status on a per-crawler basis
+ * 
  * 
  * @author rana
  *
@@ -71,6 +78,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   private int _numElements = -1;
   private int _numHashFunctions = -1;
   private int _bitsPerElement = -1;
+  private int _crawlNumber = -1;
   private URLFPBloomFilter _bloomFilter = null;
   /** primary crawler database **/
   RecordStore   _recordStore = new RecordStore();
@@ -127,8 +135,13 @@ public class CrawlHistoryServer extends CommonCrawlServer
     try {
       // initialize database
       _recordStore.initialize(dbPath, null);
-      // load state (if any)
-      loadState();
+      
+      _state = new HistoryServerState();
+      _state.setCurrentCheckpointState(CheckpointState.ACTIVE);
+      _state.setCurrentCrawlNumber(_crawlNumber);
+      
+      updateState();
+      
       // load bloom filter from disk if possible 
       loadBloomFilter();
       
@@ -166,28 +179,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     // ok safe to call super now ... 
     super.stop();
   }
-  
-  /** load state **/
-  private void loadState() throws RecordStoreException { 
     
-    _state = (HistoryServerState) _recordStore.getRecordByKey(HistoryServerStateKey);
-    
-    if (_state == null) {
-
-      try { 
-        _recordStore.beginTransaction();
-        _state = new HistoryServerState();
-        _recordStore.insertRecord(null, HistoryServerStateKey, _state);
-        _recordStore.commitTransaction();
-      }
-      catch (RecordStoreException e) { 
-        LOG.error(e);
-        _recordStore.abortTransaction();
-        throw e;
-      }
-    }
-  }
-  
   /** update and persist state data structure **/
   private void updateState() throws RecordStoreException {
     _recordStore.beginTransaction();
@@ -215,9 +207,12 @@ public class CrawlHistoryServer extends CommonCrawlServer
           _bitsPerElement = Integer.parseInt(argv[++i]);
         }
       }
+      else if (argv[i].equalsIgnoreCase("--crawlNumber")) {
+        _crawlNumber = Integer.parseInt(argv[++i]);
+      }
     }
     
-    return (_numElements != -1 && _numHashFunctions != -1 && _bitsPerElement != -1);
+    return (_numElements != -1 && _numHashFunctions != -1 && _bitsPerElement != -1 && _crawlNumber != -1);
   }
 
   @Override
@@ -239,8 +234,9 @@ public class CrawlHistoryServer extends CommonCrawlServer
   public void checkpoint(AsyncContext<CrawlHistoryStatus, CrawlHistoryStatus> rpcContext)throws RPCException {
     LOG.info("Received Checkpoint Command with CrawlerNumber:" + rpcContext.getInput().getActiveCrawlNumber());
     if (_state.getCurrentCrawlNumber() < rpcContext.getInput().getActiveCrawlNumber() || _bloomFilter ==   null) {
-      LOG.info("Current Crawl Number differs from Checkpoint Command Crawl Number. Reseting BloomFilter");
-      resetBloomFilter(rpcContext);
+      rpcContext.setStatus(Status.Error_RequestFailed);
+      rpcContext.setErrorDesc("Incoming Version:" + rpcContext.getInput().getActiveCrawlNumber() + " Expected:" + _state.getCurrentCrawlNumber());
+      rpcContext.completeRequest();
     }
     else {
       
@@ -348,7 +344,55 @@ public class CrawlHistoryServer extends CommonCrawlServer
   private final Path getDataFileCheckpointPath() { 
     return new Path(CrawlEnvironment.HDFS_HistoryServerBase,getHostName()+".checkpoint");
   }
+  
+  private final Path getCheckpointMutexPath() { 
+    Hour hour = new Hour(new Date());
+    Path checkpointPath = new Path(CrawlEnvironment.HDFS_HistoryServerBase+CrawlEnvironment.HDFS_HistoryServerCheckpointMutex+"."+hour.getFirstMillisecond());
+    return checkpointPath;
+  }
+  
+  private List<Path> reloadActiveHistory()throws IOException {
+    ArrayList<Path> paths = new ArrayList<Path>();
+    FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
+    
+    // create scan pattern 
+    Path hdfsScanPath = 
+      new Path(   CrawlEnvironment.getCrawlSegmentDataDirectory() 
+                + "/" 
+                + _state.getCurrentCrawlNumber() 
+                + "/*/"
+                + CrawlEnvironment.buildCrawlSegmentLogCheckpointWildcardString(getHostName()));
+    
+    // scan hdfs for log files
+    FileStatus candidates[];
+    
+    LOG.info("Scanning For Cadnidates in:" + hdfsScanPath);
+    candidates = fs.globStatus(hdfsScanPath);
 
+    // iterate candidates 
+    for(FileStatus candidate : candidates) { 
+      
+      // ok found a candidate we can work on 
+      LOG.info("Found Candidate:" + candidate.getPath());
+      final URLFPV2 placeHolderFP = new URLFPV2();
+      CrawlSegmentLog.walkFingerprintsInLogFile(fs,candidate.getPath(),new CrawlSegmentLog.LogFileItemCallback() {
+        
+        @Override
+        public void processItem(long domainHash, long urlFingerprint) {
+          placeHolderFP.setDomainHash(domainHash);
+          placeHolderFP.setUrlHash(urlFingerprint);
+          // add item for bloom filter 
+          _bloomFilter.add(placeHolderFP);
+        }
+      });
+      LOG.info("Finished Processing Candidate:" + candidate.getPath());
+      
+      paths.add(candidate.getPath());
+    }
+    
+    return paths;
+  }
+  
   private void reloadLaggingHistory(int previousCrawlNumber)throws IOException {
     FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
     
@@ -466,81 +510,95 @@ public class CrawlHistoryServer extends CommonCrawlServer
     }).start();
     
   }
+  Thread _resetThread = null; 
   private void resetBloomFilter(final AsyncContext<CrawlHistoryStatus, CrawlHistoryStatus> rpcContext){ 
-    
-    // ok, first we need to stop the checkpoint thread ... 
-    // so, start a new thread and have it block on the checkpoint semaphore ... 
-    new Thread(new Runnable(){
-
-      @Override
-      public void run() {
-        LOG.info("Waiting for Checkpoint Thread to IDLE");
-        // ok, now in the thread's context, safely block to acquire the checkpoint semaphore 
-        _checkpointThreadSemaphore.acquireUninterruptibly();
-        LOG.info("Checkpoint Thread to IDLE - Proceeding with BloomFilter Reset");
-        // ok now we can safely reset state, shift back to async thread ... 
-        getEventLoop().setTimer(new Timer(0,false,new Timer.Callback() {
-          
-          @Override
-          public void timerFired(Timer timer) {
-            try { 
-              // ok now we are back in the async thread context  ...
-              try { 
-                LOG.info("Deleting Existing Checkpoint Files");
-                // safely delete checkpoint files ... 
-                FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
-                fs.delete(getDataFileCheckpointPath());
-                fs.delete(getDataFileFinalPath());
-                
-                LOG.info("Reseting BloomFilter");
-                // safely reset bloom filter 
-                _bloomFilter = null;
-                _bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
-                
-                // ok reload any lagging history ...
-                LOG.info("Reloading Lagging History");
-                reloadLaggingHistory(rpcContext.getInput().getActiveCrawlNumber() - 1);
-                
-                // and write out bloom filter
-                Path finalPath      = getDataFileFinalPath();
-                
-                LOG.info("Writing BloomFilter Data");
-                // serialize the filter ... 
-                serializeBloomFilter(finalPath);
-
-                LOG.info("Update Disk State");
-                _state.setCurrentCrawlNumber(rpcContext.getInput().getActiveCrawlNumber());
-                _state.setCurrentCheckpointState(CrawlHistoryStatus.CheckpointState.ACTIVE);
-                // write state to disk ... 
-                updateState();
-
-                LOG.info("Transition to new CrawlNumber:" + rpcContext.getInput().getActiveCrawlNumber() + " complete");
-                // update status 
-                rpcContext.getOutput().setActiveCrawlNumber(_state.getCurrentCrawlNumber());
-                rpcContext.getOutput().setCheckpointState(_state.getCurrentCheckpointState());
-              }
-              catch(IOException e) { 
-                LOG.error(CCStringUtils.stringifyException(e));
-                rpcContext.setStatus(Status.Error_RequestFailed);
-                rpcContext.setErrorDesc(CCStringUtils.stringifyException(e));
-              }
-              // complete the request ... 
-              try {
-                rpcContext.completeRequest();
-              } catch (RPCException e) {
-                LOG.error(CCStringUtils.stringifyException(e));
-              }
-            }
-            finally { 
-              // reset scan variables
-              _lastCheckpointScanTime = -1; 
-              _lastCheckpointFlushTime = 1;
-              _checkpointThreadSemaphore.release();
-            }
-          }
-        }));
+    LOG.info("Got Reset BloomFilter RPC");
+    if (_resetThread != null) { 
+      rpcContext.setErrorDesc("Reset Already In Progress!");
+      rpcContext.setStatus(Status.Error_RequestFailed);
+      try {
+        rpcContext.completeRequest();
+      } catch (RPCException e) {
       }
-    }).start();
+    }
+    else { 
+      // ok, first we need to stop the checkpoint thread ... 
+      // so, start a new thread and have it block on the checkpoint semaphore ... 
+      _resetThread = new Thread(new Runnable(){
+  
+        @Override
+        public void run() {
+          LOG.info("Waiting for Checkpoint Thread to IDLE");
+          // ok, now in the thread's context, safely block to acquire the checkpoint semaphore 
+          _checkpointThreadSemaphore.acquireUninterruptibly();
+          LOG.info("Checkpoint Thread to IDLE - Proceeding with BloomFilter Reset");
+          // ok now we can safely reset state, shift back to async thread ... 
+          getEventLoop().setTimer(new Timer(0,false,new Timer.Callback() {
+            
+            @Override
+            public void timerFired(Timer timer) {
+              try { 
+                // ok now we are back in the async thread context  ...
+                try { 
+                  LOG.info("Deleting Existing Checkpoint Files");
+                  // safely delete checkpoint files ... 
+                  FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
+                  fs.delete(getDataFileCheckpointPath());
+                  fs.delete(getDataFileFinalPath());
+                  
+                  LOG.info("Reseting BloomFilter");
+                  // safely reset bloom filter 
+                  _bloomFilter = null;
+                  _bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
+                  
+                  // ok reload any lagging history ...
+                  LOG.info("Reloading Lagging History");
+                  reloadLaggingHistory(rpcContext.getInput().getActiveCrawlNumber() - 1);
+                  
+                  // and write out bloom filter
+                  Path finalPath      = getDataFileFinalPath();
+                  
+                  LOG.info("Writing BloomFilter Data");
+                  // serialize the filter ... 
+                  serializeBloomFilter(finalPath);
+  
+                  LOG.info("Update Disk State");
+                  _state.setCurrentCrawlNumber(rpcContext.getInput().getActiveCrawlNumber());
+                  _state.setCurrentCheckpointState(CrawlHistoryStatus.CheckpointState.ACTIVE);
+                  // write state to disk ... 
+                  updateState();
+  
+                  LOG.info("Transition to new CrawlNumber:" + rpcContext.getInput().getActiveCrawlNumber() + " complete");
+                  // update status 
+                  rpcContext.getOutput().setActiveCrawlNumber(_state.getCurrentCrawlNumber());
+                  rpcContext.getOutput().setCheckpointState(_state.getCurrentCheckpointState());
+                }
+                catch(IOException e) { 
+                  LOG.error(CCStringUtils.stringifyException(e));
+                  rpcContext.setStatus(Status.Error_RequestFailed);
+                  rpcContext.setErrorDesc(CCStringUtils.stringifyException(e));
+                }
+                // complete the request ... 
+                try {
+                  rpcContext.completeRequest();
+                } catch (RPCException e) {
+                  LOG.error(CCStringUtils.stringifyException(e));
+                }
+              }
+              finally { 
+                // reset scan variables
+                _lastCheckpointScanTime = -1; 
+                _lastCheckpointFlushTime = 1;
+                _checkpointThreadSemaphore.release();
+                _resetThread = null;
+              }
+              
+            }
+          }));
+        }
+      });
+      _resetThread.start();
+    }
   }
   
   private void serializeBloomFilter(Path checkpointPath) throws IOException { 
@@ -569,10 +627,30 @@ public class CrawlHistoryServer extends CommonCrawlServer
     }
   }
   
-  private void loadBloomFilter() throws IOException { 
+  private void deSerializeBloomFilter(Path checkpointPath) throws IOException { 
+
+    FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
+    
+    FSDataInputStream stream = fs.open(checkpointPath);
+    
+    try { 
+      
+      stream.readInt(); // version  
+      stream.readInt(); // crawl number ... 
+      
+      // serialize bloom filter contents ... 
+      _bloomFilter = URLFPBloomFilter.load(stream);
+    }
+    finally {
+      stream.close();
+    }
+  }
+  
+  
+  private boolean validateOnDiskVersion() throws IOException { 
     FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
     Path dataFilePath = getDataFileFinalPath();
-    
+    LOG.info("Loading BloomFilter From Disk at Path:" + dataFilePath);
     if (fs.exists(dataFilePath)) { 
       FSDataInputStream stream = null;
       try { 
@@ -582,40 +660,45 @@ public class CrawlHistoryServer extends CommonCrawlServer
         dataInput.readInt();
         // read crawl version ... 
         int serializedCrawlVersion = dataInput.readInt();
-        // now check crawl version against state ... 
-        if (!_state.isFieldDirty(HistoryServerState.Field_CURRENTCRAWLNUMBER)
-             || serializedCrawlVersion >= _state.getCurrentCrawlNumber()) {
-          
-          if (serializedCrawlVersion != _state.getCurrentCrawlNumber()) { 
-            LOG.warn("serializedCrawlNumber > current Crawl Number");
-            _state.setCurrentCrawlNumber(serializedCrawlVersion);
-            updateState();
-          }
-          // ok load bloom filter .. 
-          _bloomFilter = URLFPBloomFilter.load(dataInput);
-          if (_bloomFilter != null) { 
-            if (_bloomFilter.getNumElements() != _numElements ||
-                _bloomFilter.getHashCount() != _numHashFunctions || 
-                _bloomFilter.getBucketsPerElement() != _bitsPerElement) { 
-              LOG.error("Serialized stream BloomFilter parameters do not match!");
-              _bloomFilter = null;
-            }
-            else { 
-              LOG.info("BloomFilter initialized from disk for crawl version:" + serializedCrawlVersion);
-              _state.setCurrentCrawlNumber(serializedCrawlVersion);
-              updateState();
-            }
-          }
+        LOG.info("BloomFilter From On Disk has CrawlVersion:" + serializedCrawlVersion);
+        if (serializedCrawlVersion < _state.getCurrentCrawlNumber()) {
+          LOG.error("skipping load because serial crawl number is less than current crawl");
+          stream.close();
+          stream = null;
+          fs.rename(dataFilePath, new Path(dataFilePath.getParent(),dataFilePath.getName()+"-V-"+serializedCrawlVersion));
+          return false;
         }
+        return true;
       }
       finally { 
-       if (stream != null) { 
-         stream.close();
-       }
+        if (stream != null) 
+          stream.close();
       }
     }
-    else { 
-    	_bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
+    return false;
+  }
+  
+  private void loadBloomFilter() throws IOException { 
+    FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
+    Path dataFilePath = getDataFileFinalPath();
+    LOG.info("Potentially Loading BloomFilter From Disk at Path:" + dataFilePath);
+    if (!validateOnDiskVersion()) { 
+      LOG.info("On Disk Verison Not Valid. Allocating New BloomFilter at Path:" + dataFilePath);
+      LOG.info("Allocating NEW BloomFilter");
+      _bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
+    }
+    else {
+      LOG.info("Loading BloomFilter From Disk");
+      deSerializeBloomFilter(dataFilePath);
+    }
+    List<Path> paths = reloadActiveHistory();
+    if (paths.size() != 0) { 
+      LOG.info("Loaded Some History Via Log Files - Writing Back to Disk");
+      serializeBloomFilter(dataFilePath);
+      
+      for (Path historyFile : paths) { 
+        fs.delete(historyFile,false);
+      }
     }
   }
   
@@ -627,6 +710,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   /** last checkpoint time **/
   private long   _lastCheckpointScanTime = -1;
   private long   _lastCheckpointFlushTime = -1;
+  private static final int CHECKPOINT_MUTEX_ACQUISITON_DELAY = 60000 * 2;
   /** urls process since last checkpoint **/
   private AtomicInteger    _urlsProcessedSinceCheckpoint = new AtomicInteger();
   /** checkpoint scan interval **/
@@ -669,7 +753,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
               // scan hdfs for log files
               FileStatus candidates[];
               try {
-                //LOG.info("Checkpoint Thread Scanning For Cadnidates in:" + hdfsScanPath);
+                LOG.info("Checkpoint Thread Scanning For Cadnidates in:" + hdfsScanPath);
                 candidates = fs.globStatus(hdfsScanPath);
     
                 // iterate candidates 
@@ -702,47 +786,70 @@ public class CrawlHistoryServer extends CommonCrawlServer
                 _lastCheckpointScanTime = System.currentTimeMillis();
 
                 // see if can do a full checkpoint ... 
-                if (_lastCheckpointFlushTime == -1 || System.currentTimeMillis() - _lastCheckpointFlushTime >= CHECKPOINT_FLUSH_INTERVAL) { 
-                  LOG.info("Checkpoint Thread Starting Checkpoint");
-                  
+                if (_lastCheckpointFlushTime == -1 || System.currentTimeMillis() - _lastCheckpointFlushTime >= CHECKPOINT_FLUSH_INTERVAL) {
+                      
                   int approximateItemsToFlush = _urlsProcessedSinceCheckpoint.get();
                   // ok at this point we are read to initialize a checkpoint 
-                  if (approximateItemsToFlush != 0) { 
-                      // get the checkpoint path ... 
-                      Path checkpointPath = getDataFileCheckpointPath();
-                      Path finalPath      = getDataFileFinalPath();
-                      
-                      LOG.info("Checkpoint Thread Writing BloomFilter Data");
-                      // serialize the filter ... 
-                      serializeBloomFilter(checkpointPath);
-                      
-                      LOG.info("Checkpoint Thread Deleting Old Checkpoint Data");
-                      // ok now everything seems to have gone fine ... delete existing data file 
-                      fs.delete(finalPath);
-                      LOG.info("Checkpoint Thread ReWriting New Checkpoint Data");
-                      // rename checkpoint to final ... 
-                      fs.rename(checkpointPath, finalPath);
-                      
-                      if (_state.getCurrentCheckpointState() != CrawlHistoryStatus.CheckpointState.TRANSITIONING) { 
-                        LOG.info("Checkpoint Thread Deleting Processed Files");
-                        // ok safely delete all processed files
-                        for (Path processedFilePath: _processedPaths){ 
-                          fs.delete(processedFilePath);
+                  if (approximateItemsToFlush != 0) {
+                    
+                    Path checkpointMutexPath = getCheckpointMutexPath();
+                    
+                    if (fs.createNewFile(checkpointMutexPath)) {
+                      try { 
+                        LOG.info("Checkpoint Thread Starting Checkpoint");
+                    
+                        // get the checkpoint path ... 
+                        Path checkpointPath = getDataFileCheckpointPath();
+                        Path finalPath      = getDataFileFinalPath();
+                        
+                        LOG.info("Checkpoint Thread Writing BloomFilter Data");
+                        // serialize the filter ... 
+                        serializeBloomFilter(checkpointPath);
+                        
+                        LOG.info("Checkpoint Thread Deleting Old Checkpoint Data");
+                        // ok now everything seems to have gone fine ... delete existing data file 
+                        fs.delete(finalPath);
+                        LOG.info("Checkpoint Thread ReWriting New Checkpoint Data");
+                        // rename checkpoint to final ... 
+                        fs.rename(checkpointPath, finalPath);
+                        
+                        if (_state.getCurrentCheckpointState() != CrawlHistoryStatus.CheckpointState.TRANSITIONING) { 
+                          LOG.info("Checkpoint Thread Deleting Processed Files");
+                          // ok safely delete all processed files
+                          for (Path processedFilePath: _processedPaths){ 
+                            fs.delete(processedFilePath);
+                          }
+                          _processedPaths.clear();
                         }
-                        _processedPaths.clear();
+                        else { 
+                          LOG.info("Skipping Processed Files Purge because we are in Transitioning State");
+                        }
+                        _urlsProcessedSinceCheckpoint.addAndGet(-approximateItemsToFlush);
                       }
-                      else { 
-                        LOG.info("Skipping Processed Files Purge because we are in Transitioning State");
+                      finally { 
+                        LOG.info("Checkpoint Thread Releasing Mutex:" + checkpointMutexPath);
+                        fs.delete(checkpointMutexPath, false);
                       }
-                      _urlsProcessedSinceCheckpoint.addAndGet(-approximateItemsToFlush);
+                    }
+                    else { 
+                      int delay = (int)(Math.random() * CHECKPOINT_MUTEX_ACQUISITON_DELAY);
+                      LOG.info("Checkpoint thread failed to acquire Mutex:" + checkpointMutexPath + " Waiting " + delay + "(MS) before retry");
+                      try {
+                        Thread.sleep(delay);
+                      } catch (InterruptedException e) {
+                      }
+                    }
                   }
                   // update last checkpoint no time no matter what ...
                   _lastCheckpointFlushTime = System.currentTimeMillis();
-
                 }
                 
               } catch (IOException e) {
                 LOG.error("Checkpoint Thread Bloom Filter Checkpoint Failed with Exception:" + CCStringUtils.stringifyException(e));
+                try {
+                  Thread.sleep(60000);
+                } catch (InterruptedException e1) {
+                }
               }
             }
             finally { 
@@ -794,8 +901,6 @@ public class CrawlHistoryServer extends CommonCrawlServer
       
       // ok reset resync variable on checkpoint thread 
       _lastCheckpointScanTime = -1;
-      // interrupt thread ... 
-      _checkpointThread.interrupt();
       // now set a timer to poll periodically for resync to complete
       getEventLoop().setTimer(new Timer(100,true,new Timer.Callback() {
         

@@ -1,18 +1,20 @@
 /**
  * Copyright 2008 - CommonCrawl Foundation
  * 
- * CommonCrawl licenses this file to you under the Apache License, 
- * Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
 
 package org.commoncrawl.crawl.crawler;
 
@@ -21,12 +23,14 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -72,8 +76,6 @@ import org.commoncrawl.crawl.segment.SegmentLoader;
 import org.commoncrawl.crawl.segment.SegmentLoader.LoadProgressCallback;
 import org.commoncrawl.crawl.statscollector.CrawlerStats;
 import org.commoncrawl.crawl.statscollector.LogCrawlStatsRequest;
-import org.commoncrawl.db.RecordStore;
-import org.commoncrawl.db.RecordStore.RecordStoreException;
 import org.commoncrawl.io.internal.DNSQueryResult;
 import org.commoncrawl.io.internal.NIODNSCache;
 import org.commoncrawl.io.internal.NIODNSQueryClient;
@@ -87,10 +89,10 @@ import org.commoncrawl.protocol.CrawlSegmentStatus;
 import org.commoncrawl.protocol.CrawlSegmentURL;
 import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.CrawlURLMetadata;
+import org.commoncrawl.protocol.URLFP;
 import org.commoncrawl.rpc.base.internal.AsyncRequest;
 import org.commoncrawl.rpc.base.internal.NullMessage;
 import org.commoncrawl.rpc.base.shared.RPCException;
-import org.commoncrawl.rpc.base.shared.RPCStructWithId;
 import org.commoncrawl.util.internal.HttpHeaderInfoExtractor;
 import org.commoncrawl.util.internal.RuntimeStatsCollector;
 import org.commoncrawl.util.internal.SessionIDURLNormalizer;
@@ -106,7 +108,7 @@ import org.commoncrawl.util.shared.JVMStats;
 import org.commoncrawl.util.shared.MovingAverage;
 
 /**
- * Main class that manages the crawler process state
+ * Class that manages the crawler process state
  * 
  * @author rana
  *
@@ -139,8 +141,6 @@ public final class CrawlerEngine  {
 
   /** logging **/
   private static final Log LOG = LogFactory.getLog("org.commoncrawl.crawler.CrawlEngine");
-  /** primary crawler database **/
-  RecordStore 	_recordStore = null;
   /** database id of crawler **/
   String 			  	_databaseId;
   /** back pointer to crawl server **/
@@ -314,9 +314,8 @@ public final class CrawlerEngine  {
    * 
    * 
    */
-  public boolean initialize(RecordStore recordStore,InetSocketAddress[] crawlInterfaceList) {
+  public boolean initialize(InetSocketAddress[] crawlInterfaceList) {
 
-    _recordStore = recordStore;
     _crawlInterfaces = crawlInterfaceList;
     _failureLog = new CustomLogger("CrawlerFailureLog");
     _GETLog = new CustomLogger("GETLog");
@@ -356,8 +355,6 @@ public final class CrawlerEngine  {
     try {
 
 
-
-      _databaseId = _recordStore.getDatabaseId();
 
       // register ourselves as log sink for dns events ... 
       // NIODNSLocalResolver.setLogger(this);
@@ -431,7 +428,7 @@ public final class CrawlerEngine  {
 
       return true;
     }
-    catch (RecordStoreException e) { 
+    catch (IOException e) { 
       LOG.fatal(e);
 
       return false;
@@ -977,13 +974,16 @@ public final class CrawlerEngine  {
 
 
   /** load state **/
-  private void loadState() throws RecordStoreException { 
+  private void loadState() throws IOException { 
 
   }
 
 
   /** internal helper routine to load crawl segment metdata given list id **/
-  private void populateCrawlSegmentsFromHDFS(int listId) throws IOException {
+  private List<CrawlSegment> populateCrawlSegmentsFromHDFS(int listId) throws IOException {
+    
+    ArrayList<CrawlSegment> crawlSegments = new ArrayList<CrawlSegment>();
+    
     LOG.info("Populating CrawlSegment(s) from HDFS for List:" + listId);
     // get root path for crawl segment data for the specified list id 
     Path hdfsSearchPath = CrawlSegmentLog.buildHDFSCrawlSegmentSearchPathForListId(listId,_server.getHostName());
@@ -994,44 +994,22 @@ public final class CrawlerEngine  {
     FileStatus fileStatusArray[] = hdfs.globStatus(hdfsSearchPath);
     LOG.info("Found:" + fileStatusArray.length + " segments at path:"+ hdfsSearchPath);
     
-    try  {  
+    // now walk matched set 
+    for (FileStatus fileStatus : fileStatusArray) { 
+      // segment id is the parent path name of the matched file
+      String segmentName = fileStatus.getPath().getParent().getName();
+      int segmentId = Integer.parseInt(segmentName);
+      //now populate crawl segment information 
+      CrawlSegment crawlSegment = new CrawlSegment();
 
-      _recordStore.beginTransaction();
+      crawlSegment.setListId(listId);
+      crawlSegment.setSegmentId(segmentId);
 
-      // now walk matched set 
-      for (FileStatus fileStatus : fileStatusArray) { 
-        // segment id is the parent path name of the matched file
-        String segmentName = fileStatus.getPath().getParent().getName();
-        int segmentId = Integer.parseInt(segmentName);
-        //now populate crawl segment information 
-        CrawlSegment crawlSegment = new CrawlSegment();
+      LOG.info("adding crawl segment:"+crawlSegment.getSegmentId() + " for List:" + listId);
 
-        crawlSegment.setListId(listId);
-        crawlSegment.setSegmentId(segmentId);
-
-        LOG.info("adding crawl segment:"+crawlSegment.getSegmentId() + " for List:" + listId);
-
-
-        if (Environment.detailLogEnabled())
-          LOG.info("writing work unit to disk segmentId:"+crawlSegment.getSegmentId());
-        // if not, persist the work unit to disk
-        _insertUpdatePersistentObject(crawlSegment,CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY,CrawlSegmentKeyPrefix,false);
-
-        if (Environment.detailLogEnabled())
-          LOG.info("queuing workunit for load - segmentId:"+crawlSegment.getSegmentId());
-
-        // delay load the segment ... 
-        //delayLoadSegment(crawlSegment,null);
-      }
-
-      _recordStore.commitTransaction();
-
+      crawlSegments.add(crawlSegment);
     }
-    catch (RecordStoreException e) { 
-      LOG.error(e);
-      _recordStore.abortTransaction();
-      throw e;
-    }
+    return crawlSegments;
   }
 
   /** internal load work unit routine **/
@@ -1039,32 +1017,15 @@ public final class CrawlerEngine  {
 
     LOG.info("Loading Crawl Segments");
 
-    _recordStore.beginTransaction();
-    _recordStore.deleteChildRecords(CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY);
-    _recordStore.commitTransaction();
-
-    populateCrawlSegmentsFromHDFS(_activeListId);
+    List<CrawlSegment> crawlSegments = populateCrawlSegmentsFromHDFS(_activeListId);
 
     LOG.info("defer loading lists");
 
     float loadPosition = 0.0f;
 
 
-    LOG.info("Loading CrawlSegments for List:" + _activeListId);
-    Vector<String> crawlSegmentKeys = _recordStore.getChildRecordKeysByParentId(CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY);
-    LOG.info("Found:" + crawlSegmentKeys.size() + " CrawlSegments for List:" + _activeListId + " Loading Segment Metadata");
-    Vector<CrawlSegment> crawlSegmentList = new Vector<CrawlSegment>();
-
-    for (String crawlSegmentKey :  crawlSegmentKeys) { 
-
-      LOG.info("Loading CrawlSegment Metdata for Segment with Id:" + crawlSegmentKey);
-      // load from disk and add to list ...
-      CrawlSegment crawlSegment = (CrawlSegment) _recordStore.getRecordByKey(crawlSegmentKey);
-      crawlSegmentList.add(crawlSegment);
-    }
-
     // now sort the list by segment id 
-    Collections.sort(crawlSegmentList,new Comparator<CrawlSegment>() {
+    Collections.sort(crawlSegments,new Comparator<CrawlSegment>() {
 
       @Override
       public int compare(CrawlSegment o1, CrawlSegment o2) {
@@ -1073,7 +1034,7 @@ public final class CrawlerEngine  {
     });
 
     // now queue up load requests ... 
-    for (CrawlSegment crawlSegment : crawlSegmentList) { 
+    for (CrawlSegment crawlSegment : crawlSegments) { 
 
       // if the segment has not been marked as completed but it is marked as crawling (we loaded the last time we ran)
       if (!crawlSegment.getIsComplete()) { 
@@ -1091,6 +1052,16 @@ public final class CrawlerEngine  {
     completionCallback.execute();
   }
 
+  
+  public static CrawlSegment crawlSegmentFromCrawlSegmentStatus(CrawlSegmentStatus status) { 
+    CrawlSegment segment = new CrawlSegment();
+    
+    segment.setListId(status.getListId());
+    segment.setSegmentId(status.getSegmentId());
+
+    return segment;
+  }
+  
   /** load the specified crawl segment 
    * 
    * @param crawlSegment
@@ -1358,7 +1329,7 @@ public final class CrawlerEngine  {
 
 
   /** internal loadWorkUnit routine **/
-  private CrawlSegmentStatus loadCrawlSegment(final CrawlSegment crawlSegment)throws RecordStoreException {
+  private CrawlSegmentStatus loadCrawlSegment(final CrawlSegment crawlSegment) {
 
     _activeLoadCount++;
 
@@ -1384,21 +1355,6 @@ public final class CrawlerEngine  {
 
 
     if (!getServer().externallyManageCrawlSegments()) { 
-
-      boolean localTransaction = false;
-      if (!_recordStore.inTransaction()) { 
-        _recordStore.beginTransaction();
-        localTransaction = true;
-      }
-
-
-      // and update database record ... 
-      _insertUpdatePersistentObject(crawlSegment,CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY,CrawlSegmentKeyPrefix,true);
-
-      if (localTransaction) { 
-        _recordStore.commitTransaction();
-        localTransaction = false;
-      }
 
       // remove crawl segment log from crawl log data structure 
       // (we need to do this to protect the data structure from corruption, since the underlying 
@@ -1849,6 +1805,12 @@ public final class CrawlerEngine  {
 
       boolean badSessionIDURL = false;
       boolean malformedURL = false;
+      
+      URLFP fp = URLUtils.getURLFPFromURL(segmentURL.getUrl(),false);
+      
+      if (fp == null) {
+        malformedURL = true;
+      }
 
       if (!failed && !blackListedHost) { 
         /*
@@ -1919,13 +1881,6 @@ public final class CrawlerEngine  {
     _dnsProcessResultsTime.addSample((double)timeEnd-timeStart);
   }
 
-  /** generic helper routine to persist RPCStruct to disk **/
-  private void _insertUpdatePersistentObject ( RPCStructWithId object,String  parentKey,String keyPrefix,boolean update) throws RecordStoreException  { 
-    if (update)
-      _recordStore.updateRecordByKey(keyPrefix+object.getKey(), object);
-    else 
-      _recordStore.insertRecord(parentKey, keyPrefix+object.getKey(), object);
-  }
 
   private static String buildCrawlSegmentKey(int listId,int segmentId) { 
     CrawlSegment segment = new CrawlSegment();
@@ -1946,21 +1901,11 @@ public final class CrawlerEngine  {
         // now if a load target was found ... 
         if (loadTarget != null) { 
 
-          try { 
-            // get the crawl segment object ... 
-            CrawlSegment segment = (CrawlSegment) _recordStore.getRecordByKey(CrawlSegmentKeyPrefix + buildCrawlSegmentKey(loadTarget.getListId(),loadTarget.getSegmentId()));
-            if (segment == null) { 
-              LOG.error("LoadNextSegment - Could not find CrawlSegment object in database for segment id:" + loadTarget.getSegmentId());
-            }
-            else {
-              if (Environment.detailLogEnabled())
-                LOG.info("potenitallyLoadNextSegment returned segment:" + segment.getSegmentId() + " from list:" + segment.getListId());
-              loadCrawlSegment(segment);
-            }
-          }
-          catch (RecordStoreException e) { 
-            LOG.error("Delay Load of Segment:" + loadTarget.getSegmentId() + " Failed with Exception:" + CCStringUtils.stringifyException(e));
-          }
+          // get the crawl segment object ... 
+          CrawlSegment segment = crawlSegmentFromCrawlSegmentStatus(loadTarget);
+          if (Environment.detailLogEnabled())
+            LOG.info("potenitallyLoadNextSegment returned segment:" + segment.getSegmentId() + " from list:" + segment.getListId());
+          loadCrawlSegment(segment);
         }
       }
     }
@@ -2030,7 +1975,7 @@ public final class CrawlerEngine  {
   }
 
   /** clear persistent and in memory state **/
-  public void clearState() throws RecordStoreException{ 
+  public void clearState() { 
 
     // stop the crawl ... 
     stopCrawl(null);
@@ -2038,7 +1983,6 @@ public final class CrawlerEngine  {
     stopStatsCollector();
     // clear queues ... 
     _httpCrawlQueue.clear();
-    _recordStore.deleteChildRecords(CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY);
     // clear internal data structures ...
     _statusMap.clear();
 

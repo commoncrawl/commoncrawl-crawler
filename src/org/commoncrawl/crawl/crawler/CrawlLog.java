@@ -1,18 +1,21 @@
 /**
  * Copyright 2008 - CommonCrawl Foundation
  * 
- * CommonCrawl licenses this file to you under the Apache License, 
- * Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
  */
+
 
 package org.commoncrawl.crawl.crawler;
 
@@ -24,6 +27,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -34,7 +38,8 @@ import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.channels.FileChannel;
+import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,8 +51,9 @@ import java.util.Vector;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
 import java.util.zip.CRC32;
+
+import junit.framework.Assert;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -57,10 +63,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.compress.SnappyCodec;
 import org.commoncrawl.async.ConcurrentTask;
-import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
+import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.common.Environment;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.protocol.CrawlSegmentDetail;
@@ -71,9 +79,10 @@ import org.commoncrawl.util.internal.RuntimeStatsCollector;
 import org.commoncrawl.util.shared.CCStringUtils;
 import org.commoncrawl.util.shared.FPGenerator;
 import org.commoncrawl.util.shared.FileUtils;
+import org.commoncrawl.util.shared.FlexBuffer;
 import org.commoncrawl.util.shared.MovingAverage;
 import org.commoncrawl.util.shared.SmoothedAverage;
-import org.junit.Test;
+import org.mortbay.jetty.security.Credential.MD5;
 
 /**
  * CrawlLog - A write ahead log that stores all crawler state up to a checkpoint
@@ -81,6 +90,7 @@ import org.junit.Test;
  * @author rana
  *
  */
+
 public final class CrawlLog {
 
   public static final Log LOG = LogFactory.getLog(CrawlLog.class);
@@ -225,9 +235,14 @@ public final class CrawlLog {
   /** initialize log (file) **/
   private static LogFileHeader initializeActiveLog(File rootDirectory)throws IOException { 
     File activeLogPath = getActivePath(rootDirectory);
+    return initializeLogFileHeaderFromLogFile(activeLogPath);
+  }
+  
+  private static LogFileHeader initializeLogFileHeaderFromLogFile(File logFilePath)throws IOException {
+  
     LogFileHeader headerOut = null;
-    if (!activeLogPath.exists()) { 
-      DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(activeLogPath));
+    if (!logFilePath.exists()) { 
+      DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(logFilePath));
       try {
         headerOut = initializeEmptyLogFile(outputStream);
       }
@@ -238,7 +253,7 @@ public final class CrawlLog {
     else { 
       headerOut = new LogFileHeader();
 
-      DataInputStream inputStream = new DataInputStream(new FileInputStream(activeLogPath));
+      DataInputStream inputStream = new DataInputStream(new FileInputStream(logFilePath));
       
       try { 
         headerOut.readHeader(inputStream);
@@ -328,19 +343,19 @@ public final class CrawlLog {
     }
   }
   
-  private void updateLogFileHeader(File logFileName, long addedRecordCount)throws IOException {
+  private static void updateLogFileHeader(File logFileName, LogFileHeader header,long addedRecordCount)throws IOException {
     
     RandomAccessFile file = new RandomAccessFile(logFileName,"rw");
     
     try { 
       
       // update cached header ... 
-      _header._fileSize = file.getChannel().size();
-      _header._itemCount += addedRecordCount;
+      header._fileSize = file.getChannel().size();
+      header._itemCount += addedRecordCount;
       // set the position at zero .. 
       file.seek(0);
       // and write header to disk ... 
-      _header.writeHeader(file);
+      header.writeHeader(file);
     }
     finally {
       // major bottle neck.. 
@@ -476,69 +491,134 @@ public final class CrawlLog {
     }
   }
   
-  private Path transferLocalCheckpointLog(FileSystem hdfs,File crawlLogPath, long checkpointId) throws IOException { 
+  
+  
+  /**
+   * seek out next instance of sync bytes in the file input stream
+   * 
+   * @param file
+   * @throws IOException
+   */
+  private static boolean seekToNextSyncBytesPos(byte [] syncBytesBuffer,RandomAccessFile file,long maxFileSize)
+      throws IOException {
+    // read in a sync.length buffer amount
+    file.read(syncBytesBuffer);
+
+    int syncLen = SYNC_BYTES_SIZE;
+
+    // start scan for next sync position ...
+    for (int i = 0; file.getFilePointer() < maxFileSize; i++) {
+      int j = 0;
+      for (; j < syncLen; j++) {
+        if (_sync[j] != syncBytesBuffer[(i + j) % syncLen])
+          break;
+      }
+      if (j == syncLen) {
+        // found matching sync bytes - reset file pos to before sync bytes
+        file.seek(file.getFilePointer() - SYNC_BYTES_SIZE); // position
+                                                                               // before
+                                                                               // sync
+        return true;
+      }
+      syncBytesBuffer[i % syncLen] = file.readByte();
+    }
+    return false;
+  }
+
+  private static interface HDFSCrawlURLWriter { 
+    public void writeCrawlURLItem(Text url,CrawlURL urlObject)throws IOException;
+    public void close()throws IOException;
+  }
+  
+  private static class SequenceFileCrawlURLWriter implements HDFSCrawlURLWriter {
     
-    // construct a target path (where we are going to store the checkpointed crawl log )
-    Path stagingDirectory      = new Path(CrawlEnvironment.getCheckpointStagingDirectory());
-    Path tempFileName       = new Path(stagingDirectory,CrawlEnvironment.buildCrawlLogCheckpointName(getNodeName(),checkpointId));
+    SequenceFile.Writer writer = null;
     
-    // delete the temp file ... 
-    hdfs.delete(tempFileName);
+    public SequenceFileCrawlURLWriter(Configuration conf,FileSystem fs,Path path) throws IOException { 
+      // open a sequence file writer at the temp file location ...
+      writer = SequenceFile.createWriter(fs,conf,path,Text.class,CrawlURL.class,CompressionType.BLOCK,new SnappyCodec());
+    }
     
-    // open a sequence file writer at the temp file location ...
-    SequenceFile.Writer writer = new SequenceFile.Writer(hdfs,CrawlEnvironment.getHadoopConfig(),tempFileName,Text.class,CrawlURL.class);
+    @Override
+    public void writeCrawlURLItem(Text url, CrawlURL urlObject)throws IOException {
+      writer.append(url, urlObject);
+    }
+    
+    public void close() throws IOException { 
+      writer.close();
+    }
+  };
+
+  private static void transferLocalCheckpointLog(File crawlLogPath,HDFSCrawlURLWriter writer, long checkpointId) throws IOException { 
+    
     // and open the crawl log file ...
-    FileInputStream inputStream = null;
+    RandomAccessFile inputStream = null;
     
     IOException exception = null;
     
     CRC32 crc = new CRC32();
     CustomByteArrayOutputStream buffer = new CustomByteArrayOutputStream(1 << 17);
+    byte [] syncBytesBuffer = new byte[SYNC_BYTES_SIZE];
+    
+    // save position for potential debug output.
+    long lastReadPosition = 0;
     
     try { 
-      inputStream = new FileInputStream(crawlLogPath);
+      inputStream = new RandomAccessFile(crawlLogPath,"rw");
       // and a data input stream ...
-      DataInputStream reader = new DataInputStream(inputStream);
+      RandomAccessFile reader = inputStream;
+      // seek to zero
+      reader.seek(0L);
       
       // read the header ... 
       LogFileHeader header =  readLogFileHeader(reader);
       
-      // we can only read up to file size specified ... get the channel to keep track of position 
-      FileChannel channel = inputStream.getChannel();
-
       // read a crawl url from the stream... 
       
-      while (channel.position() < header._fileSize) { 
+      while (inputStream.getFilePointer() < header._fileSize) { 
         
-        // save position for potential debug output.
-        long readPosition = channel.position();
-        // read length ... 
-        int urlDataLen = reader.readInt();
-        long urlDataCRC = reader.readLong();
-        
-        if (urlDataLen > buffer.getBuffer().length) { 
-          buffer = new  CustomByteArrayOutputStream( ((urlDataLen / 65536) + 1) * 65536 );
-        }
-        reader.read(buffer.getBuffer(), 0, urlDataLen);
-        crc.reset();
-        crc.update(buffer.getBuffer(), 0, urlDataLen);
-        
-        long computedValue = crc.getValue();
-        
-        // validate crc values ... 
-        if (computedValue != urlDataCRC) { 
-          throw new CorruptCrawlLogException("CRC Mismatch Detected during HDFS transfer in CrawlLog:" + crawlLogPath.getAbsolutePath() + " Checkpoint Id:" + checkpointId + " FilePosition:" + readPosition);
+        if (seekToNextSyncBytesPos(syncBytesBuffer, reader, header._fileSize)) { 
+          
+          lastReadPosition = inputStream.getFilePointer();
+          
+          // skip sync 
+          inputStream.skipBytes(SYNC_BYTES_SIZE);
+          
+          // read length ... 
+          int urlDataLen = reader.readInt();
+          long urlDataCRC = reader.readLong();
+          
+          if (urlDataLen > buffer.getBuffer().length) { 
+            buffer = new  CustomByteArrayOutputStream( ((urlDataLen / 65536) + 1) * 65536 );
+          }
+          reader.read(buffer.getBuffer(), 0, urlDataLen);
+          crc.reset();
+          crc.update(buffer.getBuffer(), 0, urlDataLen);
+          
+          long computedValue = crc.getValue();
+          
+          // validate crc values ... 
+          if (computedValue != urlDataCRC) { 
+            LOG.error("CRC Mismatch Detected during HDFS transfer in CrawlLog:" + crawlLogPath.getAbsolutePath() + " Checkpoint Id:" + checkpointId + " FilePosition:" + lastReadPosition);
+            inputStream.seek(lastReadPosition + 1);
+          }
+          else { 
+            // allocate a crawl url data structure 
+            CrawlURL url = new CrawlURL();
+            DataInputStream bufferReader = new DataInputStream(new ByteArrayInputStream(buffer.getBuffer(),0,urlDataLen));
+            //populate it from the (in memory) data stream
+            url.readFields(bufferReader);
+            // and write out appropriate sequence file entries ...
+            writer.writeCrawlURLItem(new Text(url.getUrl()),url);
+          }
         }
         else { 
-          // allocate a crawl url data structure 
-          CrawlURL url = new CrawlURL();
-          DataInputStream bufferReader = new DataInputStream(new ByteArrayInputStream(buffer.getBuffer(),0,urlDataLen));
-          //populate it from the (in memory) data stream
-          url.readFields(bufferReader);
-          // and write out appropriate sequence file entries ...
-          writer.append(new Text(url.getUrl()),url);
+          break;
         }
       }
+    }
+    catch (EOFException e) { 
+      LOG.error("Caught EOF Exception during read of local CrawlLog:" + crawlLogPath.getAbsolutePath() + " Checkpoint Id:" + checkpointId + " FilePosition:" + lastReadPosition);
     }
     catch (IOException e) {
     	LOG.error(CCStringUtils.stringifyException(e));
@@ -548,17 +628,7 @@ public final class CrawlLog {
     finally {
     	if (inputStream != null) 
     		inputStream.close();
-    	if (writer != null) 
-    		writer.close();
-
-      // if there was an exception ... 
-      if (exception != null) { 
-        LOG.error("HDFS Write of CrawlLog failed with Exception:" + CCStringUtils.stringifyException(exception));
-        // delete any hdfs output ... 
-        hdfs.delete(tempFileName);
-      }
     }
-    return tempFileName;
   }
   
   private Path getFinalSegmentLogPath(FileSystem hdfs,long checkpointId,int listId, int segmentId) throws IOException {
@@ -644,18 +714,44 @@ public final class CrawlLog {
           public Boolean call() throws Exception {
 
             // we need to track these in case of failure ... 
-            Path checkpointTempFileName = null;
             Vector<Path> segmentLogStagingPaths = new Vector<Path>();
             Vector<Path> segmentLogFinalPaths = new Vector<Path>();
 
             // get the file system 
-            FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
+            final FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
             
             try { 
               
               LOG.info("CrawlLog Checkpoint - Transferring CrawlLog to HDFS");
-              // write out crawl log to hdfs ... 
-              checkpointTempFileName = transferLocalCheckpointLog(hdfs,getCheckpointPath(_rootDirectory),_checkpointId);
+              
+              // construct a target path (where we are going to store the checkpointed crawl log )
+              Path stagingDirectory      = new Path(CrawlEnvironment.getCheckpointStagingDirectory());
+              final Path checkpointTempFileName = new Path(stagingDirectory,CrawlEnvironment.buildCrawlLogCheckpointName(getNodeName(),_checkpointId));
+              
+              // delete the temp file ... 
+              hdfs.delete(checkpointTempFileName);
+
+              SequenceFileCrawlURLWriter hdfsWriter = new SequenceFileCrawlURLWriter(CrawlEnvironment.getHadoopConfig(),hdfs, checkpointTempFileName);
+              
+              try { 
+                // write out crawl log to hdfs ... 
+                transferLocalCheckpointLog(getCheckpointPath(_rootDirectory),hdfsWriter,_checkpointId);
+              }
+              catch (Exception e) { 
+                LOG.error("HDFS Write of CrawlLog failed. Deleting tempFile:" + checkpointTempFileName + " Exception:" + CCStringUtils.stringifyException(e));
+                	
+                // close writer 
+                hdfsWriter.close();
+                hdfsWriter = null;
+                // delete any hdfs output ... 
+                hdfs.delete(checkpointTempFileName,false);
+                throw e;
+              }
+              finally {
+                if (hdfsWriter != null) { 
+                  hdfsWriter.close();
+                }
+              }
               
               LOG.info("CrawlLog Checkpoint - Transferring CrawlSegment Logs");
               // and next for every segment 
@@ -684,6 +780,7 @@ public final class CrawlLog {
               // if no checkpoint data directory ... create one ... 
               if (!hdfs.exists(checkpointDirectory))
                   hdfs.mkdirs(checkpointDirectory);
+              LOG.info("Promoting Checking File From:" + checkpointTempFileName + " to:" + checkpointFileName);
               // and essentially move the crawl log file from staging to data directory ..
               hdfs.rename(checkpointTempFileName,checkpointFileName);
               // and now do the same thing for each segment log files
@@ -696,10 +793,6 @@ public final class CrawlLog {
             }
             catch (Exception e) { 
               LOG.error("Checkpoint:" + _checkpointId +" FAILED with exception:" + CCStringUtils.stringifyException(e));
-              // in case of error ... we need to undo the checkpoint (as best as possible) ... 
-              if (checkpointTempFileName != null) { 
-                hdfs.delete(checkpointTempFileName);
-              }
               for (Path segmentPath : segmentLogStagingPaths) {
                 hdfs.delete(segmentPath);
               }
@@ -835,6 +928,62 @@ public final class CrawlLog {
     _engine.getCrawlLogLog().info(sb.toString());
   }
   
+  static byte[] _sync;                          // 16 random bytes
+  static final int SYNC_BYTES_SIZE = 16;
+  static 
+  {
+    try {                                       
+      MessageDigest digester = MessageDigest.getInstance("MD5");
+      digester.update("SOME RANDOM BYTES".getBytes());
+      _sync = digester.digest();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static class SyncedCrawlURLLogWriter {
+
+    boolean _injectErrors = false;
+    boolean _corruptThisEntry = false;
+    
+    public SyncedCrawlURLLogWriter(boolean injectErrors) { 
+      _injectErrors = injectErrors;
+    }
+    
+    public SyncedCrawlURLLogWriter() { 
+      
+    }
+    private CustomByteArrayOutputStream bufferOutputStream = new CustomByteArrayOutputStream(1 << 17);
+    private DataOutputStream dataOutputStream = new DataOutputStream(bufferOutputStream);
+    private CRC32 crc = new CRC32();
+    
+    public void writeItem(DataOutputStream crawlLogStream,CrawlURL url) throws IOException {
+
+      bufferOutputStream.reset();
+      // write to intermediate stream ... 
+      url.write(dataOutputStream);
+      // and crc the data ... 
+      crc.reset();
+      crc.update(bufferOutputStream.getBuffer(),0,bufferOutputStream.size());
+      // write out sync bytes first 
+      crawlLogStream.write(_sync);
+      // write out length 
+      crawlLogStream.writeInt(bufferOutputStream.size());
+      //crc next
+      long computedValue = crc.getValue();
+      if (_injectErrors) {
+        _corruptThisEntry = !_corruptThisEntry;
+        if (_corruptThisEntry) { 
+          LOG.info("Intentionally Corrupting URL:" + url.getUrl());
+          computedValue += 12;
+        }
+      }
+      crawlLogStream.writeLong(computedValue);
+      // and then the data 
+      crawlLogStream.write(bufferOutputStream.getBuffer(),0,bufferOutputStream.size());
+    }    
+  }
+  
   private void flushLog(final FlushCompletionCallback completionCallback) { 
     if (Environment.detailLogEnabled())
       LOG.info("LOG_FLUSH:Collecting Entries....");
@@ -939,29 +1088,13 @@ public final class CrawlLog {
                       
                       new CrawlSegmentLog.LogItemBuffer.CrawlURLWriter() {
 
-                        private CustomByteArrayOutputStream bufferOutputStream = new CustomByteArrayOutputStream(1 << 17);
-                        private DataOutputStream dataOutputStream = new DataOutputStream(bufferOutputStream);
-                        private CRC32 crc = new CRC32();
-                        
+                        SyncedCrawlURLLogWriter syncedLogWriter = new SyncedCrawlURLLogWriter();
                         
                         public void writeItem(CrawlURL url) throws IOException {
-
-                          bufferOutputStream.reset();
-                          // write to intermediate stream ... 
-                          url.write(dataOutputStream);
                           // log it 
-                          logCrawlLogWrite(url,dataOutputStream.size());
-                          // and crc the data ... 
-                          crc.reset();
-                          crc.update(bufferOutputStream.getBuffer(),0,bufferOutputStream.size());
-                          // write out length first 
-                          crawlLogStream.writeInt(bufferOutputStream.size());
-                          //crc next
-                          long computedValue = crc.getValue();
-                          //TODO: waste of space - write 32 bit values as long because having problems with java sign promotion rules during read...
-                          crawlLogStream.writeLong(computedValue);
-                          // and then the data 
-                          crawlLogStream.write(bufferOutputStream.getBuffer(),0,bufferOutputStream.size());
+                          logCrawlLogWrite(url,url.getContentSize());
+                          // write it 
+                          syncedLogWriter.writeItem(crawlLogStream, url);
                         }
     
                         public void writeItemCount(int entryCount)throws IOException {
@@ -996,7 +1129,7 @@ public final class CrawlLog {
                 if (Environment.detailLogEnabled())
                   LOG.info("LOG_FLUSH: Updating Log File Headers");
                 // update the log file header 
-                updateLogFileHeader(crawlLogFile,crawlLogRecordCount);
+                updateLogFileHeader(crawlLogFile,_header,crawlLogRecordCount);
                 // and update each completion log header ... 
                 for (long packedSegmentId : recordCountsByPackedId.keySet()) { 
                   File activeSegmentLogPath = CrawlSegmentLog.buildActivePath(_rootDirectory,getListIdFromLogId(packedSegmentId), getSegmentIdFromLogId(packedSegmentId));
@@ -1258,128 +1391,6 @@ public final class CrawlLog {
     collector.setLongValue(CrawlerEngineStats.ID, CrawlerEngineStats.Name.CrawlLog_FlushTimeLast,_lastFlushTime);
   }
   
-    
-  @Test
-  public void testCrawlLog() throws Exception {
-    // initialize ...
-    Configuration conf = new Configuration();
-    
-    conf.addResource("nutch-default.xml");
-    conf.addResource("nutch-site.xml");
-    conf.addResource("hadoop-default.xml");
-    conf.addResource("hadoop-site.xml");
-    conf.addResource("commoncrawl-default.xml");
-    conf.addResource("commoncrawl-site.xml");
-    
-    CrawlEnvironment.setHadoopConfig(conf);
-    CrawlEnvironment.setDefaultHadoopFSURI("file:///");
-    CrawlEnvironment.setParseSegmentDataDirectory(_rootDirectory.getAbsolutePath() + "/parse_segments");
-    
-    
-    // delete any existing log entry ... 
-    CrawlSegmentLog.buildActivePath(_rootDirectory, 1,1).delete();
-    
-    // create a crawl segment ... 
-    CrawlSegmentDetail detail = loadCrawlSegment("bloggerGETs_1.txt");
-    // create a log instance 
-    CrawlSegmentLog segmentLog = new CrawlSegmentLog(_rootDirectory,1,1,getNodeName());
-    // add it to the crawl log instance 
-    addSegmentLog(segmentLog);
-    // get it back ... 
-    segmentLog  = getLogForSegment(1,1);
-
-    // compute our test targets ... 
-    int totalItemCount = detail.getUrlCount();
-    int desiredItemCount = totalItemCount - 100;
-    
-    // populate the logs 
-
-    int curItemCount = 0;
-    int flushPendingCount = 0;
-    int flushCount = 0;
-    // create a semaphore ... 
-    final Semaphore semaphore = new Semaphore(0);
-    
-    for (CrawlSegmentHost host : detail.getHosts()) { 
-      for (CrawlSegmentURL url : host.getUrlTargets()) { 
-        //populate a crawl url data ... 
-        CrawlURL crawlURLData = new CrawlURL();
-        
-        
-      	String urlStr = url.getUrl();
-        crawlURLData.setUrl(urlStr);
-        crawlURLData.setFingerprint(url.getUrlFP());
-        crawlURLData.setHostFP(host.getHostFP());
-        // and add it the log ... 
-        segmentLog.completeItem(crawlURLData);
-        ++flushPendingCount;
-        ++curItemCount;
-        
-        if (flushPendingCount % 1000 == 0 || curItemCount == desiredItemCount) {
-          // count the number of flushes ... 
-          ++flushCount;
-          flushLog( new FlushCompletionCallback() {
-
-            public void flushComplete() {
-              semaphore.release();
-            }
-
-            public void flushFailed(Exception e) {
-              semaphore.release();
-            } 
-            
-          }
-          
-          );
-        }
-        if (curItemCount == desiredItemCount)
-          break;
-      }
-      if (curItemCount == desiredItemCount)
-        break;
-    }
-    
-    // wait for all flushes to complete ...
-    while (flushCount-- != 0) { 
-      semaphore.acquire();
-    }
-    
-    // next checkpoint the log ... 
-    checkpoint(System.currentTimeMillis(),new CheckpointCompletionCallback() {
-
-      public void checkpointComplete(long checkpointId,Vector<Long> completedSegmentIds) {
-        semaphore.release();
-      }
-
-      public void checkpointFailed(long checkpointId, Exception e) {
-        semaphore.release();
-      } 
-      
-      }, 1);
-
-    /*
-     * TODO: WE NEED TO REWORK THIS SECTION >....
-    // recreate a crawl segment ... 
-    detail = loadCrawlSegment("bloggerGETs_1.txt");
-    // create a log instance 
-    segmentLog = new CrawlSegmentLog(_rootDirectory,1,getNodeName());
-    // add it to the crawl log instance 
-    addSegmentLog(segmentLog);
-    // get it back ... 
-    segmentLog  = getLogForSegment(1);
-    // if exists, then just reconcile against the full segment against the log 
-    segmentLog.syncToLog(detail);
-    // validate .. 
-    assert detail.getUrlsComplete() == desiredItemCount && detail.getUrlCount() == totalItemCount;
-    // finally delete both log files after second run ... 
-    CrawlSegmentLog.getActivePathGivenSegmentId(_rootDirectory, 1).delete();
-    getActivePath(_rootDirectory).delete();
-  */
-    
-    
-  }
-  
-  
   private static CrawlSegmentHost createHost(String hostName) { 
     CrawlSegmentHost host = new CrawlSegmentHost();
     host.setHostName(hostName);
@@ -1457,5 +1468,116 @@ public final class CrawlLog {
     Vector<Long> segmentIdList = new Vector<Long>();
     segmentIdList.addAll(_loggers.keySet());
     return segmentIdList;
+  }
+  
+  static void validateInputOutputCrawlURLArrays(ArrayList<CrawlURL> input,ArrayList<CrawlURL> output)throws IOException { 
+    Assert.assertTrue(input.size() == output.size());
+    for (int i=0;i<input.size();++i) { 
+      CrawlURL left = input.get(i);
+      CrawlURL right = input.get(i);
+      Assert.assertTrue(left.getUrl().equals(right.getUrl()));
+      Assert.assertTrue(left.getContentRaw().getReadOnlyBytes().equals(right.getContentRaw().getReadOnlyBytes()));
+    }
+  }
+  
+  static void validateLogFlusherCode(final File localDirPath,final Path remotePath,boolean injectErrors)throws IOException { 
+    
+    final Configuration conf = new Configuration();
+    
+    final FileSystem fs = FileSystem.get(conf);
+    
+    LOG.info("Deleting Remote File:" + remotePath);
+    fs.delete(remotePath);
+    
+    // ok create a crawlLog test file 
+    File localFile = File.createTempFile("crawlLog", "test",localDirPath);
+    localFile.delete();
+    
+    LOG.info("Initializing Temp File:"+ localFile);
+    // initialize 
+    LogFileHeader fileHeader = initializeLogFileHeaderFromLogFile(localFile);
+    
+    LOG.info("Creating SyncedCrawl URL Writer");
+    // create synced url writer ... 
+    SyncedCrawlURLLogWriter crawlURLWriter = new SyncedCrawlURLLogWriter(injectErrors);
+    
+    ArrayList<CrawlURL> urlObjects = new ArrayList<CrawlURL>();
+    // write a couple of url objects
+    for (int i=0;i<100;++i) { 
+      CrawlURL url = new CrawlURL();
+      url.setUrl("http://someurl.com/" + i);
+      byte bytes[] = MD5.digest("Some Random:" + Math.random() + " Number").getBytes();
+      url.setContentRaw(new FlexBuffer(bytes));
+      final DataOutputStream crawlLogStream = new DataOutputStream(new FileOutputStream(localFile,true));
+      try {
+        LOG.info("Appending object to log");
+        crawlURLWriter.writeItem(crawlLogStream, url);
+      }
+      finally { 
+        LOG.info("Flushing Log");
+        crawlLogStream.flush();
+        crawlLogStream.close();
+      }
+      LOG.info("Updating Header");
+      updateLogFileHeader(localFile, fileHeader, 1);
+      
+      if (!injectErrors || i%2 == 0) { 
+        urlObjects.add(url);
+      }
+      else { 
+        // drop odd entry 
+        LOG.info("Dropping Odd Entry:" + url.getUrl());
+      }
+    }
+    
+    final ArrayList<CrawlURL> urlObjectsOut = new ArrayList<CrawlURL>();
+    
+    HDFSCrawlURLWriter stubWriter = new HDFSCrawlURLWriter() {
+
+      SequenceFileCrawlURLWriter innerWriter = new SequenceFileCrawlURLWriter(conf, fs, remotePath); 
+      @Override
+      public void writeCrawlURLItem(Text url, CrawlURL urlObject)
+          throws IOException {
+        LOG.info("Got URL:" + url.toString());
+        urlObjectsOut.add(urlObject);
+        innerWriter.writeCrawlURLItem(url, urlObject);
+      }
+      
+      @Override
+      public void close() throws IOException {
+        innerWriter.close();
+      }
+    };
+    
+    try { 
+      LOG.info("Transferring from Local to Remote");
+      transferLocalCheckpointLog(localFile,stubWriter,1L);
+    }
+    finally { 
+      stubWriter.close();
+    }
+    LOG.info("Validating Input/Output");
+    validateInputOutputCrawlURLArrays(urlObjects, urlObjectsOut);
+    // read via sequenceFile 
+    urlObjectsOut.clear();
+    SequenceFile.Reader reader = new SequenceFile.Reader(fs, remotePath, conf);
+    Text key = new Text();
+    CrawlURL value = new CrawlURL();
+    while (reader.next(key, value)) { 
+      LOG.info("Got:" + key.toString());
+      urlObjectsOut.add(value);
+      value = new CrawlURL();
+    }
+    reader.close();
+    LOG.info("Validating Input/Output");
+    validateInputOutputCrawlURLArrays(urlObjects, urlObjectsOut);
+    
+    LOG.info("Done!");
+  }
+  
+  public static void main(String[] args)throws IOException {
+    LOG.info("Validating Flusher Code");
+    validateLogFlusherCode(new File(args[0]), new Path(args[1]),false);
+    validateLogFlusherCode(new File(args[0]), new Path(args[1]),true);
   }
 }

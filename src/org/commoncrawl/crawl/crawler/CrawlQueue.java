@@ -1,18 +1,22 @@
 /**
  * Copyright 2008 - CommonCrawl Foundation
  * 
- * CommonCrawl licenses this file to you under the Apache License, 
- * Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
  */
+
+
 
 package org.commoncrawl.crawl.crawler;
 
@@ -43,7 +47,7 @@ import org.commoncrawl.util.shared.CCStringUtils;
 
 import com.google.common.collect.ImmutableSet;
 
-/** 
+/**
  * A queue that manages a set of Crawlable Hosts
  * 
  * @author rana
@@ -382,32 +386,42 @@ public final class CrawlQueue {
           
           // get fp for url 
           URLFP urlFingerprint = URLUtils.getURLFPFromURL(segmentURL.getUrl(),false);
-          // check to see if already crawled ... 
-          if (CrawlerServer.getEngine().getLocalBloomFilter().isPresent(urlFingerprint)) { 
-            // CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.UNKNOWN,"Item Already Crawled");
+          if (urlFingerprint != null) { 
+            // check to see if already crawled ... 
+            if (CrawlerServer.getEngine().getLocalBloomFilter().isPresent(urlFingerprint)) { 
+              // CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.UNKNOWN,"Item Already Crawled");
+              CrawlTarget.logFailureDetail(
+                  getEngine(),
+                  CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),
+                  null,
+                  FailureReason.UNKNOWN, 
+                  "Aready Crawled URL");
+            }
+            else { 
+              
+              // allocate a new crawl target ... 
+              CrawlTarget target = new CrawlTarget(segmentId,crawlList,host,segmentURL);
+              
+              // set target's ip address and ttl based on original host 
+              target.setServerIP(host.getIpAddress());
+              target.setServerIPTTL(host.getTtl());
+              
+              // set optional callback
+              target.setCompletionCallback(callback);
+              
+              // and add to the domain's list ... 
+              crawlList.addCrawlTarget(target,false);
+              // increment items Queued 
+              newItemsQueued++;
+            }
+          }
+          else { 
             CrawlTarget.logFailureDetail(
                 getEngine(),
                 CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),
                 null,
-                FailureReason.UNKNOWN, 
-                "Aready Crawled URL");
-          }
-          else { 
-            
-            // allocate a new crawl target ... 
-            CrawlTarget target = new CrawlTarget(segmentId,crawlList,host,segmentURL);
-            
-            // set target's ip address and ttl based on original host 
-            target.setServerIP(host.getIpAddress());
-            target.setServerIPTTL(host.getTtl());
-            
-            // set optional callback
-            target.setCompletionCallback(callback);
-            
-            // and add to the domain's list ... 
-            crawlList.addCrawlTarget(target,false);
-            // increment items Queued 
-            newItemsQueued++;
+                FailureReason.MalformedURL, 
+                "Failed to Convert to URLFP");            
           }
         }
         
