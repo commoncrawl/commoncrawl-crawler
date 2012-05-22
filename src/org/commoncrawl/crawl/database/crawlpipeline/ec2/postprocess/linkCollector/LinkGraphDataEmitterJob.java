@@ -53,16 +53,16 @@ import com.google.common.collect.Sets;
  * @author rana
  *
  */
-public class LinkCollectorJob {
+public class LinkGraphDataEmitterJob {
 
-  static final Log LOG = LogFactory.getLog(LinkCollectorJob.class);
+  static final Log LOG = LogFactory.getLog(LinkGraphDataEmitterJob.class);
   
   static final Path internalEC2SegmentPath = new Path("crawl/ec2Import/segment");
   static final Path internalMergedSegmentPath = new Path("crawl/ec2Import/mergedSegment"); 
   
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
-  static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/merge-output/intermediate/";
+  static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/graph-output/intermediate/";
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
   
@@ -73,7 +73,7 @@ public class LinkCollectorJob {
 
 
   
-  public static void mergeSegmentEC2(FileSystem s3fs,Configuration conf,long segmentId)throws IOException { 
+  public static void processSegmentEC2(FileSystem s3fs,Configuration conf,long segmentId)throws IOException { 
     Path outputPath = new Path(S3N_BUCKET_PREFIX + MERGE_INTERMEDIATE_OUTPUT_PATH+Long.toString(segmentId));
     LOG.info("Starting Intermedaite Merge of Segment:" + segmentId + " Output path is:" + outputPath);
     
@@ -93,24 +93,18 @@ public class LinkCollectorJob {
       .inputs(pathList)
       .inputFormat(SequenceFileInputFormat.class)
       .keyValue(TextBytes.class, TextBytes.class)
-      .mapper(LinkDataResharder.class)
+      .mapper(LinkGraphDataEmitter.class)
       .maxMapAttempts(7)
       .maxReduceAttempts(7)
-      .maxMapTaskFailures(100)
-      .reducer(LinkDataResharder.class, true)
-      .partition(LinkKeyPartitioner.class)
-      .sort(LinkKeyComparator.class)
-      .numReducers(5000)
+      .maxMapTaskFailures(1000)
+      .reuseJVM(1000)
+      .reducer(LinkGraphDataEmitter.class, false)
+      .numReducers(500)
       .speculativeExecution(true)
-
       .output(outputPath)
       .outputFormat(SequenceFileOutputFormat.class)
-
       .compressMapOutput(true)
       .compressor(CompressionType.BLOCK, SnappyCodec.class)
-      
-      .delayReducersUntil(1.0f)
-      
       .build();
         
     JobClient.runJob(jobConf);
@@ -176,7 +170,7 @@ public class LinkCollectorJob {
   }
 
   
-  public LinkCollectorJob(Configuration conf)throws Exception {
+  public LinkGraphDataEmitterJob(Configuration conf)throws Exception {
     FileSystem fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
     LOG.info("FileSystem is:" + fs.getUri() +" Scanning for valid segments");
     SortedSet<Long> validSegments = scanForValidSegments(fs);
@@ -220,7 +214,7 @@ public class LinkCollectorJob {
       conf.addResource(new Path("/home/hadoop/conf/core-site.xml"));
       conf.addResource(new Path("/home/hadoop/conf/mapred-site.xml"));
     
-      LinkCollectorJob task = new LinkCollectorJob(conf);
+      LinkGraphDataEmitterJob task = new LinkGraphDataEmitterJob(conf);
       task.run();
     }
     else { 
@@ -294,7 +288,7 @@ public class LinkCollectorJob {
             LOG.info("Queue Thread:" + Thread.currentThread().getId() + " got segment:" + item.segmentId);
             LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Starting Job");
             try {
-              mergeSegmentEC2(item.fs,item.conf,item.segmentId);
+              processSegmentEC2(item.fs,item.conf,item.segmentId);
             } catch (IOException e) {
               LOG.error("Queue Thread:" + Thread.currentThread().getId() + " threw exception:" + CCStringUtils.stringifyException(e));
             }

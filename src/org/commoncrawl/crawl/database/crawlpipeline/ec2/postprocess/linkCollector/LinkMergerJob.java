@@ -1,3 +1,21 @@
+/**
+ * Copyright 2012 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
 package org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.linkCollector;
 
 import java.io.IOException;
@@ -8,7 +26,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -34,12 +51,12 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.crawlpipeline.JobConfig;
 import org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.linkCollector.LinkDataResharder.Counters;
 import org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.linkCollector.LinkKey.LinkKeyGroupingComparator;
 import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.util.internal.GoogleURL;
 import org.commoncrawl.util.internal.HttpHeaderInfoExtractor;
+import org.commoncrawl.util.internal.JobBuilder;
 import org.commoncrawl.util.internal.URLUtils;
 import org.commoncrawl.util.internal.MultiFileMergeUtils.MultiFileInputReader;
 import org.commoncrawl.util.internal.MultiFileMergeUtils.MultiFileMergeInputFormat;
@@ -98,7 +115,7 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
     // establish merge timestamp 
     long mergeTimesmap = System.currentTimeMillis();
     // get a temp directory ... 
-    Path outputPath = JobConfig.tempDir(conf, Long.toString(mergeTimesmap));
+    Path outputPath = JobBuilder.tempDir(conf, Long.toString(mergeTimesmap));
 
     
     // find latest merge timestamp ... 
@@ -121,7 +138,7 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
       }
       
       
-      JobConf jobConf = new JobConfig("Final Merge Job", conf)
+      JobConf jobConf = new JobBuilder("Final Merge Job", conf)
       .inputs(inputPaths)
       .inputFormat(MultiFileMergeInputFormat.class)
       .mapperKeyValue(IntWritable.class, Text.class)
@@ -139,17 +156,15 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
       
       .build();
       
-/*      JsonArray hack = new JsonArray();
+      JsonArray hack = new JsonArray();
       
-      hack.add(new JsonPrimitive(5));
-      hack.add(new JsonPrimitive(10));
-      hack.add(new JsonPrimitive(28));
-      hack.add(new JsonPrimitive(35));
-      hack.add(new JsonPrimitive(61));
-      hack.add(new JsonPrimitive(81));
-      hack.add(new JsonPrimitive(81));
+      hack.add(new JsonPrimitive(11));
+      hack.add(new JsonPrimitive(21));
+      hack.add(new JsonPrimitive(82));
+      hack.add(new JsonPrimitive(83));
+      hack.add(new JsonPrimitive(90));
 
-      jobConf.set("hack", hack.toString());*/
+      jobConf.set("hack", hack.toString());
       
       LOG.info("Starting JOB");
       JobClient.runJob(jobConf);      
@@ -308,15 +323,19 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
     JsonElement hrefElement = jsonObject.get("href");
     
     if (sourceElement != null && hrefElement != null) { 
-      incOutputKeyHitCount(hrefElement.getAsString());
-      if (outputKeyURLObj == null) { 
-        outputKeyURLObj = new GoogleURL(hrefElement.getAsString());
-      }
-      
-      
       GoogleURL hrefSource = new GoogleURL(sourceElement.getAsString());
       
       if (hrefSource.isValid()) {
+        
+        if (outputKeyString == null || !outputKeyFromInternalLink) {
+          if (outputKeyString == null || outputKeyString.compareTo(hrefElement.getAsString()) != 0) { 
+            outputKeyString = hrefElement.getAsString();
+            outputKeyURLObj = new GoogleURL(outputKeyString);
+            if (outputKeyURLObj.getHost().equals(hrefSource.getHost())) {
+              outputKeyFromInternalLink = true;
+            }
+          }
+        }
 
         if (linkSummaryRecord == null) { 
           linkSummaryRecord = new JsonObject();
@@ -383,125 +402,130 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
     JsonElement sourceHREFElement = jsonObject.get("source_url");
 
     if (sourceHREFElement != null) {
-      incOutputKeyHitCount(sourceHREFElement.getAsString());
-      if (outputKeyURLObj == null) { 
+      if (outputKeyString == null || !outputKeyFromInternalLink) { 
+        outputKeyString = sourceHREFElement.getAsString();
         outputKeyURLObj = new GoogleURL(sourceHREFElement.getAsString());
       }
-    }
-    
-    if (summaryRecord == null) { 
-      summaryRecord = new JsonObject();
-    }
-    String disposition = jsonObject.get("disposition").getAsString();
-    long   attemptTime = jsonObject.get("attempt_time").getAsLong();
-    
-    safeIncrementJSONCounter(summaryRecord,"attempt_count");
-    
-    long latestAttemptTime = safeSetMaxLongValue(summaryRecord,"latest_attempt",attemptTime);
-    
-    JsonElement redirectObject = jsonObject.get("redirect_from");
-    if (redirectObject != null) { 
-      emitRedirectRecord(jsonObject, redirectObject.getAsJsonObject(), reporter);
-    }
-
-    if (latestAttemptTime == attemptTime) { 
-      summaryRecord.addProperty("failed", (disposition.equals("SUCCESS")) ? false : true);
-    }
-    
-    if (disposition.equals("SUCCESS")) {
-    
-      int httpResult = jsonObject.get("http_result").getAsInt();
+      if (summaryRecord == null) { 
+        summaryRecord = new JsonObject();
+      }
+      String disposition = jsonObject.get("disposition").getAsString();
+      long   attemptTime = jsonObject.get("attempt_time").getAsLong();
       
+      safeIncrementJSONCounter(summaryRecord,"attempt_count");
+      
+      long latestAttemptTime = safeSetMaxLongValue(summaryRecord,"latest_attempt",attemptTime);
+      
+      JsonElement redirectObject = jsonObject.get("redirect_from");
+      if (redirectObject != null) { 
+        emitRedirectRecord(jsonObject, redirectObject.getAsJsonObject(), reporter);
+      }
+  
       if (latestAttemptTime == attemptTime) { 
-        summaryRecord.addProperty("http_result", httpResult);
+        summaryRecord.addProperty("failed", (disposition.equals("SUCCESS")) ? false : true);
       }
       
-      if (httpResult == 200) {
-        // inject all the details into a JSONObject 
-        JsonObject crawlStatsJSON = new JsonObject();
+      if (disposition.equals("SUCCESS")) {
+      
+        int httpResult = jsonObject.get("http_result").getAsInt();
         
-        // basic stats ... starting with crawl time ...
-        crawlStatsJSON.addProperty("server_ip", jsonObject.get("server_ip").getAsString());
-        crawlStatsJSON.addProperty("attempt_time", attemptTime);
-        crawlStatsJSON.addProperty("content_len",jsonObject.get("content_len").getAsInt());
-        if (jsonObject.get("mime_type") != null) { 
-          crawlStatsJSON.addProperty("mime_type",jsonObject.get("mime_type").getAsString());
+        if (httpResult == 200) { 
+          outputKeyFromInternalLink = true;
         }
-        if (jsonObject.get("md5") != null) {
-          crawlStatsJSON.addProperty("md5",jsonObject.get("md5").getAsString());
+        if (latestAttemptTime == attemptTime) { 
+          summaryRecord.addProperty("http_result", httpResult);
         }
-        if (jsonObject.get("text_simhash") != null) {
-          crawlStatsJSON.addProperty("text_simhash",jsonObject.get("text_simhash").getAsLong());
-        }
-        //populate date headers ... 
-        populateDateHeadersFromJSONObject(jsonObject,crawlStatsJSON);
         
-        JsonElement parsedAs = jsonObject.get("parsed_as");
-        
-        if (parsedAs != null) {
-          // populate some info based on type ... 
-          crawlStatsJSON.addProperty("parsed_as",parsedAs.getAsString());
+        if (httpResult == 200) {
+          // inject all the details into a JSONObject 
+          JsonObject crawlStatsJSON = new JsonObject();
           
-          String parsedAsString = parsedAs.getAsString();
+          // basic stats ... starting with crawl time ...
+          crawlStatsJSON.addProperty("server_ip", jsonObject.get("server_ip").getAsString());
+          crawlStatsJSON.addProperty("attempt_time", attemptTime);
+          crawlStatsJSON.addProperty("content_len",jsonObject.get("content_len").getAsInt());
+          if (jsonObject.get("mime_type") != null) { 
+            crawlStatsJSON.addProperty("mime_type",jsonObject.get("mime_type").getAsString());
+          }
+          if (jsonObject.get("md5") != null) {
+            crawlStatsJSON.addProperty("md5",jsonObject.get("md5").getAsString());
+          }
+          if (jsonObject.get("text_simhash") != null) {
+            crawlStatsJSON.addProperty("text_simhash",jsonObject.get("text_simhash").getAsLong());
+          }
+          //populate date headers ... 
+          populateDateHeadersFromJSONObject(jsonObject,crawlStatsJSON);
           
-          // if html ... 
-          if (parsedAsString.equals("html")) { 
-            JsonObject content = jsonObject.get("content").getAsJsonObject();
-            if (content != null) { 
+          JsonElement parsedAs = jsonObject.get("parsed_as");
+          
+          if (parsedAs != null) {
+            // populate some info based on type ... 
+            crawlStatsJSON.addProperty("parsed_as",parsedAs.getAsString());
+            
+            String parsedAsString = parsedAs.getAsString();
+            
+            // if html ... 
+            if (parsedAsString.equals("html")) { 
+              JsonObject content = jsonObject.get("content").getAsJsonObject();
+              if (content != null) { 
+                JsonElement titleElement = content.get("title");
+                JsonElement metaElement = content.get("meta_tags");
+                if (titleElement != null) { 
+                  crawlStatsJSON.add("title", titleElement);
+                }
+                if (metaElement != null) { 
+                  crawlStatsJSON.add("meta_tags", metaElement);
+                }
+                // collect link stats for json ... 
+                updateLinkStatsFromHTMLContent(crawlStatsJSON,content,fpSource,reporter);
+              }
+              
+            }
+            // if feed ... 
+            else if (parsedAsString.equals("feed")) { 
+              // get content ... 
+              JsonObject content = jsonObject.get("content").getAsJsonObject();
               JsonElement titleElement = content.get("title");
-              JsonElement metaElement = content.get("meta_tags");
               if (titleElement != null) { 
                 crawlStatsJSON.add("title", titleElement);
               }
-              if (metaElement != null) { 
-                crawlStatsJSON.add("meta_tags", metaElement);
+              // set update time ... 
+              long updateTime = safeGetLong(content, "updated");
+              if (updateTime != -1) { 
+                crawlStatsJSON.addProperty("updated", updateTime);
               }
-              // collect link stats for json ... 
-              updateLinkStatsFromHTMLContent(crawlStatsJSON,content,fpSource,reporter);
+              
+              addMinMaxFeedItemTimes(content,crawlStatsJSON);
             }
-            
           }
-          // if feed ... 
-          else if (parsedAsString.equals("feed")) { 
-            // get content ... 
-            JsonObject content = jsonObject.get("content").getAsJsonObject();
-            JsonElement titleElement = content.get("title");
-            if (titleElement != null) { 
-              crawlStatsJSON.add("title", titleElement);
+  
+          long latestCrawlTime = safeSetMaxLongValue(summaryRecord,"latest_crawl",attemptTime);
+          
+          if (latestCrawlTime == attemptTime) {
+            // update latest http result 
+            // update parsed as info 
+            if (parsedAs != null) { 
+              summaryRecord.addProperty("parsed_as", parsedAs.getAsString());
             }
-            // set update time ... 
-            long updateTime = safeGetLong(content, "updated");
-            if (updateTime != -1) { 
-              crawlStatsJSON.addProperty("updated", updateTime);
-            }
-            
-            addMinMaxFeedItemTimes(content,crawlStatsJSON);
+            // update the timestamp 
+            summaryRecord.addProperty("latest_crawl",attemptTime);
           }
-        }
-
-        long latestCrawlTime = safeSetMaxLongValue(summaryRecord,"latest_crawl",attemptTime);
-        
-        if (latestCrawlTime == attemptTime) {
-          // update latest http result 
-          // update parsed as info 
-          if (parsedAs != null) { 
-            summaryRecord.addProperty("parsed_as", parsedAs.getAsString());
+          // always increment successfull crawl count .... 
+          safeIncrementJSONCounter(summaryRecord,"crawl_count");
+  
+          // construct crawl stats array if necessary 
+          JsonArray crawlStatsArray = summaryRecord.getAsJsonArray("crawl_stats");
+          if (crawlStatsArray == null) { 
+            crawlStatsArray = new JsonArray();
+            summaryRecord.add("crawl_stats", crawlStatsArray);
           }
-          // update the timestamp 
-          summaryRecord.addProperty("latest_crawl",attemptTime);
+          // add crawl stats to it 
+          crawlStatsArray.add(crawlStatsJSON);
         }
-        // always increment successfull crawl count .... 
-        safeIncrementJSONCounter(summaryRecord,"crawl_count");
-
-        // construct crawl stats array if necessary 
-        JsonArray crawlStatsArray = summaryRecord.getAsJsonArray("crawl_stats");
-        if (crawlStatsArray == null) { 
-          crawlStatsArray = new JsonArray();
-          summaryRecord.add("crawl_stats", crawlStatsArray);
-        }
-        // add crawl stats to it 
-        crawlStatsArray.add(crawlStatsJSON);
       }
+    }
+    else { 
+      reporter.incrCounter(Counters.NO_SOURCE_URL_FOR_CRAWL_STATUS, 1);
     }
   }
   
@@ -541,30 +565,10 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
   JsonObject linkSummaryRecord = null;
   HashSet<String> types = new HashSet<String>();
   HashMap<Long,String> linkSources = null;
-  HashMap<String,Integer> outputKeyFreqCounter = new HashMap<String, Integer>();
+  String outputKeyString = null;
+  boolean outputKeyFromInternalLink = false;
   GoogleURL outputKeyURLObj = null;
   
-  void incOutputKeyHitCount(String key) { 
-    Integer existing = outputKeyFreqCounter.get(key);
-    if (existing == null) { 
-      outputKeyFreqCounter.put(key, 1);
-    }
-    else { 
-      outputKeyFreqCounter.put(key, existing + 1);
-    }
-  }
-  
-  String getBestOutputKey() { 
-    int highestFreq = 0;
-    String bestTerm = null;
-    for (Map.Entry<String,Integer> entry : outputKeyFreqCounter.entrySet()) { 
-      if (entry.getValue() > highestFreq) {
-        highestFreq = entry.getValue();
-        bestTerm = entry.getKey();
-      }
-    }
-    return bestTerm;
-  }
   
   @Override
   public void reduce(IntWritable key, Iterator<Text> values,
@@ -612,7 +616,8 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
       linkSummaryRecord = null;
       types.clear();
       linkSources = null;
-      outputKeyFreqCounter.clear();
+      outputKeyString = null;
+      outputKeyFromInternalLink = false;
       outputKeyURLObj = null;
       
       int statusCount = 0;
@@ -694,9 +699,14 @@ public class LinkMergerJob implements Reducer<IntWritable, Text,TextBytes,TextBy
           compositeObject.add("link_status", linkSummaryRecord);
         }
         
-        String bestKey = getBestOutputKey();
-        if (bestKey != null && outputKeyURLObj != null && outputKeyURLObj.isValid()) { 
-          output.collect(new TextBytes(bestKey),new TextBytes(compositeObject.toString()));
+        if (outputKeyString != null && outputKeyURLObj != null && outputKeyURLObj.isValid()) {
+          if (outputKeyFromInternalLink) { 
+            reporter.incrCounter(Counters.OUTPUT_KEY_FROM_INTERNAL_LINK, 1);
+          }
+          else { 
+            reporter.incrCounter(Counters.OUTPUT_KEY_FROM_EXTERNAL_LINK, 1);
+          }
+          output.collect(new TextBytes(outputKeyString),new TextBytes(compositeObject.toString()));
         }
         else { 
           reporter.incrCounter(Counters.FAILED_TO_GET_SOURCE_HREF, 1);

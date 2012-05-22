@@ -1,7 +1,24 @@
+/**
+ * Copyright 2012 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
 package org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.linkCollector;
 
 import java.io.IOException;
-import java.util.Comparator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -10,7 +27,6 @@ import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Partitioner;
 import org.commoncrawl.protocol.URLFPV2;
-import org.commoncrawl.util.internal.URLFPUtils;
 import org.commoncrawl.util.internal.URLUtils;
 import org.commoncrawl.util.internal.Tuples.Pair;
 import org.commoncrawl.util.shared.ByteArrayUtils;
@@ -19,12 +35,16 @@ import org.commoncrawl.util.shared.MurmurHash;
 import org.commoncrawl.util.shared.TextBytes;
 import org.junit.Assert;
 
-
-class LinkKey { 
+/**
+ * 
+ * @author rana
+ *
+ */
+public class LinkKey { 
   
   private static final Log LOG = LogFactory.getLog(LinkKey.class);
   
-  enum ComponentId { 
+  public enum ComponentId { 
     ROOT_DOMAIN_HASH_COMPONENT_ID,
     DOMAIN_HASH_COMPONENT_ID,
     URL_HASH_COMPONENT_ID,
@@ -32,7 +52,7 @@ class LinkKey {
     EXTRA_DATA_COMPONENT_ID
   }
   
-  enum Type { 
+  public enum Type { 
     KEY_TYPE_CRAWL_STATUS, 
     KEY_TYPE_HTML_LINK,
     KEY_TYPE_ATOM_LINK,
