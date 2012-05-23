@@ -1,0 +1,23 @@
+module org.commoncrawl.crawl.filter {
+
+  class DomainFilterData { 
+    
+    enum Type { 
+      Type_ExlusionFilter   = 0;
+      Type_InclusionFilter  = 1;
+    }
+    
+    byte filterType = 1;
+    
+  }
+  
+  class FilterResults { 
+      float   pageRankBoostValue = 1;
+      long    modifiedRecrawlTime = 2;
+      int     ipAddressHint = 3;
+      ustring rewrittenDomainName = 4;
+      int     crawlRateOverride = 5;
+      int     position = 6;
+  }
+  
+}

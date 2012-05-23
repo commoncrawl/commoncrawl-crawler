@@ -1,0 +1,54 @@
+module org.commoncrawl.service.directory {
+
+  class DirectoryServiceRegistrationInfo { 
+      ustring connectionName = 1;
+      ustring connectionString = 2;
+      long    registrationCookie = 3;
+  }
+  
+  class DirectoryServiceRegistrationResponse { 
+      long    registrationCookie = 1;
+  }  
+
+  class DirectoryServiceSubscriptionInfo { 
+      ustring subscriptionPath = 1;
+  }
+  
+  class DirectoryServiceItem { 
+      ustring itemPath = 1;
+      buffer  itemData = 2;
+      long    versionNumber = 3;
+      ustring lastUpdateSource =4;
+      enum Flags { 
+        ItemNotFound = 1;
+        ItemUpdated = 2;
+        ItemDeleted = 4;
+        ItemLoadFailed = 8;
+      }
+      int     flags = 5;
+  }
+
+  class DirectoryServiceQuery { 
+   
+    ustring itemPath = 1;
+  }
+  
+  class DirectoryServiceItemList { 
+    vector<DirectoryServiceItem> items = 1;
+  }
+
+
+  service DirectoryService {
+    
+    method register(in DirectoryServiceRegistrationInfo,out NullMessage);
+    method subscribe(in DirectoryServiceSubscriptionInfo,out DirectoryServiceItemList);
+    method unscubscribe(in DirectoryServiceSubscriptionInfo,out NullMessage);
+    method publish(in DirectoryServiceItem, out DirectoryServiceItem);
+    method query(in DirectoryServiceQuery,out DirectoryServiceItemList);
+  }
+  
+  service DirectoryServiceCallback { 
+    method initialize(in DirectoryServiceRegistrationInfo, out NullMessage);
+    method itemChanged(in DirectoryServiceItemList,out NullMessage); 
+  }
+}

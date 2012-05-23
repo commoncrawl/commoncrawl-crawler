@@ -1,0 +1,140 @@
+module org.commoncrawl.service.pagerank {
+
+  class PageRankJobConfig [recordid]{ 
+  
+    long    jobId = 1;
+    int     iterationNumber = 2;
+    int     maxIterationNumber =3;
+    int     slaveCount =4;
+    ustring inputValuesPath = 5;
+    ustring outlinksDataPath = 6;
+    ustring jobWorkPath = 7;
+    ustring outputValuesPath = 8;
+
+    float   alpha =9;
+    int     algorithmId =10;
+  }
+  
+  class PRMasterState [recordid] { 
+    
+    enum ServerStatus { 
+      IDLE = 0;    
+      STARTED = 1;
+      ITERATING_DISTRIBUTING = 2;
+      ITERATING_CALCULATING  = 3;
+      PAUSED =4;
+      FINISHING = 5;
+    }
+    
+    
+    PageRankJobConfig activeJobConfig = 1;
+    int               serverStatus = 2;
+    long              lastKnownSlaveFileCRC = 4;
+    long              currentTxnId = 5;
+  }
+  
+  class BaseConfig { 
+  
+    ustring fileSystem        = 1;
+    ustring baseWorkingDir    = 2;
+    int     slaveId = 3;
+    int     slaveCount = 4;
+    ustring slavesList = 5;
+  }
+
+
+  class IterationInfo { 
+    enum Phase { 
+      DISTRIBUTE = 0;
+      CALCULATE  = 1;
+    }
+    
+    long jobId = 1;
+    int iterationNumber = 2;
+    int phase = 3;
+  }
+  
+  class SlaveStatus { 
+    enum State { 
+      INITIALIZING = 1;
+      IDLE = 2;
+      STARTED_IDLE = 3;
+      DISTRIBUTING = 4;
+      DONE_DISTRIBUTING =5;
+      CALCULATING = 6;
+      DONE_CALCULATING=7;
+      ERROR=8;
+    }
+    
+    int       state = 1;
+    long      activeJobId = 3;
+    int       currentIteration =5;
+    long      currentCheckpointId = 6;
+    long      committedCheckpointId = 7;
+    float     percentComplete = 8;
+  }
+  
+  
+  // used to optimize prValue access
+  class PRRangeItem [nodirty] { 
+
+     long  domainStart = 1;
+     long  urlFPStart  = 2;
+     int   startPos    = 3;
+  }
+  
+  class CheckpointInfo { 
+    long txnId = 1;
+    int  currentPhase = 2;
+    int  currentIterationNumber = 3;
+  }
+ 
+  class BeginPageRankInfo { 
+    PageRankJobConfig jobConfig = 1;
+    int serverStatus = 2;
+  }
+  
+  class FileInfo { 
+    long    jobId = 1;
+    ustring fileName = 2;
+    long    fileId = 3;
+  }
+  
+  class BlockTransfer { 
+    long    fileId    =1;
+    long    blockId   =2;
+    long    blockCRC  =3;
+    buffer  blockData =4;
+  
+  }
+  
+  class BlockTransferAck { 
+    long fileId = 1;
+    long blockId = 2;
+    long blockCRC = 3;    
+  }
+ 
+  service PageRankSlave {
+  
+    method initialize(in BaseConfig,out SlaveStatus);
+    
+    method beginPageRank(in BeginPageRankInfo,out SlaveStatus);
+    
+    method doIteration(in IterationInfo, out SlaveStatus);
+    
+    method endPageRank(in NullMessage,out SlaveStatus);
+    
+    method heartbeat(in NullMessage, out SlaveStatus);
+    
+    method checkpoint(in CheckpointInfo, out SlaveStatus);
+
+    method createJobFile(in FileInfo,out FileInfo);
+    
+    method transferBlock(in BlockTransfer,out BlockTransferAck);
+    
+    method commitFile(in FileInfo,out NullMessage);
+    
+    method deleteFile(in FileInfo,out NullMessage);
+    
+  }
+}

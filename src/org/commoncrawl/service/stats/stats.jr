@@ -1,0 +1,37 @@
+module org.commoncrawl.service.stats {
+  
+  
+  class StatsRecord { 
+    [key] long timestamp =1; 
+    long  recordPosition = 2;
+    buffer data = 3;
+  }
+  
+  class WriteStatsRecordRequest { 
+    ustring recordGroup = 1;
+    StatsRecord record = 2;
+  }
+
+  class WriteStatsRecordResponse { 
+    long recordPositon = 1;
+  }
+  
+  class ReadStatsRecordsRequest { 
+    ustring  recordGroup = 1;
+    int      recordCount = 2;
+    long     ifLastKeyNot = 3;
+    long     stopIfKeyLessThan =4;
+  }
+  
+  class ReadStatsRecordResponse { 
+    vector<StatsRecord> recordsOut = 1;
+  }
+  
+  service StatsService { 
+  
+    method writeStatsRecord(in WriteStatsRecordRequest, out WriteStatsRecordResponse);
+    method readStatsRecord(in ReadStatsRecordsRequest, out ReadStatsRecordResponse);
+  }
+
+}
+

@@ -1,0 +1,157 @@
+module org.commoncrawl.service.statscollector {
+
+  class CrawlerStats { 
+    
+    [key] long timestamp = 1;
+  
+    vlong   urlsProcessed  = 2;
+    vlong   urlsSucceeded  = 3;
+    vlong   urlsFailed     = 4;
+    vlong   http200Count   = 5;
+    vlong   http300Count   = 6;
+    vlong   http301Count   = 7;
+    vlong   http302Count   = 8;
+    vlong   http304Count   = 9;
+    vlong   http400Count   = 11;
+    vlong   http403Count   = 12;
+    vlong   http404Count   = 13;    
+    vlong   http500Count   = 14;    
+    vlong   httpOtherCount = 15;    
+    vlong   httpErrorUNKNOWN = 16;
+    vlong   httpErrorUnknownProtocol = 17;
+    vlong   httpErrorMalformedURL = 18;
+    vlong   httpErrorTimeout = 19;
+    vlong   httpErrorDNSFailure = 20;
+    vlong   httpErrorResolverFailure = 21;
+    vlong   httpErrorIOException = 22;
+    vlong   httpErrorRobotsExcluded = 23;
+    vlong   httpErrorNoData = 24;
+    vlong   httpErrorRobotsParseError = 25;
+    vlong   httpErrorRedirectFailed = 26;
+    vlong   httpErrorRuntimeError = 27;
+    vlong httpErrorConnectTimeout = 28;
+    vlong httpErrorBlackListedHost = 29;
+    vlong httpErrorBlackListedURL = 30;
+    vlong httpErrorTooManyErrors = 31;
+    vlong httpErrorInCache = 32;
+    vlong httpErrorInvalidResponseCode = 33;
+    vlong httpErrorBadRedirectData = 34;    
+    float averageDownloadSize = 35;
+    float urlsPerSecond = 36;
+    float mbytesDownPerSecond = 37;
+    vlong bytesDownloaded = 38;
+    float crawlerMemoryUsedRatio = 39;
+    vlong urlsInFetcherQueue = 41;
+    vlong urlsInLoaderQueue = 42;
+    vint actvieRobotsRequests   = 43;
+    vint robotsRequestsSucceeded =44;
+    vint robotsRequestsFailed =45;
+    vint  redirectResultAfter1Hops = 48;
+    vint  redirectResultAfter2Hops = 49;
+    vint  redirectResultAfter3Hops = 50;
+    vint  redirectResultAfterGT3Hops = 51;
+    vint  activeHosts = 52;
+    vint  scheduledHosts = 53;
+    vint  idledHosts = 54;
+    vint  activeDNSRequests = 55;
+    vint  queuedDNSRequests = 56;
+    vint  failedDNSRequests = 57;    
+    vint  successfullDNSRequests = 58;    
+    vint robotsRequestsQueuedForParse =59;
+    vint robotsRequestsSuccessfullParse =60;
+    vint robotsRequestsFailedParse =61;
+    vint robotsFileExcludesAllContent = 62;
+    vint robotsFileHadCrawlDelay = 63;
+    vint robotsFileHasExplicitMention = 64;
+    vint robotsFileExplicitlyExcludesAll = 65;
+    
+    ustring crawlerName = 66;
+  }
+  
+  class NamedItemCount { 
+    ustring name = 1;
+    vint    count = 2;
+  }
+  class IntegerItemCount { 
+    vint value = 1;
+    vint count = 2;
+  }
+  
+  class ParseStats { 
+
+    [key] long timestamp = 1;
+    
+    vint  blackListedItemCount  =2;
+    vint  validCrawlResultCount =3;
+    vint  unknownCrawlResult    =4;
+    vint  temporaryRedirectCount =5;
+    vint  permanentRedirectCount =6;
+    vint  badRedirectCount       =7;
+    vint  crawlResultFailureCount = 8;
+    vint  crawlResultSuccessCount = 9;
+    vint failureResultUNKNOWNCount=10;
+    vint failureResultUnknownProtocolCount=11;
+    vint failureResultMalformedURLCount=12;
+    vint failureResultTimeoutCount=13;
+    vint failureResultDNSFailureCount=14;
+    vint failureResultResolverFailureCount=15;
+    vint failureResultIOExceptionCount=16;
+    vint failureResultRobotsExcludedCount=17;
+    vint failureResultNoDataCount=18;
+    vint failureResultRobotsParseErrorCount=19;
+    vint failureResultRedirectFailedCount=20;
+    vint failureResultRuntimeErrorCount=21;
+    vint failureResultConnectTimeoutCount=22;
+    vint failureResultBlackListedHostCount=23;
+    vint failureResultBlackListedURLCount=24;
+    vint failureResultTooManyErrorsCount=25;
+    vint failureResultInCacheCount=26;
+    vint failureResultInvalidResponseCodeCount=27;
+    vint failureResultBadRedirectDataCount=28;
+    vint headerHasStatusLineCount=29;
+    vint headerHasContentTypeCount=30;
+    vint headerHasETagCount=31;
+    vint headerHasAgeCount=32;
+    vint headerHasDateCount=33;
+    vint headerHasLastModifiedCount=34;
+    vint headerHasExpiresCount=35;
+    vint headerHasCacheControlCount=36;
+    vint headerIsHttpVersion_0_9Count=37;
+    vint headerIsHttpVersion_1_0Count=38;
+    vint headerIsHttpVersion_1_1Count=39;
+    vint headerHasContentLengthCount=40;
+    vint headerIsGZipEncodedCount=41;
+    vint headerHasCharsetViaHeaderCount=42;
+    vint headerHasCharsetViaMetadataCount=43;
+    vint headerDetectedNonASCIICharsetCount=44;
+    vint headerHasRedirectViaMetadataCount=45;
+    vint headerFoundConverterForCharsetCount=46;
+    
+    vector<NamedItemCount> contentTypeCounts = 50;
+    vector<NamedItemCount> charsetTypeCounts = 51;
+    vector<NamedItemCount> serverTypeCounts  = 52;
+    vector<IntegerItemCount> contentLengthCounts = 53;
+    
+    
+    
+           
+  }
+  
+  class TestRecord { 
+  
+    [key] long timestamp = 1;
+    float cumilativeValue = 2;
+    float averageValue = 3;
+    
+  }
+  
+  class LogCrawlStatsRequest { 
+    ustring crawlerName = 1;
+    CrawlerStats crawlerStats = 3;
+  }
+  
+  service CrawlerStatsService { 
+    method logCrawlerStats(in LogCrawlStatsRequest,out NullMessage);
+  }
+
+}

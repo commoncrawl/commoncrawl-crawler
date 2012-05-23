@@ -1,0 +1,249 @@
+/**
+ * Copyright 2008 - CommonCrawl Foundation
+ * 
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+ 
+include "../protocol/protocol.jr"
+
+module org.commoncrawl.service.queryserver {
+  
+  class MasterState  [recordid] { 
+      long lastQueryId = 1;
+  }
+  
+  class QueryCommon { 
+    long queryId = 1;
+
+    enum QueryFlags { 
+      SORT_ON_SLAVE = 1;        
+    }
+
+    int  queryFlags = 2;
+    
+    ustring queryResultPath = 4;
+    // shard ids a particular host is responsible for processing 
+    vector<int> relevantShardIds = 5;
+  }
+
+  class PersistentQueryInfo [recordid] { 
+
+    long    queryId = 1;
+    long    finalResultCount = 2;
+    ustring cannonicalQueryId = 3;
+    long    createTime = 4;
+    long    lastAccessTime = 5;
+  }
+  
+  class ClientQueryInfo { 
+    long      clientQueryId = 1;
+    ustring   sortByField = 3;
+    
+    enum SortOrder { 
+      ASCENDING =0;
+      DESCENDING = 1;
+    }
+            
+    int       sortOrder = 4;
+    int       paginationOffset = 5;
+    int       pageSize = 6;
+  }
+  
+  class QueryStatus { 
+    long    queryId = 1;
+    float   progress = 2;
+    int     status = 3;
+        
+    enum Status { 
+      PENDING = 0;
+      RUNNING = 1;
+      FINISHED = 2;
+      ERROR = 3;
+      CANCELLED = 4;      
+    }
+    
+    ustring optErrorReason = 4;
+    long     optResultCount = 5;
+  }
+
+  // tuple that associates a shard id with a host name
+  class ShardIndexHostNameTuple { 
+    [key] int shardId = 1;
+    ustring hostName = 2;
+  }
+
+
+  class RemoteQueryInfo { 
+    // common query info 
+    QueryCommon commonInfo = 1;    
+    // query  class type
+    ustring queryClassType = 2;
+    // query data class type
+    ustring queryDataClassType =3;
+    // query data 
+    buffer  queryDataBuffer = 4;
+    // client query details 
+    ClientQueryInfo clientQueryData = 5;
+    // shard to host name mapping 
+    vector<ShardIndexHostNameTuple> shardMapping = 6; 
+  }
+  
+  class DomainListQueryInfo { 
+    QueryCommon commonInfo = 1;
+    ustring     searchPattern   = 2;
+  }
+  
+  class DomainURLListQueryInfo { 
+      QueryCommon commonInfo = 1;
+      long        domainId = 2;
+  }
+
+  class URLDetailQueryInfo { 
+      
+      QueryCommon commonInfo = 1;
+      ustring     url = 2;
+      
+      enum QueryType { 
+        URL_DATA = 1;
+        LINK_DATA = 2;
+        INVERSE_LINK_DATA =3;
+        CONTENT_DATA=4;
+      }
+      
+      int         queryType = 3;
+      org.commoncrawl.protocol.ArchiveInfo optArcFileInfo = 4;
+      
+  }
+
+  class URLLinkDetailQueryInfo { 
+      
+      QueryCommon commonInfo = 1;
+      enum QueryType { 
+        LINKS_QUERY = 0;
+        INVERSE_QUERY = 1;
+        INVERSE_BY_DOMAIN_QUERY = 2;
+        INVERSE_BY_DOMAIN_DETAIL_QUERY = 3;
+      }
+      int  queryType = 2;
+      org.commoncrawl.protocol.URLFPV2 targetURLFP =3;
+      long linkDBTS     = 4;
+      int  linkDBFileNo = 5;
+      long linkDBOffset = 6;
+      
+      // inlink query details 
+      long domainId = 7;
+      int  inlinkDomainURLCount = 8;
+      long urlDataOffset = 9; 
+  }
+  
+  class InlinkingDomainInfo { 
+    // name of inlinking domain 
+    [key] ustring domainName = 1;
+    // the domains id 
+    long domainId = 2;
+    // number of urls from this domain 
+    int   urlCount = 3;
+    // the offset to the url details for this domain
+    long  urlDataPos = 4;
+    
+  }
+  
+  class InlinksByDomainQueryInfo { 
+    ustring domainName = 1;
+    float   minPageRank = 2;
+  }
+  
+  class InlinkingURLInfo { 
+    float   sourcePageRank = 2;
+    ustring targetURL = 3;
+  }
+
+  
+  class URLQuery { 
+    int     queryId = 1;
+    ustring tldName = 2;
+    ustring optSubDomain = 3;
+  }
+  
+  class URLQueryResult { 
+    int queryId = 1;
+    int slaveId = 2;
+    vector<long> resultSetIds  = 3;
+    buffer       resultSetData = 4;
+    boolean      moreComing = 5;
+  }
+
+  class URLDataLoadRequest { 
+    int requestId = 1;
+    vector<long> loadRequestIds = 2;
+  }
+  
+  class BaseConfig { 
+  
+    ustring fileSystem        = 1;
+    ustring baseWorkingDir    = 2;
+    ustring queryResultsDir   = 3;
+    ustring queryCacheDir     = 4;
+    ustring queryDBPath       = 5;
+    ustring slaveName = 6;
+    long    databaseTimestamp = 8;
+  }
+  
+  class SlaveStatus { 
+    enum State { 
+      INITIALIZING = 1;
+      READY = 2;
+      ERROR=10;
+    }
+    
+    int       state = 1;
+    vector<QueryStatus> queryStatus = 2;
+  }  
+  
+  class URLDataLoadResult { 
+    int requestId = 1;
+    vector<org.commoncrawl.protocol.CrawlDatumAndMetadata> results =2;
+  }
+  
+  class ContentQueryRPCInfo  {
+    ustring url = 1;
+  }
+  
+  class ContentQueryRPCResult { 
+    boolean success = 1;
+    org.commoncrawl.protocol.shared.ArcFileItem arcFileResult = 2;
+  }
+  
+  service QueryServerMaster {
+    
+    method doContentQuery(in ContentQueryRPCInfo, out ContentQueryRPCResult);
+    
+  }
+  
+  
+  service QueryServerSlave {
+  
+    method initialize(in BaseConfig,out SlaveStatus);
+    
+    method doQuery(in RemoteQueryInfo, out QueryStatus);
+    
+    method cancelQuery(in QueryCommon, out NullMessage);
+    
+    method heartbeat(in NullMessage, out SlaveStatus);
+  }
+  
+  
+
+}

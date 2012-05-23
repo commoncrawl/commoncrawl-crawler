@@ -1,0 +1,57 @@
+include "../protocol/protocol.jr"
+
+
+module org.commoncrawl.service.parser { 
+  
+  
+  class Link { 
+    ustring url = 1; 
+    ustring attributes = 2;
+  }
+  
+  class Meta { 
+    ustring name=1;
+    ustring value=2;
+    byte flags=3;
+    
+    enum Flag { 
+      IsHttpEquiv =1;
+    }
+  }
+  
+  class ParseRequest {     
+    long     domainId = 1;
+    long     docId    = 2;
+    ustring  docURL   = 3;
+    ustring  docHeaders  = 4;
+    buffer   docContent  = 5;
+    buffer   context  = 6;
+  }
+  
+  class ParseResult { 
+    long domainId = 1;
+    long docId = 2;
+    ustring contentType = 3;
+    buffer  context = 4;
+    boolean parseSuccessful = 5;
+    ustring parseFailureReason = 6;
+    ustring title = 7;
+    vector<Meta> metaTags = 8;
+    vector<Link> extractedLinks =9; 
+    ustring text = 10;   
+  }
+  
+  class SlaveStatus { 
+    boolean active = 1;
+    double  load   = 2;
+    int     activeDocs = 3;
+    int     queuedDocs = 4;
+  }
+
+  service ParserServiceSlave { 
+     // query the slave for its current status  
+     method queryStatus(in NullMessage,out SlaveStatus);
+     // parse a document 
+     method parseDocument(in ParseRequest,out ParseResult);
+  }
+}

@@ -1,0 +1,29 @@
+module org.commoncrawl.service.dns {
+
+  class DNSQueryInfo { 
+      ustring hostName = 1;
+      boolean isHighPriorityRequest = 2;
+  }
+
+  class DNSQueryResponse { 
+  
+    enum Status { 
+      SUCCESS  = 0;
+      SERVER_FAILURE = 1;
+      RESOLVER_FAILURE = 2;
+    }
+
+    ustring     hostName  = 1;
+    int         status    = 2;
+    ustring     errorDesc = 3;
+    ustring     cname     = 4;
+    int         address   = 5;
+    long        ttl       = 6;
+    ustring     sourceServer = 7;
+  }
+
+  service DNSService {
+    
+    method doQuery(in DNSQueryInfo,out DNSQueryResponse);
+  }
+}
