@@ -49,17 +49,17 @@ import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.SequenceFile.Reader;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.BlackListRecord;
-import org.commoncrawl.crawl.database.BlackListSimilarityMatch;
-import org.commoncrawl.crawl.database.BlackListURLPattern;
-import org.commoncrawl.crawl.database.PatternMatchDetails;
+import org.commoncrawl.mapred.BlackListRecord;
+import org.commoncrawl.mapred.BlackListSimilarityMatch;
+import org.commoncrawl.mapred.BlackListURLPattern;
+import org.commoncrawl.mapred.PatternMatchDetails;
 import org.commoncrawl.db.RecordStore;
 import org.commoncrawl.server.AsyncWebServerRequest;
 import org.commoncrawl.server.CommonCrawlServer;
 import org.commoncrawl.util.URLPattern.URLPatternBuilder;
 import org.commoncrawl.util.URLPattern.URLPatternMatcher;
-import org.json.JSONException;
-import org.json.JSONWriter;
+
+import com.google.gson.stream.JsonWriter;
 
 public class PatternListEditor extends CommonCrawlServer {
 
@@ -869,11 +869,11 @@ public class PatternListEditor extends CommonCrawlServer {
 			
 			writer.println(req.getParameter("callback") + "(\n");
 			
-			JSONWriter jsonWriter = new JSONWriter(writer);
+			JsonWriter jsonWriter = new JsonWriter(writer);
 			try { 
-				jsonWriter.object();
-				jsonWriter.key("results");
-				jsonWriter.array();
+				jsonWriter.beginObject();
+				jsonWriter.name("results");
+				jsonWriter.beginArray();
 
 				BlackListRecord record = _recordMap.get(domain);
 				
@@ -881,10 +881,10 @@ public class PatternListEditor extends CommonCrawlServer {
 					BlackListURLPattern pattern = record.getPatterns().get(patternIdx);
 					
 					for (BlackListSimilarityMatch match : pattern.getMatches()) { 
-						jsonWriter.object();
-						jsonWriter.key("matchURL1");
+						jsonWriter.beginObject();
+						jsonWriter.name("matchURL1");
 						jsonWriter.value(match.getDocument1URL());
-						jsonWriter.key("matchURL2");
+						jsonWriter.name("matchURL2");
 						jsonWriter.value(match.getDocument2URL());
 						jsonWriter.endObject();
 					}
@@ -892,7 +892,7 @@ public class PatternListEditor extends CommonCrawlServer {
 				jsonWriter.endArray();
 				jsonWriter.endObject();
 			}
-			catch (JSONException e) { 
+			catch (Exception e) { 
 				throw new IOException(e);
 			}
 	    writer.println(");\n");
@@ -908,12 +908,12 @@ public class PatternListEditor extends CommonCrawlServer {
 			
 			writer.println(req.getParameter("callback") + "(\n");
 			
-			JSONWriter jsonWriter = new JSONWriter(writer);
+			JsonWriter jsonWriter = new JsonWriter(writer);
 			try { 
 				
 				boolean success = false;
 				
-				jsonWriter.object();
+				jsonWriter.beginObject();
 						
 				LOG.info("Domain:" + domain + " new status:" + status);
 				BlackListRecord record = _recordMap.get(domain);
@@ -939,12 +939,12 @@ public class PatternListEditor extends CommonCrawlServer {
 							_recordStore.commitTransaction();
 							LOG.info("Updated Record:" + domain);
 					
-							jsonWriter.key("status");
+							jsonWriter.name("status");
 							jsonWriter.value(BlackListURLPattern.Status.toString(record.getPatterns().get(patternIdx).getStatus()));
 						}
 					}
 				}
-				jsonWriter.key("success");
+				jsonWriter.name("success");
 				jsonWriter.value(success);
 				
 				jsonWriter.endObject();
@@ -952,7 +952,7 @@ public class PatternListEditor extends CommonCrawlServer {
 		    writer.println(");\n");
 
 			}
-			catch (JSONException e) { 
+			catch (Exception e) { 
 				throw new IOException(e);
 			}
 		}	
@@ -966,15 +966,15 @@ public class PatternListEditor extends CommonCrawlServer {
 			
 			writer.println(req.getParameter("callback") + "(\n");
 			
-			JSONWriter jsonWriter = new JSONWriter(writer);
+			JsonWriter jsonWriter = new JsonWriter(writer);
 			try { 
 				
-				jsonWriter.object();
+				jsonWriter.beginObject();
 						
 				LOG.info("Domain:" + domain + " new status:" + status);
 				BlackListRecord record = _recordMap.get(domain);
 				if (record != null) {
-					jsonWriter.key("success");
+					jsonWriter.name("success");
 					jsonWriter.value(true);
 					
 					if (status.equalsIgnoreCase("unmodified")) { 
@@ -992,11 +992,11 @@ public class PatternListEditor extends CommonCrawlServer {
 					_recordStore.commitTransaction();
 					LOG.info("Updated Record:" + domain);
 					
-					jsonWriter.key("status");
+					jsonWriter.name("status");
 					jsonWriter.value(BlackListRecord.Status.toString(record.getStatus()));
 				}
 				else { 
-					jsonWriter.key("success");
+					jsonWriter.name("success");
 					jsonWriter.value(false);
 				}
 				
@@ -1005,7 +1005,7 @@ public class PatternListEditor extends CommonCrawlServer {
 		    writer.println(")\n");
 
 			}
-			catch (JSONException e) { 
+			catch (Exception e) { 
 				throw new IOException(e);
 			}
 		}
@@ -1017,12 +1017,12 @@ public class PatternListEditor extends CommonCrawlServer {
 			
 			writer.println(req.getParameter("callback") + "(\n");
 			
-			JSONWriter jsonWriter = new JSONWriter(writer);
+			JsonWriter jsonWriter = new JsonWriter(writer);
 					
 			try { 
-		    jsonWriter.object();
-				jsonWriter.key("results");
-				jsonWriter.array();
+		    jsonWriter.beginObject();
+				jsonWriter.name("results");
+				jsonWriter.beginArray();
 		
 				int recordCount =0;
 				
@@ -1040,35 +1040,35 @@ public class PatternListEditor extends CommonCrawlServer {
 				for (BlackListRecord record : records) {
 					
 					// write json record 
-					jsonWriter.object();
+					jsonWriter.beginObject();
 					
-					jsonWriter.key("name");
+					jsonWriter.name("name");
 					jsonWriter.value(record.getDomainName());
-					jsonWriter.key("href");
+					jsonWriter.name("href");
 					jsonWriter.value(record.getDomainName() + "_Index.html");
-					jsonWriter.key("logFileCount");
+					jsonWriter.name("logFileCount");
 					jsonWriter.value(record.getLogFileCount());
-					jsonWriter.key("urlCount");
+					jsonWriter.name("urlCount");
 					jsonWriter.value(record.getUrlCount());
-					jsonWriter.key("status");
+					jsonWriter.name("status");
 					jsonWriter.value(BlackListRecord.Status.toString(record.getStatus()));
 					
-					jsonWriter.key("patterns");
+					jsonWriter.name("patterns");
 					
-					jsonWriter.array();
+					jsonWriter.beginArray();
 					for (BlackListURLPattern pattern : record.getPatterns()) { 
-						jsonWriter.object();
+						jsonWriter.beginObject();
 						
-						jsonWriter.key("pattern");
+						jsonWriter.name("pattern");
 						jsonWriter.value(pattern.getPattern());				
 		
-						jsonWriter.key("status");
+						jsonWriter.name("status");
 						jsonWriter.value(BlackListURLPattern.Status.toString(pattern.getStatus()));
 						
-						jsonWriter.key("matchCount");
+						jsonWriter.name("matchCount");
 						jsonWriter.value(pattern.getTotalMatchCount());				
 		
-						jsonWriter.key("avgJSC");
+						jsonWriter.name("avgJSC");
 						jsonWriter.value(pattern.getAvgJSC());				
 
 						/*
@@ -1109,7 +1109,7 @@ public class PatternListEditor extends CommonCrawlServer {
 		    
 		    writer.println(")\n");
 			}
-			catch (JSONException e) { 
+			catch (Exception e) { 
 				LOG.error(CCStringUtils.stringifyException(e));
 				throw new IOException(e);
 			}

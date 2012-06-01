@@ -39,7 +39,7 @@ import java.util.zip.CRC32;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.record.Buffer;
-import org.apache.nutch.util.GZIPUtils;
+import org.commoncrawl.util.GZIPUtils;
 import org.commoncrawl.async.ConcurrentTask;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.common.Environment;
@@ -50,14 +50,16 @@ import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.commoncrawl.service.crawler.PersistentCrawlTarget;
 import org.commoncrawl.service.crawler.RobotRulesParser.RobotRuleSet;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.service.statscollector.CrawlerStats;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.FileUtils;
 import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.IntrusiveList;
+import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.URLFingerprint;
 import org.commoncrawl.util.URLUtils;
+import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.IntrusiveList.IntrusiveListElement;
 import org.junit.Test;
 
@@ -1126,7 +1128,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                     
                     try {
                       
-                      byte[] contentData = contentBuffer.get();
+                      TextBytes contentData = new TextBytes(contentBuffer.get());
                       
                       String contentEncoding = httpHeaders.findValue("Content-Encoding");
                       
@@ -1135,17 +1137,21 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                         if (Environment.detailLogEnabled())
                           LOG.info("GZIP Encoding Detected for Robots File For:"+activeHost);
   
-                        contentData = GZIPUtils.unzipBestEffort(contentData,CrawlEnvironment.CONTENT_SIZE_LIMIT);
+                        UnzipResult result = GZIPUtils.unzipBestEffort(contentData.getBytes(),CrawlEnvironment.CONTENT_SIZE_LIMIT);
   
-                        if (contentData == null) { 
+                        if (result == null) {
+                          contentData = null;
                           if (Environment.detailLogEnabled())
                             LOG.info("GZIP Decoder returned NULL for Robots File For:"+activeHost);
+                        }
+                        else { 
+                          contentData.set(result.data.get(),result.data.getOffset(),result.data.getCount());
                         }
                       }
 
                       try {
                         if (contentData != null) { 
-                          String robotsTxt = new String(contentData).trim().toLowerCase();
+                          String robotsTxt = contentData.toString().trim().toLowerCase();
                           if (robotsTxt.startsWith("<html") || robotsTxt.startsWith("<!doctype html")) { 
                             contentData = null;
 
@@ -1182,11 +1188,11 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                       if (contentData != null) { 
                         synchronized (_crc32) { 
                           _crc32.reset();
-                          _crc32.update(contentData);
+                          _crc32.update(contentData.getBytes(),contentData.getOffset(),contentData.getLength());
                           result.crcValue = _crc32.getValue();
                         }
                         RobotRulesParser parser = new RobotRulesParser(getServerSingleton().getConfig());
-                        result.ruleSet = parser.parseRules(contentData,0,contentData.length); 
+                        result.ruleSet = parser.parseRules(contentData.getBytes(),contentData.getOffset(),contentData.getLength()); 
                       }
                       else {
                         result.ruleSet = RobotRulesParser.getEmptyRules();

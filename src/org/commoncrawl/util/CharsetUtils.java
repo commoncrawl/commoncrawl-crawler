@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.DataInputBuffer;
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.util.HttpHeaderUtils.ContentTypeAndCharset;
 import org.commoncrawl.util.Tuples.Pair;
 import org.mozilla.intl.chardet.nsDetector;

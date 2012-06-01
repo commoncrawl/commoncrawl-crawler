@@ -45,10 +45,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.SequenceFile.ValueBytes;
 import org.apache.hadoop.io.file.tfile.TFile;
 import org.apache.log4j.BasicConfigurator;
-import org.apache.nutch.crawl.CrawlDatum;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.crawlpipeline.MetadataIndexBuilder;
-import org.commoncrawl.crawl.database.crawlpipeline.InverseLinksByDomainDBBuilder.ComplexKeyComparator;
+import org.commoncrawl.mapred.pipelineV1.MetadataIndexBuilderV2;
+import org.commoncrawl.mapred.pipelineV1.InverseLinksByDomainDBBuilder.ComplexKeyComparator;
 import org.commoncrawl.hadoop.mergeutils.MergeSortSpillWriter;
 import org.commoncrawl.hadoop.mergeutils.RawKeyValueComparator;
 import org.commoncrawl.hadoop.mergeutils.SequenceFileSpillWriter;
@@ -61,6 +60,7 @@ import org.commoncrawl.service.queryserver.index.DatabaseIndexV2.MasterDatabaseI
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CompressURLListV2;
 import org.commoncrawl.util.CompressedURLFPListV2;
+import org.commoncrawl.util.CrawlDatum;
 import org.commoncrawl.util.FileUtils;
 import org.commoncrawl.util.FlexBuffer;
 import org.commoncrawl.util.NodeAffinityMaskBuilder;
@@ -116,11 +116,11 @@ public class DatabaseIndexV2 {
       _indexToShardMapping.put(INDEX_NAME_DOMAIN_NAME_TO_METADATA,
           buildShardMapFromAffinityMapGivenRootPath(new Path(
               "crawl/metadatadb/" + _databaseTimestamp + "/subDomainMetadata/"
-                  + MetadataIndexBuilder.SUBDOMAIN_INDEX_NAME_TO_METADATA),slavesList));
+                  + MetadataIndexBuilderV2.SUBDOMAIN_INDEX_NAME_TO_METADATA),slavesList));
       _indexToShardMapping.put(INDEX_NAME_DOMAIN_ID_TO_METADATA,
           buildShardMapFromAffinityMapGivenRootPath(new Path(
               "crawl/metadatadb/" + _databaseTimestamp + "/subDomainMetadata/"
-                  + MetadataIndexBuilder.SUBDOMAIN_INDEX_ID_TO_METADATA),slavesList));
+                  + MetadataIndexBuilderV2.SUBDOMAIN_INDEX_ID_TO_METADATA),slavesList));
       _indexToShardMapping.put(INDEX_NAME_DOMAIN_ID_TO_URLLIST_SORTED_BY_NAME,
           buildShardMapFromAffinityMapGivenRootPath(new Path(
               "crawl/querydb/db/" + _databaseTimestamp + "/indexedByURL"),slavesList));
@@ -374,7 +374,7 @@ public class DatabaseIndexV2 {
       keyBuffer.writeLong(domainId);
 
       FlexBuffer key = queryDomainMetadataKeyAndIndex(keyBuffer,
-          MetadataIndexBuilder.SUBDOMAIN_INDEX_ID_TO_METADATA, shardId);
+          MetadataIndexBuilderV2.SUBDOMAIN_INDEX_ID_TO_METADATA, shardId);
 
       if (key != null) {
         DataInputBuffer inputStream = new DataInputBuffer();
@@ -964,7 +964,7 @@ public class DatabaseIndexV2 {
 
       Path metadataDBPath = new Path("crawl/metadatadb/" + _databaseTimestamp
           + "/subDomainMetadata/"
-          + MetadataIndexBuilder.SUBDOMAIN_INDEX_NAME_TO_METADATA + "/part-"
+          + MetadataIndexBuilderV2.SUBDOMAIN_INDEX_NAME_TO_METADATA + "/part-"
           + _numberFormat.get().format(shardId));
 
       Pattern patternObj = Pattern.compile(searchPattern);

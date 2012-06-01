@@ -66,7 +66,6 @@ import org.commoncrawl.async.CallbackWithResult;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.crawlpipeline.LinkDBPRValueWriterV2;
 import org.commoncrawl.protocol.CompressedOutlinkList;
 import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
@@ -104,6 +103,9 @@ import com.hadoop.compression.lzo.LzoCodec;
 
 
 public class PageRankUtils {
+
+  // TODO:HACK 
+  public static final int           VALUES_PER_RANGE  = 10;
 
   public static final Log LOG = LogFactory.getLog(PageRankUtils.class);
 
@@ -342,7 +344,7 @@ public class PageRankUtils {
       //timeStart = System.currentTimeMillis();
       
       // walk up to max number of items in range ... 
-      for (int itemIdx=0;itemIdx<LinkDBPRValueWriterV2.VALUES_PER_RANGE;++itemIdx) { 
+      for (int itemIdx=0;itemIdx<VALUES_PER_RANGE;++itemIdx) { 
         // read the urlf fp ... 
         long urlFPValue = valueFileBuffer.getLong();
 
@@ -398,7 +400,7 @@ public class PageRankUtils {
       
       
       // walk up to max number of items in range ... 
-      for (int itemIdx=0;itemIdx<LinkDBPRValueWriterV2.VALUES_PER_RANGE  && valueFileBuffer.remaining() != 0;++itemIdx) { 
+      for (int itemIdx=0;itemIdx<VALUES_PER_RANGE  && valueFileBuffer.remaining() != 0;++itemIdx) { 
         // read the urlf fp ... 
         long urlFPValue = valueFileBuffer.getLong();
         // and the value 

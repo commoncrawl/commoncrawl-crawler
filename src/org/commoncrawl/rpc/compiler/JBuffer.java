@@ -28,7 +28,7 @@ public class JBuffer extends JCompType {
   class JavaBuffer extends JavaCompType {
     
     JavaBuffer() {
-      super("FlexBuffer", "FlexBuffer", "org.commoncrawl.util.shared.FlexBuffer");
+      super("FlexBuffer", "FlexBuffer", "org.commoncrawl.util.FlexBuffer");
     }
     
     @Override

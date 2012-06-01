@@ -1009,8 +1009,21 @@ module org.commoncrawl.protocol {
     long    parameterResult = 2;
    }
       
-  
-  service CrawlDBService { 
+   class ParseOutput { 
+      ustring metadata = 1;
+      ustring textContent = 2;
+      ustring normalizedMimeType = 3;
+      ustring hostIPAddress = 4;
+      long    fetchTime = 5;
+      buffer  md5Hash = 6;
+      long    simHash = 7;
+      ustring headers = 8;
+      buffer  rawContent = 9;
+      ustring compactMetadata = 10;
+      org.commoncrawl.protocol.shared.CrawlMetadata crawlMetadata = 11;
+   }
+
+  Service CrawlDBService { 
     // map reduce job state support 
     method updateMapReduceTaskValue(in MapReduceTaskIdAndData,out NullMessage);
     method queryMapReduceTaskValue(in MapReduceTaskIdAndData,out MapReduceTaskIdAndData);
@@ -1020,7 +1033,7 @@ module org.commoncrawl.protocol {
     method queryFingerprintStatus(in URLFPV2,out SimpleByteResult);
   }
   
-  service CrawlerService {
+  Service CrawlerService {
 
     method doAction(in CrawlerAction, out CrawlerStatus);
   
@@ -1030,7 +1043,7 @@ module org.commoncrawl.protocol {
   }
   
   
-  service CrawlerHistoryService { 
+  Service CrawlerHistoryService { 
     
     // query the current crawl number of this history server
     method queryStatus(in NullMessage,out CrawlHistoryStatus);
@@ -1049,7 +1062,7 @@ module org.commoncrawl.protocol {
     //
   }
   
-  service CrawlerHistoryServiceV2 { 
+  Service CrawlerHistoryServiceV2 { 
     // query the server for a single url fingerprint item 
     method singleItemQuery(in URLFPV2, out SingleItemHistoryQueryResponse);
     // initiate a bulk fingerprint query 

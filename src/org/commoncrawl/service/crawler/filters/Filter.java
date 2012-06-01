@@ -6,7 +6,7 @@ import java.net.InetAddress;
 import org.apache.hadoop.mapred.JobConf;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.commoncrawl.rpc.base.shared.RPCStruct;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 
 public abstract class Filter {
 

@@ -27,8 +27,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.commoncrawl.service.statscollector.Month;
-import org.commoncrawl.service.statscollector.SerialDate;
+import org.commoncrawl.util.time.Month;
+import org.commoncrawl.util.time.SerialDate;
 import org.commoncrawl.util.Tuples.Pair;
 
 import com.google.common.collect.Multimap;

@@ -52,8 +52,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.file.tfile.TFile;
-import org.apache.nutch.crawl.CrawlDatum;
-import org.apache.nutch.protocol.ProtocolStatus;
+import org.commoncrawl.util.CrawlDatum;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.protocol.ArchiveInfo;
 import org.commoncrawl.protocol.CrawlDatumAndMetadata;
@@ -80,13 +79,14 @@ import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.FlexBuffer;
 import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.MurmurHash;
+import org.commoncrawl.util.ProtocolStatus;
 import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.URLUtils;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.json.JSONWriter;
+
 import org.mortbay.jetty.servlet.Context;
 import org.mortbay.jetty.servlet.DefaultServlet;
+
+import com.google.gson.stream.JsonWriter;
 
 /**
  * 
@@ -102,6 +102,7 @@ public class QueryServerFE {
 
   
   public static MasterServer getServer() { return _server; }
+  
   
   public QueryServerFE(MasterServer server, File webAppRoot) throws IOException {
     _server = server;
@@ -159,17 +160,17 @@ public class QueryServerFE {
         	// ok, detected a direct url query ...
         	// formulate a specific response ... 
 					PrintWriter writer = response.getWriter();
-					JSONWriter jsonWriter = new JSONWriter(writer);
+					JsonWriter jsonWriter = new JsonWriter(writer);
 					
 					try {
-            jsonWriter.object();
-            jsonWriter.key("isURL");        	
+            jsonWriter.beginObject();
+            jsonWriter.name("isURL");        	
             jsonWriter.value(1);
-            jsonWriter.key("domainName");
+            jsonWriter.name("domainName");
             jsonWriter.value(urlObject.getHost());
             jsonWriter.endObject();
             return;
-	        } catch (JSONException e) {
+	        } catch (Exception e) {
 	        	LOG.error(CCStringUtils.stringifyException(e));
 	          throw new IOException(e);
 	        }
@@ -254,7 +255,7 @@ public class QueryServerFE {
                 if (count++ != 0) 
                   writer.write(",");
                 writer.write("{ cell:[");
-                writer.write(JSONObject.quote(record.getKey().toString()) + ",");
+                writer.write(quote(record.getKey().toString()) + ",");
                 writer.print(record.getValue().getUrlCount());
                 writer.write("] }\n");
               }
@@ -378,7 +379,7 @@ public class QueryServerFE {
                 //response.setContentType("text/plain");
                 
               
-              writer.write("{\"name\":"+ JSONObject.quote(metadata.getDomainText()) +",");
+              writer.write("{\"name\":"+ quote(metadata.getDomainText()) +",");
               writer.write("\"urls\":"+ metadata.getUrlCount() +",");
               writer.write("\"fetched\":"+ metadata.getFetchedCount() +",");
               writer.write("\"gone\":"+ metadata.getGoneCount() +",");
@@ -484,12 +485,12 @@ public class QueryServerFE {
                   writer.write(",");
                 writer.write("{ cell:[");                  
                 //URL
-                writer.write(JSONObject.quote(record.getValue().getUrl())+",");
+                writer.write(quote(record.getValue().getUrl())+",");
                 //STATUS
-                writer.write(JSONObject.quote(getStatusStringFromMetadata(record.getValue()))+",");
+                writer.write(quote(getStatusStringFromMetadata(record.getValue()))+",");
                 // FETCHTIME
                 if (record.getValue().getMetadata().isFieldDirty(CrawlURLMetadata.Field_LASTFETCHTIMESTAMP)) { 
-                  writer.write(JSONObject.quote(new Date(record.getValue().getMetadata().getLastFetchTimestamp()).toString())+",");
+                  writer.write(quote(new Date(record.getValue().getMetadata().getLastFetchTimestamp()).toString())+",");
                 }
                 else { 
                   writer.write(",");
@@ -617,24 +618,24 @@ public class QueryServerFE {
               
               // DOMAIN HASH 
               writer.write("domainHash:");
-              writer.write(JSONObject.quote(Long.toString(fingerprint.getDomainHash()))+"\n,");
+              writer.write(quote(Long.toString(fingerprint.getDomainHash()))+"\n,");
               
               // FINGERPRINT 
               writer.write("urlHash:");
-              writer.write(JSONObject.quote(Long.toString(fingerprint.getUrlHash()))+"\n,");
+              writer.write(quote(Long.toString(fingerprint.getUrlHash()))+"\n,");
               
               // CANONICAL URL 
               writer.write("canonicalURL:");
-              writer.write(JSONObject.quote(urlName)+"\n,");
+              writer.write(quote(urlName)+"\n,");
               
               
               //STATUS
               writer.write("status:");
-              writer.write(JSONObject.quote(getStatusStringFromMetadata(realMetadataObject))+"\n,");
+              writer.write(quote(getStatusStringFromMetadata(realMetadataObject))+"\n,");
               
               //CONTENT LOCATION 
               //writer.write("contentLocation:");
-              //writer.write(JSONObject.quote(data.getMetadata().getContentFileNameAndPos())+"\n,");
+              //writer.write(quote(data.getMetadata().getContentFileNameAndPos())+"\n,");
               
               writer.write("hasArcFileData:");
               writer.print(realMetadataObject.getMetadata().getArchiveInfo().size() != 0 ? 1 : 0 ); 
@@ -671,7 +672,7 @@ public class QueryServerFE {
                 
                 // ARC FILE PATH 
                 writer.write("arcFilePath:");
-                writer.print(JSONObject.quote(hdfsNameToS3ArcFileName(info.getArcfileDate(), info.getArcfileIndex())));
+                writer.print(quote(hdfsNameToS3ArcFileName(info.getArcfileDate(), info.getArcfileIndex())));
                 writer.write("\n,");
                 
                 // ARC FILE SIZE 
@@ -710,7 +711,7 @@ public class QueryServerFE {
               
               if (realMetadataObject.getRedirectLocation().length() !=0) { 
               	writer.write("RedirectLocation:");
-              	writer.print(JSONObject.quote(realMetadataObject.getRedirectLocation()));
+              	writer.print(quote(realMetadataObject.getRedirectLocation()));
               	writer.write("\n,");
 
               	
@@ -719,7 +720,7 @@ public class QueryServerFE {
               		hostName = "";
               	
               	writer.write("RedirectDomain:");
-              	writer.print(JSONObject.quote(hostName));
+              	writer.print(quote(hostName));
               	writer.write("\n,");
               	
               }
@@ -756,7 +757,7 @@ public class QueryServerFE {
 
               if (realMetadataObject.getMetadata().isFieldDirty(CrawlURLMetadata.Field_ETAG)) { 
                 writer.write("httpETag:");
-                writer.print(JSONObject.quote(realMetadataObject.getMetadata().getETag())); 
+                writer.print(quote(realMetadataObject.getMetadata().getETag())); 
                 writer.write("\n,");	
               }
 
@@ -778,7 +779,7 @@ public class QueryServerFE {
                 if ((CrawlURLMetadata.CacheControlFlags.PRIVATE & realMetadataObject.getMetadata().getCacheControlFlags()) != 0) {
                 	flags += "private ";
                 }
-                writer.print(JSONObject.quote(flags)); 
+                writer.print(quote(flags)); 
                 writer.write("\n,");	
               }
               
@@ -1101,7 +1102,7 @@ public class QueryServerFE {
 	        writer.write(",");
 	      writer.write("{ cell:[");                  
 	      //URL
-	      writer.write(JSONObject.quote(record.getKey().toString())+",");
+	      writer.write(quote(record.getKey().toString())+",");
 	      InlinkingDomainInfo domainInfo = (InlinkingDomainInfo)record.getValue();
 	      
 	      writer.write(domainInfo.getUrlCount()+",");
@@ -1139,7 +1140,7 @@ public class QueryServerFE {
         writer.write(",");
       writer.write("{ cell:[");                  
       //URL
-      writer.write(JSONObject.quote(((CrawlDatumAndMetadata)record.getValue()).getUrl())+",");
+      writer.write(quote(((CrawlDatumAndMetadata)record.getValue()).getUrl())+",");
       
       float pageRank = ((CrawlDatumAndMetadata)record.getValue()).getMetadata().getPageRank();
       // PAGE RANK
@@ -1147,13 +1148,13 @@ public class QueryServerFE {
       writer.print(",");
        
       // WRITE STATUS 
-      writer.print(JSONObject.quote(getStatusStringFromMetadata(((CrawlDatumAndMetadata)record.getValue()))));
+      writer.print(quote(getStatusStringFromMetadata(((CrawlDatumAndMetadata)record.getValue()))));
       writer.print(",");
 
       //WRITE DOMAIN NAME 
       String hostName = URLUtils.fastGetHostFromURL(((CrawlDatumAndMetadata)record.getValue()).getUrl());
       
-    	writer.print(JSONObject.quote((hostName!=null? hostName : "")));
+    	writer.print(quote((hostName!=null? hostName : "")));
       
 
       writer.write("]}\n");  
@@ -1659,7 +1660,7 @@ public class QueryServerFE {
                 text.set(record.getKey().get(),inputReader.getPosition(),textSize);
                 
                 writer.write("[");
-                writer.print(JSONObject.quote(text.toString()));
+                writer.print(quote(text.toString()));
                 writer.print(',');
                 writer.print(pageRank);
                 writer.print(',');
@@ -1672,10 +1673,10 @@ public class QueryServerFE {
                 }
                 
                 if (metadata != null) { 
-                	writer.print(JSONObject.quote(metadata.url.toString()));
+                	writer.print(quote(metadata.url.toString()));
                 }
                 else { 
-                	writer.print(JSONObject.quote("<<BAD URL>>"));
+                	writer.print(quote("<<BAD URL>>"));
                 }
                 writer.write("]\n");
               }
@@ -1717,6 +1718,71 @@ public class QueryServerFE {
         throw new IOException(CCStringUtils.stringifyException(e));
       }
     }
-  }  
+  }
+  
+  /**
+   * Produce a string in double quotes with backslash sequences in all the
+   * right places. A backslash will be inserted within </, allowing JSON
+   * text to be delivered in HTML. In JSON text, a string cannot contain a
+   * control character or an unescaped quote or backslash.
+   * @param string A String
+   * @return  A String correctly formatted for insertion in a JSON text.
+   */
+  public static String quote(String string) {
+      if (string == null || string.length() == 0) {
+          return "\"\"";
+      }
+
+      char         b;
+      char         c = 0;
+      int          i;
+      int          len = string.length();
+      StringBuffer sb = new StringBuffer(len + 4);
+      String       t;
+
+      sb.append('"');
+      for (i = 0; i < len; i += 1) {
+          b = c;
+          c = string.charAt(i);
+          switch (c) {
+          case '\\':
+          case '"':
+              sb.append('\\');
+              sb.append(c);
+              break;
+          case '/':
+              if (b == '<') {
+                  sb.append('\\');
+              }
+              sb.append(c);
+              break;
+          case '\b':
+              sb.append("\\b");
+              break;
+          case '\t':
+              sb.append("\\t");
+              break;
+          case '\n':
+              sb.append("\\n");
+              break;
+          case '\f':
+              sb.append("\\f");
+              break;
+          case '\r':
+              sb.append("\\r");
+              break;
+          default:
+              if (c < ' ' || (c >= '\u0080' && c < '\u00a0') ||
+                             (c >= '\u2000' && c < '\u2100')) {
+                  t = "000" + Integer.toHexString(c);
+                  sb.append("\\u" + t.substring(t.length() - 4));
+              } else {
+                  sb.append(c);
+              }
+          }
+      }
+      sb.append('"');
+      return sb.toString();
+  }
   
 }

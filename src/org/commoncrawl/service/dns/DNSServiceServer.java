@@ -63,7 +63,7 @@ import org.commoncrawl.rpc.base.internal.AsyncServerChannel;
 import org.commoncrawl.rpc.base.internal.NullMessage;
 import org.commoncrawl.rpc.base.shared.RPCException;
 import org.commoncrawl.server.CommonCrawlServer;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.service.crawler.filters.Filter.FilterResult;
 import org.commoncrawl.service.directory.DirectoryServiceCallback;
 import org.commoncrawl.service.directory.DirectoryServiceItemList;

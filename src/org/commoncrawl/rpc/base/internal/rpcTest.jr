@@ -13,7 +13,7 @@ module org.commoncrawl.rpc.base.internal {
 	 vector<ustring> vectorOfStrings = 4;
   }
   
-  service RPCTestService { 
+  Service RPCTestService { 
 	 method hello(in UnitTestStruct1,out UnitTestStruct1);
   }
 

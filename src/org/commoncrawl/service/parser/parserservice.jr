@@ -1,4 +1,4 @@
-include "../protocol/protocol.jr"
+include "../../protocol/protocol.jr"
 
 
 module org.commoncrawl.service.parser { 
@@ -48,7 +48,7 @@ module org.commoncrawl.service.parser {
     int     queuedDocs = 4;
   }
 
-  service ParserServiceSlave { 
+  Service ParserServiceSlave { 
      // query the slave for its current status  
      method queryStatus(in NullMessage,out SlaveStatus);
      // parse a document 

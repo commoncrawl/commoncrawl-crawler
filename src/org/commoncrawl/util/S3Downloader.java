@@ -40,13 +40,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
-import org.commoncrawl.io.internal.NIOBufferList;
-import org.commoncrawl.io.internal.NIOHttpConnection;
-import org.commoncrawl.io.internal.NIOHttpConnection.State;
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOBufferList;
+import org.commoncrawl.io.NIOHttpConnection;
+import org.commoncrawl.io.NIOHttpConnection.State;
+import org.commoncrawl.io.NIOHttpHeaders;
 
-import com.amazon.s3.CallingFormat;
-import com.amazon.s3.Utils;
 
 /**
  * 
@@ -69,7 +67,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
   private LinkedList<NIOHttpConnection> _activeConnections      = new LinkedList<NIOHttpConnection>();
   private EventLoop _eventLoop = new EventLoop();
   private boolean   _ownsEventLoop = false;
-  private CallingFormat _callingFormat = CallingFormat.getSubdomainCallingFormat();
+  private S3Utils.CallingFormat _callingFormat = S3Utils.CallingFormat.getSubdomainCallingFormat();
   private Callback _callback; 
   private boolean _freezeDownloads = false;
   private int _lastItemId = 0;
@@ -245,7 +243,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     NIOHttpConnection connection = null;
     try { 
       // construct the url for the item 
-      URL theURL = _callingFormat.getURL(false, Utils.DEFAULT_HOST, Utils.INSECURE_PORT, _s3BucketName, item.getKey(), null);
+      URL theURL = _callingFormat.getURL(false, S3Utils.DEFAULT_HOST, S3Utils.INSECURE_PORT, _s3BucketName, item.getKey(), null);
       connection = new NIOHttpConnection(theURL,_eventLoop.getSelector(),_eventLoop.getResolver(),null);
       connection.getContentBuffer().setMinBufferSize(DEFAULT_MIN_HTTP_BUFFER_SIZE);
       connection.getContentBuffer().setMaxBufferSize(DEFAULT_MAX_HTTP_BUFFER_SIZE);

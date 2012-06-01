@@ -1,0 +1,451 @@
+<?xml version="1.0"?>
+
+<project name="commoncrawl-crawler" default="compile" xmlns:artifact="antlib:org.apache.maven.artifact.ant">
+  
+  <!-- Load all the default properties, and any the user wants    -->
+  <!-- to contribute (without having to type -D or edit this file -->
+  <property file="${user.home}/build.properties" />
+  <property file="${basedir}/build.properties" />
+  <property name="Name" value="commoncrawl"/>
+  <property name="name" value="commoncrawl"/>
+  <property name="version" value="0.1"/>
+  <property name="final.name" value="${name}-${version}"/>  
+
+
+  <fail message="Please define Hadoop Base Path via hadoop.path in your build.properties file">
+     <condition>
+       <not>
+         <isset property="hadoop.path"/>
+       </not>
+     </condition>
+   </fail>  
+  <property name="javacc.home" value="${basedir}/src/org/commoncrawl/rpc/compiler/generated/" />
+  <property name="cc.src.dir" value="${basedir}/src"/>
+  <property name="lib.dir" value="${basedir}/lib"/>
+  <property name="conf.dir" value="${basedir}/conf"/>
+  <property name="bin.dir" value="${basedir}/bin"/>	
+  <property name="webapps.dir" value="${basedir}/webapps"/>	
+  
+  <property name="build.dir" value="${basedir}/build"/>
+  <property name="build.native" value="${basedir}/build"/>
+  <property name="build.classes" value="${build.dir}/classes"/>
+  <property name="build.src" value="${build.dir}/src"/>
+  <property name="build.lib.dir" location="${build.dir}/lib"/>
+  <property name="build.tools.dir" location="${build.dir}/tools"/>
+  <property name="build.webapps" value="${build.dir}/webapps"/>
+  <property name="build.anttasks" value="${build.dir}/ant"/>
+  <!-- convert spaces to _ so that mac os doesn't break things -->
+  <exec executable="sed" inputstring="${os.name}" 
+        outputproperty="nonspace.os">
+    <arg value="s/ /_/g"/>
+  </exec>
+  <property name="build.platform" 
+            value="${nonspace.os}-${os.arch}-${sun.arch.data.model}"/>
+
+  <property name="build.native" value="${build.dir}/native/${build.platform}"/>
+   
+  <property name="build.encoding" value="ISO-8859-1"/>  
+  <property name="dist.dir" value="${build.dir}/${final.name}"/>
+  
+  <property name="javac.debug" value="on"/>
+  <property name="javac.optimize" value="on"/>
+  <property name="javac.deprecation" value="off"/>
+  <property name="javac.version" value="1.5"/>
+  <property name="javac.args" value=""/>
+  <property name="javac.args.warnings" value=""/>
+  <!-- native make support -->
+  <property name="make.cmd" value="make"/>
+  <property name="cc.native.src.dir" value="${cc.src.root}/native"/>
+ 
+  <!-- the normal classpath -->
+  <echo message="Processing Class Path"/>
+  <path id="classpath">
+    <pathelement location="${build.classes}"/>
+    <fileset dir="${lib.dir}">
+      <include name="jets3t*.jar"/>
+    </fileset>
+    <fileset dir="${lib.dir}">
+      <include name="*.jar" />
+      <include name="**/*.jar" />
+    </fileset>
+	<!-- stuff in build.lib -->	
+    <fileset dir="${build.lib.dir}">
+      	<include name="libthrift-0.7.0.jar" />
+ 	<include name="*.jar" />
+	  <exclude name="servlet-api-2.5-6.1.14.jar"/>
+	  <exclude name="servlet-api-2.5.jar"/>
+    </fileset>
+    <fileset dir="${hadoop.path}">
+      <include name="lib/**/*.jar"/>
+      <include name="hadoop-*-core.jar"/>
+      <include name="hadoop-core-*.jar"/>	
+      <exclude name="lib/jets3t-0.6.1.jar"/>
+	  <exclude name="lib/jackson-*"/>
+	  <exclude name="slf4j*" />
+    </fileset>
+  </path>
+
+  <target name="setup.init">
+    <tstamp/>
+    <mkdir dir="${build.dir}"/>
+    <mkdir dir="${build.lib.dir}"/>
+    <mkdir dir="${build.tools.dir}"/>
+  </target>
+
+  <!-- maven properties -->
+  <property name="pom.xml" location="${build.dir}/${final.name}.pom"/>
+  <property name="cc.artifactid" value="commoncrawl"/>
+  <property name="cc.groupid" value="commoncrawl"/>
+  <!-- ====================================================== -->
+  <!-- Maven Targets                            			  -->
+  <!-- ====================================================== -->
+
+  <target name="proxy" if="proxy.enabled">
+    <setproxy proxyhost="${proxy.host}" proxyport="${proxy.port}"
+      proxyuser="${proxy.user}" proxypassword="${proxy.pass}"/>
+  </target>
+
+  <target name="mvn.ant.tasks.download" depends="setup.init,mvn.ant.tasks.check,proxy" unless="mvn.ant.tasks.found">
+    <get src="${mvn.ant.task.url}/${mvn.ant.task.jar}" dest="${build.tools.dir}/${mvn.ant.task.jar}" usetimestamp="true"/>
+  </target>
+
+  <target name="mvn.ant.tasks.check">
+    <condition property="mvn.ant.tasks.found">
+      <typefound uri="antlib:org.apache.maven.artifact.ant" name="artifact"/>
+    </condition>
+  </target> 
+  
+  <echo message="classpath:${classpath}" />
+
+  <!-- ====================================================== -->
+  <!-- Stuff needed by all targets                            -->
+  <!-- ====================================================== -->
+  <echo message="Processing Init Target"/>
+  <target name="init" depends="mvn.init">
+    <echo message="Executing Init Target"/>    
+
+    <mkdir dir="${build.dir}"/>
+    <mkdir dir="${build.classes}"/>
+    <mkdir dir="${build.src}"/>
+    <mkdir dir="${build.anttasks}"/>
+
+  </target>
+
+	<!-- ====================================================== -->
+	<!-- Compile RCC Compiler				                    -->
+	<!-- ====================================================== -->
+  
+    <target name="record-parser" depends="init" if="javacc.home">
+      <javacc
+             target="${cc.src.dir}/org/commoncrawl/rpc/compiler/generated/RPCCompiler.jj"
+             outputdirectory="${cc.src.dir}/org/commoncrawl/rpc/compiler/generated"
+             javacchome="${javacc.home}"
+             />
+    </target>
+
+	<echo message="Processing Compile-RCC Target"/>        
+		<target name="compile-rcc-compiler" depends="init, record-parser">
+    		<javac 
+	           encoding="${build.encoding}" 
+	           srcdir="${cc.src.dir}"
+	           includes="org/commoncrawl/rpc/compiler/**/*.java"
+	           excludes="org/commoncrawl/**/OneService.java"
+	           destdir="${build.classes}"
+	           debug="${javac.debug}"
+	           optimize="${javac.optimize}"
+	           target="${javac.version}"
+	           source="${javac.version}"
+			   includeantruntime="no"	
+	           deprecation="${javac.deprecation}">
+      			<compilerarg line="${javac.args}"/>
+      			<classpath refid="classpath"/>
+    		</javac>
+    		<taskdef name="recordcc" classname="org.commoncrawl.rpc.compiler.ant.RccTask">
+      			<classpath refid="classpath" />
+    		</taskdef>
+  		</target>
+  
+	<!-- ====================================================== -->
+	<!-- Generate Records / Service Definitions                 -->
+	<!-- ====================================================== -->
+
+	<echo message="Processing CC-RPC Records Target"/>
+	<target name="gen-records-shared" depends="init, compile-rcc-compiler">
+		<recordcc destdir="${build.src}" language="java">
+   	    	<fileset dir="${cc.src.dir}/org/commoncrawl/protocol/shared" includes="*.jr" /> 
+		</recordcc>
+	</target>
+	<target name="gen-records" depends="gen-records-shared">
+  		<recordcc
+      		destdir="${build.src}"
+      		language="java">
+		    <fileset dir="${cc.src.dir}" includes="**\/*.jr" /> 
+  		</recordcc>
+	</target>					
+
+    <!-- ====================================================== -->
+    <!-- Compile the Java files                                 -->
+    <!-- ====================================================== -->
+    <echo message="Processing Compile Core Classes Target"/>                
+    <target name="compile-core-classes" depends="init,gen-records">
+
+      <!-- Compile Java files (excluding JSPs) checking warnings -->
+	  <echo message="Compiling Core Files"/>
+      <javac 
+             encoding="${build.encoding}" 
+             srcdir="${cc.src.dir};${build.src}"
+             includes="**/*.java" 
+             excludes="org/commoncrawl/**/OneService.java"
+             destdir="${build.classes}"
+             debug="${javac.debug}"
+             optimize="${javac.optimize}"
+             target="${javac.version}"
+             source="${javac.version}"
+			 includeantruntime="no"
+             deprecation="${javac.deprecation}" >
+        <compilerarg line="${javac.args} ${javac.args.warnings}" />
+        <classpath refid="classpath"/>
+      </javac>   
+
+      <copy todir="${build.classes}">
+        <fileset 
+                 dir="${cc.src.dir}" 
+                 includes="**/*.properties"
+                 />
+      </copy>
+    </target>
+    
+	<echo message="Processing Compile Core Target"/>                    
+    <target name="compile-core" depends="compile-core-classes">
+    </target>
+    
+	<echo message="Processing Compile Target"/>                        
+    <target name="compile" depends="compile-core,jar">
+    </target>    
+    
+    <!-- ================================================================== -->
+    <!-- Make JNIS                                              			-->
+    <!-- ================================================================== -->
+	<uptodate property="jni.makefiles.uptodate" targetfile="${build.src}/jni.makefile.timestamp" >
+	  <!-- ADD NATIVE MAKEFILE DEPENDENCIES HERE -->		
+	  <srcfiles dir= "${cc.native.src.dir}">
+		<include name="**/Makefile.am"/>
+	  </srcfiles>
+	</uptodate>
+	<uptodate property="jni.libraries.uptodate" targetfile="${build.src}/jni.libraries.timestamp" >
+	  <!-- ADD NATIVE SOURCE FILE DEPENDENCIES HERE -->		
+	 <srcfiles dir= "${build.src}">
+		<include name="jni.makefile.timestamp"/>
+	 </srcfiles>
+	  <srcfiles dir= "${cc.native.src.dir}">
+		<include name="**/Makefile.am"/>
+		<include name="**/*.cc"/>
+		<include name="**/*.c"/>
+		<include name="**/*.h"/>
+	  </srcfiles>
+	</uptodate>
+	<target name="check-for-native-makefile" if="compile.native">
+	
+		<available file="${build.native}/Makefile" property="native.makefile.present"/>
+		
+		<condition property="native.makefile.not.present">
+			<not>
+				<isset property="native.makefile.present"/>
+			</not>
+		</condition>
+		
+	</target>
+
+    <target name="compile-core-native-setup" depends="check-for-native-makefile"  if="compile.native" unless="jni.makefiles.uptodate">
+		
+    <mkdir dir="${build.native}/lib"/>
+    <mkdir dir="${build.native}/src/libGoogleURL"/>
+
+    <javah classpath="${build.classes}" destdir="${build.native}/src/libGoogleURL" force="yes" verbose="yes" >
+      <class name="org.commoncrawl.util.shared.GoogleURL" />
+    </javah>
+	<!--
+    <javah classpath="${build.classes}" destdir="${build.native}/src/libGoogleURL" force="yes" verbose="yes" >
+      <class name="org.commoncrawl.util.shared.NodeJS" />
+    </javah>
+	-->
+	<echo message="forcing rebuild of Makefiles"/>
+    <exec dir="${cc.native.src.dir}" executable="bash" failonerror="true">
+          <arg line='-c "mkdir ./config;aclocal --force;glibtoolize --force;automake --add-missing --force;autoconf;automake"'/>
+    </exec>
+
+    <exec dir="${build.native}" executable="sh" failonerror="true">
+          <env key="OS_NAME" value="${nonspace.os}"/>
+          <env key="OS_ARCH" value="${os.arch}"/>
+          <env key="JVM_DATA_MODEL" value="${sun.arch.data.model}"/>
+          <env key="BUILD_DIR" value="${build.native}"/>
+		  <env key="SRC_ROOT" value="${basedir}/${cc.native.src.dir}"/>
+          <arg line="${basedir}/${cc.native.src.dir}/configure --disable-static"/>
+    </exec>
+	<touch file="${build.src}/jni.makefile.timestamp" />
+    </target>
+
+    <target name="compile-core-native" depends="compile-core-classes,compile-core-native-setup" if="compile.native" unless="jni.libraries.uptodate">
+    <exec dir="${build.native}" executable="${make.cmd}" failonerror="true">
+      <env key="OS_NAME" value="${nonspace.os}"/>
+      <env key="OS_ARCH" value="${os.arch}"/>
+	  <env key="BUILD_DIR" value="${build.native}"/>     
+	  <env key="SRC_ROOT" value="${basedir}/${cc.native.src.dir}"/> 
+  	  <env key="JVM_DATA_MODEL" value="${sun.arch.data.model}"/>
+    </exec>
+	
+	<!-- Now Install Libraries -->
+	<echo message="OS_NAME is:${nonspace.os} OS_ARCH is:${os.arch}"/>
+    <exec dir="${build.native}" executable="${make.cmd}" failonerror="true">
+      <env key="OS_NAME" value="${nonspace.os}"/>
+      <env key="OS_ARCH" value="${os.arch}"/>
+	  <env key="BUILD_DIR" value="${build.native}"/>      
+	  <env key="SRC_ROOT" value="${basedir}/${cc.native.src.dir}"/>	
+  	  <env key="JVM_DATA_MODEL" value="${sun.arch.data.model}"/>
+		<arg line="install pkglibdir=${lib.dir}/native/${nonspace.os}-${os.arch}-${sun.arch.data.model}"/>
+    </exec>
+	<touch file="${build.src}/jni.libraries.timestamp" />
+   </target>
+
+    <!-- ================================================================== -->
+    <!-- Make commoncrawl.jar                                              -->
+    <!-- ================================================================== -->
+    <!--                                                                    -->
+    <!-- ================================================================== -->
+	<echo message="Processing Jar Target"/>                        
+    <target name="jar" depends="compile-core,compile-core-native">
+      <jar jarfile="${build.dir}/${final.name}.jar" basedir="${build.classes}" duplicate="preserve" >
+
+        <manifest>
+          <section name="org/commoncrawl">
+            <attribute name="Implementation-Title" value="commoncrawl"/>
+            <attribute name="Implementation-Version" value="${version}"/>
+            <attribute name="Implementation-Vendor" value="CommonCrawl"/>
+          </section>
+        </manifest>
+        <zipfileset dir="${conf.dir}" prefix="conf" >
+          <include name="*" />
+        </zipfileset>
+        <zipfileset dir="${lib.dir}" prefix="lib" >
+          <include name="*.jar" />
+        </zipfileset>
+        <zipfileset dir="${build.lib.dir}" prefix="lib" >
+          <include name="*.jar" />
+		  <exclude name="servlet-api-2.5-6.1.14.jar"/>
+		  <exclude name="servlet-api-2.5.jar"/>
+		  <exclude name="slf4j-jdk14-1.6.4.jar"/>
+        </zipfileset>
+        <zipfileset dir="${lib.dir}" prefix="lib" >
+          <include name="native/**/*.dylib" />
+          <include name="native/**/*.so" />
+          <exclude name="native/**/*.jar" />
+        </zipfileset>
+		<zipfileset dir="${webapps.dir}" prefix="webapps" >
+		 	<include name="**/**" />
+		</zipfileset>
+      </jar>
+    </target>
+
+    <!-- ================================================================== -->
+    <!-- Clean.  Delete the build files, and their directories              -->
+    <!-- ================================================================== -->
+    
+	<echo message="Processing Clean Target"/>                                        
+    <target name="clean">
+      <delete dir="${build.dir}"/>
+	  <delete> 
+		<fileset dir="${cc.src.dir}" includes="**\/gen.stamp" /> 
+	  </delete>
+    </target>
+	<echo message="Clean Genereated Target"/>                                        
+    <target name="clean-gen">
+	  <delete> 
+		<fileset dir="${cc.src.dir}" includes="**\/gen.stamp" /> 
+	  </delete>
+    </target>
+
+   <!-- ================================================================== -->
+   <!-- maven pom init                                                     -->
+   <!-- ================================================================== -->
+
+	<target name="mvn.init" depends="mvn.ant.tasks.download" >
+	  <!-- Download mvn ant tasks, download dependencies, and setup pom file -->
+	  <typedef uri="antlib:org.apache.maven.artifact.ant" classpath="${build.tools.dir}/${mvn.ant.task.jar}"/>
+
+	  <!-- remote repositories used to download dependencies from -->
+	  <artifact:remoteRepository id="central" url="${mvn.repo}"/>
+	  <artifact:remoteRepository id="apache" url="${apache.repo}"/>
+	  <artifact:remoteRepository id="fusesource.nexus.snapshot" url="http://repo.fusesource.com/nexus/content/groups/public-snapshots"/>
+	  <!-- Pom file information -->
+	  <artifact:pom id="pom" 
+	    groupId="${commoncrawl.groupid}" 
+	    artifactId="${commoncrawl.artifactid}"
+	    version="${version}" 
+	    url="http://factual.com"
+	    name="commoncrawl crawler library"
+	    description="The commoncrawl crawler library."
+	    packaging="pom"
+	  >
+	    <remoteRepository refid="central"/>
+	    <remoteRepository refid="apache"/>
+		<remoteRepository refid="fusesource.nexus.snapshot"/>
+	    <!-- Developers -->
+	    <developer id="rana" name="Ahad Rana"/>
+
+	    <!-- dependencies list -->
+	    <dependency groupId="commons-lang" artifactId="commons-lang" version="2.5"/>
+	    <dependency groupId="javax.servlet" artifactId="servlet-api" version="2.5"/>
+	    <dependency groupId="org.apache.httpcomponents" artifactId="httpclient" version="4.0.1"/>
+		<dependency groupId="com.amazonaws" artifactId="aws-java-sdk" version="1.2.12"/>
+		<dependency groupId="org.apache.ant" artifactId="ant" version="1.7.0"/>
+		<dependency groupId="commons-cli" artifactId="commons-cli" version="1.2"/>
+		<dependency groupId="commons-io" artifactId="commons-io" version="1.4"/>
+		<dependency groupId="commons-logging" artifactId="commons-logging-api" version="1.1"/>
+		<dependency groupId="commons-logging" artifactId="commons-logging" version="1.1"/>
+		<dependency groupId="org.apache.commons" artifactId="commons-math3" version="3.0"/>
+		<dependency groupId="dom4j" artifactId="dom4j" version="1.6.1"/>
+		<dependency groupId="com.google.code.gson" artifactId="gson" version="2.1"/>
+		<dependency groupId="com.google.guava" artifactId="guava" version="11.0.1"/>
+		<dependency groupId="net.java.dev.jets3t" artifactId="jets3t" version="0.8.1"/>
+		<dependency groupId="org.mortbay.jetty" artifactId="jetty" version="6.1.26"/>
+		<dependency groupId="org.mortbay.jetty" artifactId="jetty-util" version="6.1.26"/>
+		<dependency groupId="org.mortbay.jetty" artifactId="jsp-2.1" version="6.1.14"/>
+		<dependency groupId="junit" artifactId="junit" version="4.10"/>
+		<dependency groupId="org.apache.thrift" artifactId="libthrift" version="0.7.0"/>
+		<dependency groupId="log4j" artifactId="log4j" version="1.2.14"/>
+		<dependency groupId="fastutil" artifactId="fastutil" version="5.0.9"/>
+		<dependency groupId="org.slf4j" artifactId="slf4j-api" version="1.6.4"/>
+		<dependency groupId="org.slf4j" artifactId="slf4j-log4j12" version="1.6.4"/>
+		<dependency groupId="rome" artifactId="rome" version="1.0" />
+		<dependency groupId="jdom" artifactId="jdom" version="1.0" />
+		<dependency groupId="jaxen" artifactId="jaxen" version="1.0-FCS" />
+		<dependency groupId="saxpath" artifactId="saxpath" version="1.0-FCS" />
+		<dependency groupId="xalan" artifactId="xalan" version="2.5.0" />
+		<dependency groupId="xerces" artifactId="xercesImpl" version="2.6.0" />
+		<dependency groupId="xml-apis" artifactId="xml-apis" version="1.0.b2" />
+		<dependency groupId="org.fusesource.leveldbjni" artifactId="leveldbjni" version="1.2" />
+		<dependency groupId="redis.clients" artifactId="jedis" version="2.1.0" />
+		<dependency groupId="com.ibm.icu" artifactId="icu4j" version="4.8.1.1" />
+		<dependency groupId="com.amazonaws" artifactId="aws-java-sdk" version="1.3.10" /> 
+		<dependency groupId="com.google.http-client" artifactId="google-http-client" version="1.6.0-beta" /> 
+		<dependency groupId="com.google.visualization" artifactId="visualization-datasource" version="1.1.1" />
+		
+	  </artifact:pom>
+
+	  <!-- Generate the pom file -->
+	  <artifact:writepom pomRefId="pom" file="${pom.xml}"/>
+
+	  <!-- Download the dependencies -->
+	  <artifact:dependencies filesetId="build-dependency-jars" pomRefId="pom"/>
+
+	  <!-- Copy the dependencies to the build/lib dir -->
+	  <copy todir="${build.dir}/lib">
+	    <fileset refid="build-dependency-jars"/>
+	    <mapper type="flatten"/>
+	  </copy>
+	  <property name="mvn.finished" value="true"/>
+	</target>
+
+
+    <echo message="Done Processing Targets"/>    
+</project>    

@@ -27,11 +27,12 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 
-import org.apache.nutch.util.GZIPUtils;
+import org.commoncrawl.util.GZIPUtils;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.async.Timer.Callback;
 import org.commoncrawl.io.NIOHttpConnection.State;
+import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.HttpCookieUtils.CookieStore;
 
 /**
@@ -239,9 +240,11 @@ public class NIOHttpConnectionUnitTest implements NIOHttpConnection.Listener {
               contentBuffer.read(data);
 
               if (encoding.equalsIgnoreCase("gzip")) {
-                data = GZIPUtils.unzipBestEffort(data, 1024000);
+                
+                UnzipResult result= GZIPUtils.unzipBestEffort(data, 1024000);
+                
                 contentBuffer.reset();
-                contentBuffer.write(data, 0, data.length);
+                contentBuffer.write(result.data.get(), result.data.getOffset(), result.data.getCount());
                 contentBuffer.flush();
 
                 System.out.println("GUnzip Content Size:" + data.length);

@@ -40,7 +40,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.file.tfile.TFile;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.crawlpipeline.InverseLinksByDomainDBBuilder.ComplexKeyComparator;
+import org.commoncrawl.mapred.pipelineV1.InverseLinksByDomainDBBuilder.ComplexKeyComparator;
 import org.commoncrawl.hadoop.mergeutils.MergeSortSpillWriter;
 import org.commoncrawl.hadoop.mergeutils.SequenceFileSpillWriter;
 import org.commoncrawl.protocol.URLFPV2;

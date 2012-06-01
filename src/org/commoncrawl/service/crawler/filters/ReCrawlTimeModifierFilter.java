@@ -12,8 +12,8 @@ import org.apache.hadoop.mapred.JobConf;
 import org.commoncrawl.io.NIODNSCache;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.commoncrawl.rpc.base.shared.RPCStruct;
-import org.commoncrawl.service.crawler.filter.DomainFilterData;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.DomainFilterData;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.util.URLUtils;
 import org.junit.Test;
 

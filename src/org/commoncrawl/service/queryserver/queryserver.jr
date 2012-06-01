@@ -16,7 +16,7 @@
  *
  **/
  
-include "../protocol/protocol.jr"
+include "../../protocol/protocol.jr"
 
 module org.commoncrawl.service.queryserver {
   
@@ -226,14 +226,14 @@ module org.commoncrawl.service.queryserver {
     org.commoncrawl.protocol.shared.ArcFileItem arcFileResult = 2;
   }
   
-  service QueryServerMaster {
+  Service QueryServerMaster {
     
     method doContentQuery(in ContentQueryRPCInfo, out ContentQueryRPCResult);
     
   }
   
   
-  service QueryServerSlave {
+  Service QueryServerSlave {
   
     method initialize(in BaseConfig,out SlaveStatus);
     

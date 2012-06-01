@@ -18,7 +18,6 @@
 
 package org.commoncrawl.util;
 
-import gnu.xml.libxmlj.dom.GnomeDocument;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -975,7 +974,7 @@ public class HTMLDomUtils {
       initializeHTMLTagMaps();
     }
     
-    private void postEncodeDocument(Object documentOrPool,OutputStream finalOutputStream) throws IOException {
+    private void postEncodeDocument(InstructionsPool instructionsPool,OutputStream finalOutputStream) throws IOException {
       // assign ids ... 
       assignHTMLTokenIds();
       
@@ -1029,12 +1028,8 @@ public class HTMLDomUtils {
       System.out.println("Attributes Length Buffer:" + (_attributesTokenLengthsCoder.getNumBits() + 7)/8);
 
       // encode the dom 
-      if (documentOrPool instanceof GnomeDocument) { 
-        encodeDOM((GnomeDocument)documentOrPool);
-      }
-      else { 
-        encodeDOM((InstructionsPool)documentOrPool);
-      }
+      encodeDOM(instructionsPool);
+      
       // some stats ... 
       System.out.println("Text Token Stream Size:" + (_textTokenStreamCoder.getNumBits() + 7) / 8);
       System.out.println("HREF Token Stream Size:" + (_hrefTokenStreamCoder.getNumBits() + 7) / 8);
@@ -1123,14 +1118,6 @@ public class HTMLDomUtils {
       finalOutputStream.write(intermediateBuffer);      
     }
     
-    public void encodeHTMLDocument(GnomeDocument document,OutputStream finalOutputStream) throws IOException { 
-      // 
-      preEncodeDocument();
-      // collect token from docucment ... 
-      collectTokens(document);
-      //
-      postEncodeDocument(document,finalOutputStream);
-    }
     
     private byte[] encodeTextData(Vector<TextTokenData> tokenArray,RiceCoding lengthsCoder) { 
       StringBuffer buffer = new StringBuffer();
@@ -1314,13 +1301,7 @@ public class HTMLDomUtils {
       return tokenIdData;
     }
     
-    private void collectTokens(GnomeDocument document) { 
-      collectTokensFromNode(document);
-    }
     
-    private void encodeDOM(GnomeDocument document)throws IOException { 
-      encodeNode(document);
-    }
     
     static class NodeInConstruction { 
       String nodeName;

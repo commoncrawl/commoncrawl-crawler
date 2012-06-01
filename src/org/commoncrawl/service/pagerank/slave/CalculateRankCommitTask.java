@@ -46,7 +46,7 @@ public class CalculateRankCommitTask extends PageRankTask<CalculateRankCommitTas
     _checkpointInfo = checkpointInfo;
   }
 
-  public static class TaskResult extends PageRankTaskResult { 
+  public static class TaskResult extends PageRankTask.PageRankTaskResult { 
     public boolean done = false;
     
     public TaskResult() { 

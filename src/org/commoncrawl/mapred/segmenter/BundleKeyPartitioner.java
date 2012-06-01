@@ -22,8 +22,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Partitioner;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.SegmentGeneratorBundleKey;
-import org.commoncrawl.crawl.database.SegmentGeneratorItemBundle;
+import org.commoncrawl.mapred.SegmentGeneratorBundleKey;
+import org.commoncrawl.mapred.SegmentGeneratorItemBundle;
 
 /**
  * 

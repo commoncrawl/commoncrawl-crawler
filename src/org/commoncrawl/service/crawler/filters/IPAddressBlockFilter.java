@@ -9,7 +9,7 @@ import java.util.TreeMap;
 import java.util.Vector;
 
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.IntrusiveList;
 import org.commoncrawl.util.IntrusiveList.IntrusiveListElement;

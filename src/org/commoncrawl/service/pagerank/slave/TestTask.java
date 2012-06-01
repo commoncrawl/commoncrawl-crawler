@@ -42,7 +42,7 @@ public class TestTask extends PageRankTask<TestTask.TestTaskResult>{
     _runtimeInMilliSeconds = runTimeInMilliseconds;
   }
 
-  public static class TestTaskResult extends PageRankTaskResult { 
+  public static class TestTaskResult extends PageRankTask.PageRankTaskResult { 
     public boolean done = false;
     
     public TestTaskResult(boolean done) { 

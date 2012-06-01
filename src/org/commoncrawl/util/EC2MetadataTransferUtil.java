@@ -33,13 +33,14 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.commoncrawl.io.internal.NIOBufferList;
-import org.commoncrawl.util.S3Downloader.Callback;
+import org.commoncrawl.io.NIOBufferList;
 import org.commoncrawl.util.Tuples.Pair;
 
-import com.amazon.s3.AWSAuthConnection;
-import com.amazon.s3.ListBucketResponse;
-import com.amazon.s3.ListEntry;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
@@ -73,11 +74,11 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
     LOG.info("Got JSON Array with:" + pathList.size() + " elements");
     for (int i=0;i<pathList.size();++i){
       LOG.info("Collection metadata files from path:" + pathList.get(i).toString());
-      List<ListEntry> metadataFiles = getMetadataPaths(s3AccessKeyId, s3SecretKey,bucketName,pathList.get(i).getAsString());
+      List<S3ObjectSummary> metadataFiles = getMetadataPaths(s3AccessKeyId, s3SecretKey,bucketName,pathList.get(i).getAsString());
       LOG.info("Got:" + metadataFiles.size() + " total files");
-      for (ListEntry metadataFile : metadataFiles) {
+      for (S3ObjectSummary metadataFile : metadataFiles) {
         
-        Matcher segmentNameMatcher = metadataInfoPattern.matcher(metadataFile.key);
+        Matcher segmentNameMatcher = metadataInfoPattern.matcher(metadataFile.getKey());
         
         if (segmentNameMatcher.matches()) {
           
@@ -88,10 +89,10 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
           
           FileStatus fileStatus = _fs.getFileStatus(finalPath);
           
-          if (fileStatus != null && fileStatus.getLen() != metadataFile.size) { 
+          if (fileStatus != null && fileStatus.getLen() != metadataFile.getSize()) { 
             LOG.error(
                 "SRC-DEST SIZE MISMATCH!! SRC:" + metadataFile 
-                + " SRC-SIZE:" + metadataFile.size
+                + " SRC-SIZE:" + metadataFile.getSize()
                 + " DEST:" + finalPath 
                 + " DEST-SIZE:" + fileStatus.getLen());
             
@@ -104,7 +105,7 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
           if (fileStatus == null) { 
             LOG.info("Queueing Item:" + metadataFile);
             ++_totalQueuedItemsCount;
-            _downloader.fetchItem(metadataFile.key);
+            _downloader.fetchItem(metadataFile.getKey());
           }
           else {
             LOG.info("Skipping Already Download Item:" + metadataFile + " Found at:" + finalPath);
@@ -117,46 +118,34 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
   }
   
   
-  public static List<ListEntry> getMetadataPaths(String s3AccessKeyId,String s3SecretKey,String bucketName,String segmentPath) throws IOException  { 
-        
-    AWSAuthConnection bucketListConnection = new AWSAuthConnection(s3AccessKeyId,s3SecretKey);
-        
-    String marker = null;
+  public static List<S3ObjectSummary> getMetadataPaths(String s3AccessKeyId,String s3SecretKey,String bucketName,String segmentPath) throws IOException  { 
+       
+    AmazonS3Client s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AccessKeyId,s3SecretKey));
     
-    ImmutableList.Builder<ListEntry> listBuilder = new ImmutableList.Builder<ListEntry>();
+        
+    
+    ImmutableList.Builder<S3ObjectSummary> listBuilder = new ImmutableList.Builder<S3ObjectSummary>();
     
     String metadataFilterKey = segmentPath +"metadata-";
     LOG.info("Prefix Search Key is:" + metadataFilterKey);
-    do { 
-      ListBucketResponse response = null;
-      while (true) { 
-        response = bucketListConnection.listBucket(bucketName, metadataFilterKey,  marker, null, null);
-        if (response == null || response.entries == null) { 
-          System.out.println("Invalid Respone from ListBucket Response key:" + metadataFilterKey + " marker:" + marker);
-          try {
-            Thread.sleep(10);
-          } catch (InterruptedException e) {
-          }
-        }
-        else { 
-          break;
-        }
+    
+    ObjectListing response = s3Client.listObjects(new ListObjectsRequest().withBucketName(bucketName).withPrefix(metadataFilterKey));
+
+    do {
+      LOG.info("Response Key Count:" + response.getObjectSummaries().size());
+      
+      for (S3ObjectSummary entry : response.getObjectSummaries()) { 
+        listBuilder.add(entry);
       }
-      
-      System.out.println("Response Key Count:" + response.entries.size());
-      
-      for (Object entry : response.entries) { 
-        listBuilder.add((ListEntry)entry);          
-      }
-      
-      if (response.isTruncated) { 
-        marker = ((ListEntry)response.entries.get(response.entries.size()-1)).key;
+
+      if (response.isTruncated()) { 
+        response = s3Client.listNextBatchOfObjects(response);
       }
       else { 
-        marker = null;
+        break;
       }
     }
-    while (marker != null);
+    while (true);
     
     return listBuilder.build();
   }  

@@ -47,8 +47,8 @@ import org.commoncrawl.service.listcrawler.CrawlListDomainItem;
 import org.commoncrawl.service.listcrawler.CrawlListMetadata;
 import org.commoncrawl.service.listcrawler.CrawlList.QueueState;
 import org.commoncrawl.util.CCStringUtils;
-import org.json.JSONException;
-import org.json.JSONWriter;
+
+import com.google.gson.stream.JsonWriter;
 
 @SuppressWarnings("serial")
 /** 
@@ -244,31 +244,31 @@ public class CrawlListsUI  extends HttpServlet {
 
 
 	            PrintWriter writer = resp.getWriter();
-	            JSONWriter jsonWriter = new JSONWriter(writer);
+	            JsonWriter jsonWriter = new JsonWriter(writer);
 
 	            try {
-	              jsonWriter.object();
-	              jsonWriter.key("items");
-	              jsonWriter.array();
+	              jsonWriter.beginObject();
+	              jsonWriter.name("items");
+	              jsonWriter.beginArray();
 
 	              if (item.getHttp200Count() != 0)	
-	                jsonWriter.array().value("http200").value(item.getHttp200Count()).endArray();
+	                jsonWriter.beginArray().value("http200").value(item.getHttp200Count()).endArray();
 	              int http403Count = metadata.getHttp403Count() + metadata.getRedirectHttp403Count();
 	              if (http403Count != 0)
-	                jsonWriter.array().value("http403").value(http403Count).endArray();
+	                jsonWriter.beginArray().value("http403").value(http403Count).endArray();
 	              int http404Count = metadata.getHttp404Count() + metadata.getRedirectHttp404Count();
 	              if (http404Count != 0)
-	                jsonWriter.array().value("http404").value(http404Count).endArray();
+	                jsonWriter.beginArray().value("http404").value(http404Count).endArray();
 	              int http500Count = metadata.getHttp500Count() + metadata.getRedirectHttp500Count();
 	              if (http500Count != 0)
-	                jsonWriter.array().value("http500").value(http500Count).endArray();
+	                jsonWriter.beginArray().value("http500").value(http500Count).endArray();
 	              int httpOtherCount = metadata.getHttpOtherCount() + metadata.getRedirectHttpOtherCount();
 	              if (httpOtherCount != 0)
-	                jsonWriter.array().value("httpOther").value(httpOtherCount).endArray();
+	                jsonWriter.beginArray().value("httpOther").value(httpOtherCount).endArray();
 	              if (item.getInCacheItemsCount() != 0)
-	                jsonWriter.array().value("inCache").value(item.getInCacheItemsCount()).endArray();
+	                jsonWriter.beginArray().value("inCache").value(item.getInCacheItemsCount()).endArray();
 	              if (item.getRobotsExcludedCount() != 0)
-	                jsonWriter.array().value("robotsExcluded").value(item.getRobotsExcludedCount()).endArray();
+	                jsonWriter.beginArray().value("robotsExcluded").value(item.getRobotsExcludedCount()).endArray();
 
 	              // caculate errors 
 	              int timeoutErrorCount = metadata.getTimeoutErrorCount() + metadata.getRedirectTimeoutErrorCount();
@@ -276,15 +276,15 @@ public class CrawlListsUI  extends HttpServlet {
 	              int otherErrorCount  = metadata.getOtherErrorCount();
 
 	              if (timeoutErrorCount != 0)
-	                jsonWriter.array().value("timeouts").value(timeoutErrorCount).endArray();
+	                jsonWriter.beginArray().value("timeouts").value(timeoutErrorCount).endArray();
 
 	              if (ioexceptionErrorCount != 0)
-	                jsonWriter.array().value("exceptions").value(ioexceptionErrorCount).endArray();
+	                jsonWriter.beginArray().value("exceptions").value(ioexceptionErrorCount).endArray();
 
 
 	              /*
 							if (otherErrorCount != 0)
-								jsonWriter.array().value("other errors").value(otherErrorCount).endArray();
+								jsonWriter.beginArray().value("other errors").value(otherErrorCount).endArray();
 	               */
 
 
@@ -299,7 +299,7 @@ public class CrawlListsUI  extends HttpServlet {
 	              remainingItems -= item.getRobotsExcludedCount();
 	              remainingItems -= (timeoutErrorCount + ioexceptionErrorCount);
 	              if (remainingItems > 0) { 
-	                jsonWriter.array().value("remaining").value(remainingItems).endArray();
+	                jsonWriter.beginArray().value("remaining").value(remainingItems).endArray();
 	              }
 
 	              jsonWriter.endArray();
@@ -307,7 +307,7 @@ public class CrawlListsUI  extends HttpServlet {
 
 	              result._resultCode = HttpServletResponse.SC_OK;
 
-	            } catch (JSONException e) {
+	            } catch (Exception e) {
 	              throw new IOException(e);
 	            }
 
@@ -360,11 +360,11 @@ public class CrawlListsUI  extends HttpServlet {
 							try { 
 								PrintWriter writer = resp.getWriter();
 								
-								JSONWriter jsonWriter = new JSONWriter(writer);
+								JsonWriter jsonWriter = new JsonWriter(writer);
 								
-								jsonWriter.object();
-								jsonWriter.key("items");
-								jsonWriter.array();
+								jsonWriter.beginObject();
+								jsonWriter.name("items");
+								jsonWriter.beginArray();
 																
 								for (CrawlListDatabaseRecord listRecord : sortedSet) { 
 									
@@ -392,7 +392,7 @@ public class CrawlListsUI  extends HttpServlet {
 											summary.setListId(list.getListId());
 											summary.setListName(listRecord.getListName());
 											
-											jsonWriter.array();
+											jsonWriter.beginArray();
 											jsonWriter.value(summary.getListId());
 											jsonWriter.value(queueState);
 											jsonWriter.value(summary.getListName());
@@ -407,7 +407,7 @@ public class CrawlListsUI  extends HttpServlet {
 											jsonWriter.endArray();
 										}
 										else if (list.getLoadState() == CrawlList.LoadState.QUEUED_FOR_LOADING) { 
-											jsonWriter.array();
+											jsonWriter.beginArray();
 											jsonWriter.value(list.getListId());
 											jsonWriter.value(queueState);
 											jsonWriter.value("<B>Queued:</B>" + listRecord.getListName());
@@ -423,7 +423,7 @@ public class CrawlListsUI  extends HttpServlet {
 											jsonWriter.endArray();
 										}
 										else if (list.getLoadState() == CrawlList.LoadState.REALLY_LOADING) { 
-											jsonWriter.array();
+											jsonWriter.beginArray();
 											jsonWriter.value(list.getListId());
 											jsonWriter.value("<B>Loading:</B>" + listRecord.getListName());
 											jsonWriter.value(0);
@@ -437,7 +437,7 @@ public class CrawlListsUI  extends HttpServlet {
 											jsonWriter.endArray();
 										}
 										else if (list.getLoadState() == CrawlList.LoadState.ERROR) { 
-											jsonWriter.array();
+											jsonWriter.beginArray();
 											jsonWriter.value(list.getListId());
 											jsonWriter.value("ERR");
 											jsonWriter.value(0);
@@ -463,7 +463,7 @@ public class CrawlListsUI  extends HttpServlet {
 							}
 							catch (IOException e) {
 								LOG.error(CCStringUtils.stringifyException(e));
-							} catch (JSONException e) {
+							} catch (Exception e) {
 								LOG.error(CCStringUtils.stringifyException(e));
 							}
 							finally { 
@@ -581,17 +581,17 @@ public class CrawlListsUI  extends HttpServlet {
 	        CrawlList list = proxyServer.getCrawlHistoryManager().getList(listId);
 	        if (list != null && list.isListLoaded()) {
 	          PrintWriter writer = resp.getWriter();
-	          JSONWriter jsonWriter= new JSONWriter(writer);
+	          JsonWriter jsonWriter= new JsonWriter(writer);
 
 	          try {
-	            jsonWriter.object();
-	            jsonWriter.key("items");
-	            jsonWriter.array();
+	            jsonWriter.beginObject();
+	            jsonWriter.name("items");
+	            jsonWriter.beginArray();
 
 	            int urlCount = 0;
 	            for (CrawlListDomainItem item : list.getSubDomainList(offset,count)) {
 
-	              jsonWriter.array();
+	              jsonWriter.beginArray();
 	              jsonWriter.value(item.getDomainName());
 	              jsonWriter.value(item.getUrlCount());
 	              urlCount += item.getUrlCount();
@@ -602,12 +602,12 @@ public class CrawlListsUI  extends HttpServlet {
 	            }
 
 	            jsonWriter.endArray();
-	            jsonWriter.key("remainingItems").value(list.getMetadata().getUrlCount() - urlCount);
+	            jsonWriter.name("remainingItems").value(list.getMetadata().getUrlCount() - urlCount);
 	            jsonWriter.endObject();
 
 	            result._resultCode = HttpServletResponse.SC_OK;
 	          }
-	          catch (JSONException e) { 
+	          catch (Exception e) { 
 	            throw new IOException(e);
 	          }
 	        }

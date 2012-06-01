@@ -47,7 +47,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.record.Buffer;
 import org.apache.hadoop.util.StringUtils;
 import org.commoncrawl.crawl.common.shared.Constants;
-import org.commoncrawl.io.shared.NIODataSink;
+import org.commoncrawl.io.NIODataSink;
 import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 

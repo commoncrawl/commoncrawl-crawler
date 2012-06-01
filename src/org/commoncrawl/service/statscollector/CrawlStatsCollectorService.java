@@ -40,7 +40,6 @@ import org.commoncrawl.async.ConcurrentTask;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.mapred.FixSomethingServlet;
 import org.commoncrawl.protocol.CrawlSegmentStatus;
 import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
 import org.commoncrawl.rpc.base.internal.AsyncContext;

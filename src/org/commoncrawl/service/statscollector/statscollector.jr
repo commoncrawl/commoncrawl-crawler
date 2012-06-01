@@ -150,7 +150,7 @@ module org.commoncrawl.service.statscollector {
     CrawlerStats crawlerStats = 3;
   }
   
-  service CrawlerStatsService { 
+  Service CrawlerStatsService { 
     method logCrawlerStats(in LogCrawlStatsRequest,out NullMessage);
   }
 

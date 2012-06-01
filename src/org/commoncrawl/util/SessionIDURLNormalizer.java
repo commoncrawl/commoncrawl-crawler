@@ -23,13 +23,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.nutch.net.URLNormalizer;
 import org.junit.Test;
 
 /**
  * @author rana
  */
-public class SessionIDURLNormalizer implements URLNormalizer {
+public class SessionIDURLNormalizer {
 
     // ^(.*php.*)/osCsid/([0-9a-fA-F]*)$    -> http://www.bearcountryuk.com/index.php/cPath/50/teddy+bear+name/Accessories/osCsid/4d4b2659aa5f1a39d907d315cf0a5209
     // ^(.*php.*)/([0-9a-fA-F]*)$               -> http://www.myredpacket.co.uk/section.php/25/12/birthday-gifts-and-presents/d1b4c32d834a331b63109589ef730c27 

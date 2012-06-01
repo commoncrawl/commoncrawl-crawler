@@ -37,10 +37,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.io.Text;
-import org.apache.nutch.crawl.CrawlDatum;
-import org.apache.nutch.net.protocols.Response;
-import org.apache.nutch.protocol.ProtocolException;
-import org.apache.nutch.protocol.RobotRules;
 
 
 /**
@@ -72,7 +68,7 @@ public final class RobotRulesParser implements Configurable {
    * This class holds the rules which were parsed from a robots.txt
    * file, and can test paths against those rules.
    */
-  public static class RobotRuleSet implements RobotRules {
+  public static class RobotRuleSet  {
     ArrayList tmpEntries = new ArrayList();
     RobotsEntry[] entries = null;
     long expireTime;

@@ -42,9 +42,9 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.parserservice.Meta;
-import org.commoncrawl.crawl.parserservice.ParseResult;
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.service.parser.Meta;
+import org.commoncrawl.service.parser.ParseResult;
+import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.commoncrawl.protocol.ParseOutput;
@@ -209,7 +209,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
     if (result.getExtractedLinks().size() != 0) { 
       JsonArray linkArray = new JsonArray();
-      for (org.commoncrawl.crawl.parserservice.Link link : result.getExtractedLinks()) {
+      for (org.commoncrawl.service.parser.Link link : result.getExtractedLinks()) {
         try {
           JsonObject linkObj = parser.parse(new JsonReader(new StringReader(link.getAttributes()))).getAsJsonObject();
           linkObj.addProperty("href", link.getUrl());

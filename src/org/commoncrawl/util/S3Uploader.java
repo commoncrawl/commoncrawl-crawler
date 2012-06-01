@@ -38,17 +38,15 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.nutch.util.GZIPUtils;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
-import org.commoncrawl.io.internal.NIOBufferList;
-import org.commoncrawl.io.internal.NIOHttpConnection;
-import org.commoncrawl.io.internal.NIOHttpConnection.State;
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOBufferList;
+import org.commoncrawl.io.NIOHttpConnection;
+import org.commoncrawl.io.NIOHttpConnection.State;
+import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.util.BandwidthUtils.BandwidthStats;
+import org.commoncrawl.util.GZIPUtils.UnzipResult;
 
-import com.amazon.s3.CallingFormat;
-import com.amazon.s3.Utils;
 
 /**
  * 
@@ -81,7 +79,7 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
   boolean _abort = false;
   boolean _loadComplete = false;
   NIOHttpConnection _connection = null;
-  CallingFormat _callingFormat = CallingFormat.getSubdomainCallingFormat();
+  S3Utils.CallingFormat _callingFormat = S3Utils.CallingFormat.getSubdomainCallingFormat();
   int         _slot;
   int         _bandWidthLimit;
   int         _Id;
@@ -268,10 +266,12 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
           contentBuffer.read(data);
             
             if (encoding.equalsIgnoreCase("gzip")) { 
-              data = GZIPUtils.unzipBestEffort(data,256000);
-              contentBuffer.reset();
-              contentBuffer.write(data, 0, data.length);
-              contentBuffer.flush();
+              UnzipResult result = GZIPUtils.unzipBestEffort(data,256000);
+              if (result != null) { 
+                contentBuffer.reset();
+                contentBuffer.write(result.data.get(), 0, result.data.getCount());
+                contentBuffer.flush();
+              }
             }
         }
         
@@ -501,7 +501,7 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
     // start the file loader ... 
     startLoader();
     // construct the s3 url ...
-    URL theURL = _callingFormat.getURL(false, Utils.DEFAULT_HOST, Utils.INSECURE_PORT, _s3Bucket, _s3Key, null);
+    URL theURL = _callingFormat.getURL(false, S3Utils.DEFAULT_HOST, S3Utils.INSECURE_PORT, _s3Bucket, _s3Key, null);
     // allocate an http connection 
     _connection = new NIOHttpConnection(theURL,_eventLoop.getSelector(),_eventLoop.getResolver(),null);
     _connection.setId(_Id);

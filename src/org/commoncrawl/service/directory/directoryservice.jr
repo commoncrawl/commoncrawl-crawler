@@ -38,7 +38,7 @@ module org.commoncrawl.service.directory {
   }
 
 
-  service DirectoryService {
+  Service DirectoryService {
     
     method register(in DirectoryServiceRegistrationInfo,out NullMessage);
     method subscribe(in DirectoryServiceSubscriptionInfo,out DirectoryServiceItemList);
@@ -47,7 +47,7 @@ module org.commoncrawl.service.directory {
     method query(in DirectoryServiceQuery,out DirectoryServiceItemList);
   }
   
-  service DirectoryServiceCallback { 
+  Service DirectoryServiceCallback { 
     method initialize(in DirectoryServiceRegistrationInfo, out NullMessage);
     method itemChanged(in DirectoryServiceItemList,out NullMessage); 
   }

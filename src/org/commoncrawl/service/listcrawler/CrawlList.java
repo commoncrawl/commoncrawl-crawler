@@ -57,7 +57,7 @@ import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.hadoop.mergeutils.MergeSortSpillWriter;
 import org.commoncrawl.hadoop.mergeutils.RawKeyValueComparator;
 import org.commoncrawl.hadoop.mergeutils.SequenceFileSpillWriter;
-import org.commoncrawl.mapred.database.ProxyCrawlHistoryItem;
+import org.commoncrawl.mapred.ProxyCrawlHistoryItem;
 import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.URLFP;
 import org.commoncrawl.rpc.base.shared.BinaryProtocol;

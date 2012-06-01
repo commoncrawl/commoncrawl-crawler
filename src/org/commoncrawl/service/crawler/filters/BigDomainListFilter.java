@@ -4,7 +4,7 @@ import java.io.IOException;
 
 import org.commoncrawl.io.NIODNSCache;
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.util.URLUtils;
 
 public class BigDomainListFilter extends Filter {

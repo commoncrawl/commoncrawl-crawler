@@ -18,8 +18,9 @@
 
 package org.commoncrawl.util;
 
-
 import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.net.URLEncoder;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -37,15 +38,12 @@ import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.XMLReaderFactory;
 import org.xml.sax.SAXException;
 
-import com.amazon.thirdparty.Base64;
-
 /**
  * 
  * @author rana
- *
+ * 
  */
 public class S3Utils {
-
 
   static final String METADATA_PREFIX = "x-amz-meta-";
   static final String AMAZON_HEADER_PREFIX = "x-amz-";
@@ -54,7 +52,6 @@ public class S3Utils {
 
   public static final int SECURE_PORT = 443;
   public static final int INSECURE_PORT = 80;
-
 
   /**
    * HMAC/SHA1 Algorithm per RFC 2104.
@@ -66,29 +63,28 @@ public class S3Utils {
   }
 
   /**
-   * Calculate the canonical string.  When expires is non-null, it will be
-   * used instead of the Date header.
+   * Calculate the canonical string. When expires is non-null, it will be used
+   * instead of the Date header.
    */
-  static String makeCanonicalString(String method, String bucketName, String key, Map pathArgs, 
-      Map headers, String expires)
-  {
+  static String makeCanonicalString(String method, String bucketName, String key, Map pathArgs, Map headers,
+      String expires) {
     StringBuffer buf = new StringBuffer();
     buf.append(method + "\n");
 
-    // Add all interesting headers to a list, then sort them.  "Interesting"
+    // Add all interesting headers to a list, then sort them. "Interesting"
     // is defined as Content-MD5, Content-Type, Date, and x-amz-
     SortedMap interestingHeaders = new TreeMap();
     if (headers != null) {
-      for (Iterator i = headers.keySet().iterator(); i.hasNext(); ) {
-        String hashKey = (String)i.next();
-        if (hashKey == null) continue;
+      for (Iterator i = headers.keySet().iterator(); i.hasNext();) {
+        String hashKey = (String) i.next();
+        if (hashKey == null)
+          continue;
         String lk = hashKey.toLowerCase();
 
         // Ignore any headers that are not particularly interesting.
-        if (lk.equals("content-type") || lk.equals("content-md5") || lk.equals("date") ||
-            lk.startsWith(AMAZON_HEADER_PREFIX))
-        {
-          List s = (List)headers.get(hashKey);
+        if (lk.equals("content-type") || lk.equals("content-md5") || lk.equals("date")
+            || lk.startsWith(AMAZON_HEADER_PREFIX)) {
+          List s = (List) headers.get(hashKey);
           interestingHeaders.put(lk, concatenateList(s));
         }
       }
@@ -98,7 +94,7 @@ public class S3Utils {
       interestingHeaders.put("date", "");
     }
 
-    // if the expires is non-null, use that for the date field.  this
+    // if the expires is non-null, use that for the date field. this
     // trumps the x-amz-date behavior.
     if (expires != null) {
       interestingHeaders.put("date", expires);
@@ -106,16 +102,17 @@ public class S3Utils {
 
     // these headers require that we still put a new line in after them,
     // even if they don't exist.
-    if (! interestingHeaders.containsKey("content-type")) {
+    if (!interestingHeaders.containsKey("content-type")) {
       interestingHeaders.put("content-type", "");
     }
-    if (! interestingHeaders.containsKey("content-md5")) {
+    if (!interestingHeaders.containsKey("content-md5")) {
       interestingHeaders.put("content-md5", "");
     }
 
-    // Finally, add all the interesting headers (i.e.: all that startwith x-amz- ;-))
-    for (Iterator i = interestingHeaders.keySet().iterator(); i.hasNext(); ) {
-      String headerKey = (String)i.next();
+    // Finally, add all the interesting headers (i.e.: all that startwith x-amz-
+    // ;-))
+    for (Iterator i = interestingHeaders.keySet().iterator(); i.hasNext();) {
+      String headerKey = (String) i.next();
       if (headerKey.startsWith(AMAZON_HEADER_PREFIX)) {
         buf.append(headerKey).append(':').append(interestingHeaders.get(headerKey));
       } else {
@@ -126,19 +123,19 @@ public class S3Utils {
 
     // build the path using the bucket and key
     if (bucketName != null && !bucketName.equals("")) {
-      buf.append("/" + bucketName );
+      buf.append("/" + bucketName);
     }
 
     // append the key (it might be an empty string)
     // append a slash regardless
     buf.append("/");
-    if(key != null) {
+    if (key != null) {
       buf.append(key);
     }
 
     // if there is an acl, logging or torrent parameter
     // add them to the string
-    if (pathArgs != null ) {
+    if (pathArgs != null) {
       if (pathArgs.containsKey("acl")) {
         buf.append("?acl");
       } else if (pathArgs.containsKey("torrent")) {
@@ -156,21 +153,24 @@ public class S3Utils {
 
   /**
    * Calculate the HMAC/SHA1 on a string.
-   * @param data Data to sign
-   * @param passcode Passcode to sign it with
+   * 
+   * @param data
+   *          Data to sign
+   * @param passcode
+   *          Passcode to sign it with
    * @return Signature
-   * @throws NoSuchAlgorithmException If the algorithm does not exist.  Unlikely
-   * @throws InvalidKeyException If the key is invalid.
+   * @throws NoSuchAlgorithmException
+   *           If the algorithm does not exist. Unlikely
+   * @throws InvalidKeyException
+   *           If the key is invalid.
    */
-  static String encode(String awsSecretAccessKey, String canonicalString,
-      boolean urlencode)
-  {
+  static String encode(String awsSecretAccessKey, String canonicalString, boolean urlencode) {
     // The following HMAC/SHA1 code for the signature is taken from the
-    // AWS Platform's implementation of RFC2104 (amazon.webservices.common.Signature)
+    // AWS Platform's implementation of RFC2104
+    // (amazon.webservices.common.Signature)
     //
     // Acquire an HMAC/SHA1 from the raw key bytes.
-    SecretKeySpec signingKey =
-      new SecretKeySpec(awsSecretAccessKey.getBytes(), HMAC_SHA1_ALGORITHM);
+    SecretKeySpec signingKey = new SecretKeySpec(awsSecretAccessKey.getBytes(), HMAC_SHA1_ALGORITHM);
 
     // Acquire the MAC instance and initialize with the signing key.
     Mac mac = null;
@@ -220,8 +220,11 @@ public class S3Utils {
   }
 
   /**
-   * Converts the Path Arguments from a map to String which can be used in url construction
-   * @param pathArgs a map of arguments
+   * Converts the Path Arguments from a map to String which can be used in url
+   * construction
+   * 
+   * @param pathArgs
+   *          a map of arguments
    * @return a string representation of pathArgs
    */
   public static String convertPathArgsHashToString(Map pathArgs) {
@@ -229,16 +232,16 @@ public class S3Utils {
     String argumentValue;
     boolean firstRun = true;
     if (pathArgs != null) {
-      for (Iterator argumentIterator = pathArgs.keySet().iterator(); argumentIterator.hasNext(); ) {
-        String argument = (String)argumentIterator.next();
+      for (Iterator argumentIterator = pathArgs.keySet().iterator(); argumentIterator.hasNext();) {
+        String argument = (String) argumentIterator.next();
         if (firstRun) {
-          firstRun = false; 
+          firstRun = false;
           pathArgsString.append("?");
         } else {
           pathArgsString.append("&");
-        } 
+        }
 
-        argumentValue = (String)pathArgs.get(argument);
+        argumentValue = (String) pathArgs.get(argument);
         pathArgsString.append(argument);
         if (argumentValue != null) {
           pathArgsString.append("=");
@@ -249,9 +252,6 @@ public class S3Utils {
 
     return pathArgsString.toString();
   }
-
-
-
 
   static String urlencode(String unencoded) {
     try {
@@ -279,13 +279,15 @@ public class S3Utils {
 
   /**
    * Concatenates a bunch of header values, seperating them with a comma.
-   * @param values List of header values.
+   * 
+   * @param values
+   *          List of header values.
    * @return String of all headers, with commas.
    */
   private static String concatenateList(List values) {
     StringBuffer buf = new StringBuffer();
-    for (int i = 0, size = values.size(); i < size; ++ i) {
-      buf.append(((String)values.get(i)).replaceAll("\n", "").trim());
+    for (int i = 0, size = values.size(); i < size; ++i) {
+      buf.append(((String) values.get(i)).replaceAll("\n", "").trim());
       if (i != (size - 1)) {
         buf.append(",");
       }
@@ -293,8 +295,7 @@ public class S3Utils {
     return buf.toString();
   }
 
-
-  static boolean isValidSubdomainBucketName( String bucketName ) {
+  static boolean isValidSubdomainBucketName(String bucketName) {
     final int MIN_BUCKET_LENGTH = 3;
     final int MAX_BUCKET_LENGTH = 63;
     // don't allow names that look like 127.0.0.1
@@ -302,18 +303,138 @@ public class S3Utils {
     // dns sub-name restrictions
     final String BUCKET_NAME_REGEX = "^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)*$";
 
-    // If there wasn't a location-constraint, then the current actual 
+    // If there wasn't a location-constraint, then the current actual
     // restriction is just that no 'part' of the name (i.e. sequence
     // of characters between any 2 '.'s has to be 63) but the recommendation
     // is to keep the entire bucket name under 63.
-    return null != bucketName &&
-    bucketName.length() >= MIN_BUCKET_LENGTH &&
-    bucketName.length() <= MAX_BUCKET_LENGTH &&
-    !bucketName.matches(IPv4_REGEX) &&
-    bucketName.matches(BUCKET_NAME_REGEX);
+    return null != bucketName && bucketName.length() >= MIN_BUCKET_LENGTH && bucketName.length() <= MAX_BUCKET_LENGTH
+        && !bucketName.matches(IPv4_REGEX) && bucketName.matches(BUCKET_NAME_REGEX);
+  }
+
+  /**
+   * Amazon S3 utilities (from their deprecated API) 
+   * 
+   * @author rana
+   *
+   */
+  public abstract static class CallingFormat {
+
+    protected static CallingFormat pathCallingFormat = new PathCallingFormat();
+    protected static CallingFormat subdomainCallingFormat = new SubdomainCallingFormat();
+    protected static CallingFormat vanityCallingFormat = new VanityCallingFormat();
+
+    public abstract boolean supportsLocatedBuckets();
+
+    public abstract String getEndpoint(String server, int port, String bucket);
+
+    public abstract String getPathBase(String bucket, String key);
+
+    public abstract URL getURL(boolean isSecure, String server, int port, String bucket, String key, Map pathArgs)
+        throws MalformedURLException;
+
+    public static CallingFormat getPathCallingFormat() {
+      return pathCallingFormat;
+    }
+
+    public static CallingFormat getSubdomainCallingFormat() {
+      return subdomainCallingFormat;
+    }
+
+    public static CallingFormat getVanityCallingFormat() {
+      return vanityCallingFormat;
+    }
+
+    static private class PathCallingFormat extends CallingFormat {
+      public boolean supportsLocatedBuckets() {
+        return false;
+      }
+
+      public String getPathBase(String bucket, String key) {
+        return isBucketSpecified(bucket) ? "/" + bucket + "/" + key : "/";
+      }
+
+      public String getEndpoint(String server, int port, String bucket) {
+        return server + ":" + port;
+      }
+
+      public URL getURL(boolean isSecure, String server, int port, String bucket, String key, Map pathArgs)
+          throws MalformedURLException {
+        String pathBase = isBucketSpecified(bucket) ? "/" + bucket + "/" + key : "/";
+        String pathArguments = convertPathArgsHashToString(pathArgs);
+        return new URL(isSecure ? "https" : "http", server, port, pathBase + pathArguments);
+      }
+
+      private boolean isBucketSpecified(String bucket) {
+        if (bucket == null)
+          return false;
+        if (bucket.length() == 0)
+          return false;
+        return true;
+      }
+    }
+
+    static private class SubdomainCallingFormat extends CallingFormat {
+      public boolean supportsLocatedBuckets() {
+        return true;
+      }
+
+      public String getServer(String server, String bucket) {
+        return bucket + "." + server;
+      }
+
+      public String getEndpoint(String server, int port, String bucket) {
+        return getServer(server, bucket) + ":" + port;
+      }
+
+      public String getPathBase(String bucket, String key) {
+        return "/" + key;
+      }
+
+      public URL getURL(boolean isSecure, String server, int port, String bucket, String key, Map pathArgs)
+          throws MalformedURLException {
+        if (bucket == null || bucket.length() == 0) {
+          // The bucket is null, this is listAllBuckets request
+          String pathArguments = convertPathArgsHashToString(pathArgs);
+          return new URL(isSecure ? "https" : "http", server, port, "/" + pathArguments);
+        } else {
+          String serverToUse = getServer(server, bucket);
+          String pathBase = getPathBase(bucket, key);
+          String pathArguments = convertPathArgsHashToString(pathArgs);
+          return new URL(isSecure ? "https" : "http", serverToUse, port, pathBase + pathArguments);
+        }
+      }
+    }
+
+    static private class VanityCallingFormat extends SubdomainCallingFormat {
+      public String getServer(String server, String bucket) {
+        return bucket;
+      }
+    }
+  }
+
+
+  /**
+   * Validate bucket-name
+   */
+  static boolean validateBucketName(String bucketName, CallingFormat callingFormat, boolean located) {
+    if (callingFormat == CallingFormat.getPathCallingFormat()) {
+      final int MIN_BUCKET_LENGTH = 3;
+      final int MAX_BUCKET_LENGTH = 255;
+      final String BUCKET_NAME_REGEX = "^[0-9A-Za-z\\.\\-_]*$";
+
+      return null != bucketName && bucketName.length() >= MIN_BUCKET_LENGTH
+          && bucketName.length() <= MAX_BUCKET_LENGTH && bucketName.matches(BUCKET_NAME_REGEX);
+    } else {
+      return isValidSubdomainBucketName(bucketName);
+    }
+  }
+
+  static CallingFormat getCallingFormatForBucket(CallingFormat desiredFormat, String bucketName) {
+    CallingFormat callingFormat = desiredFormat;
+    if (callingFormat == CallingFormat.getSubdomainCallingFormat() && !isValidSubdomainBucketName(bucketName)) {
+      callingFormat = CallingFormat.getPathCallingFormat();
+    }
+    return callingFormat;
   }
 
 }
-
-
-

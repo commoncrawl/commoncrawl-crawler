@@ -58,7 +58,7 @@ import org.apache.log4j.Appender;
 import org.apache.log4j.DailyRollingFileAppender;
 import org.apache.log4j.Layout;
 import org.apache.log4j.spi.LoggingEvent;
-import org.apache.nutch.util.SuffixStringMatcher;
+import org.commoncrawl.util.SuffixStringMatcher;
 import org.commoncrawl.async.Callback;
 import org.commoncrawl.async.ConcurrentTask;
 import org.commoncrawl.async.EventLoop;
@@ -66,7 +66,6 @@ import org.commoncrawl.async.Timer;
 import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.common.Environment;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.crawler.tests.CrawlerUnitTest;
 import org.commoncrawl.io.DNSQueryResult;
 import org.commoncrawl.io.NIODNSCache;
 import org.commoncrawl.io.NIODNSQueryClient;
@@ -164,8 +163,6 @@ public final class CrawlerEngine  {
   CustomLogger _CrawlLogLog;
   CustomLogger _CookieLogger;
   SimpleDateFormat robotsLogDateFormat = new SimpleDateFormat("yyyy.MM.dd hh:mm:ss.SSS");  
-  /** unit test instance **/
-  CrawlerUnitTest _unitTestInstance = null;
   /** the crawl log **/
   CrawlLog _crawlLog;
   /** stats collector **/
@@ -383,28 +380,6 @@ public final class CrawlerEngine  {
       HttpFetcher fetcher = new HttpFetcher(_maxTCPSockets,crawlInterfaceList,getServer().getHostName());
       _httpCrawlQueue = new CrawlQueue(CrawlQueue.Protocol.HTTP,fetcher);
 
-      //if we are running in unit test mode ... 
-      if (CrawlEnvironment.inUnitTestMode()) { 
-        // get the local output path ... 
-        File crawlerOutputPath = new File(getServer().getDataDirectory(),CrawlEnvironment.getCrawlerLocalOutputPath());
-        if (Environment.detailLogEnabled())
-          LOG.info("initialize - UnitTest Mode - Deleting WorkUnit Directory:" + crawlerOutputPath.toString());
-        // delete existing file in path ... 
-        // FileUtils.recursivelyDeleteFile(crawlerOutputPath);
-        // recreate directory ... 
-        crawlerOutputPath.mkdir();
-
-        // create a new segment directory ... 
-        File segmentDataDirectory = new File(crawlerOutputPath,"segments");
-        if (Environment.detailLogEnabled())
-          LOG.info("initialize - UnitTest Mode - Segment Data Directory is:" + segmentDataDirectory.toString());
-        // and next, replace existing get data directory entry in Enviornment 
-        CrawlEnvironment.setCrawlSegmentDataDirectory(segmentDataDirectory.getAbsolutePath());
-        // and set default file system to file:///
-        CrawlEnvironment.setDefaultHadoopFSURI("file:///");
-        // recreate directories...
-        segmentDataDirectory.mkdir();
-      }
       if (getServer().enableCrawlLog()) { 
         if (Environment.detailLogEnabled())
           LOG.info("initializing crawl engine log ... ");
@@ -619,7 +594,6 @@ public final class CrawlerEngine  {
     // finally, if in unit test mode ... 
     if (CrawlEnvironment.inUnitTestMode()) {
       LOG.info("UnitTest Mode Detected - Runing Test...");
-      initUnitTest();
     }
   }
 
@@ -746,23 +720,6 @@ public final class CrawlerEngine  {
   }
 
   RuntimeStatsCollector getStats() { return _stats; }
-
-  private void initUnitTest() { 
-    try {
-
-      String unitTestClassName  = getClass().getPackage().getName() + ".tests." + getServer().getUnitTestName();
-      _unitTestInstance = (CrawlerUnitTest) Class.forName(unitTestClassName).newInstance();
-      if (!_unitTestInstance.initialize(this)) { 
-        LOG.error("Unit Test:" +unitTestClassName +" Initialization Failed");
-        System.exit(1);
-      }
-    }
-    catch (Exception e ){
-      e.printStackTrace();
-      LOG.error("UnitTest Class:"+getServer().getUnitTestName() + " NOT FOUND");
-      System.exit(1);
-    }
-  }
 
   public boolean isBlackListedHost(String hostName) {
     if (getServer().getDomainBlackListFilter() != null || getServer().getTemporaryBlackListFilter()!= null){

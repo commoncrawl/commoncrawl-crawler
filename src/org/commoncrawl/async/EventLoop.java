@@ -25,8 +25,8 @@ import java.util.concurrent.Executors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
-import org.commoncrawl.io.internal.NIODNSLocalResolver;
-import org.commoncrawl.io.internal.NIOSocketSelector;
+import org.commoncrawl.io.NIODNSLocalResolver;
+import org.commoncrawl.io.NIOSocketSelector;
 import org.junit.Test;
 
 /**

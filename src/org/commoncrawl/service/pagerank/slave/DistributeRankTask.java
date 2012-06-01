@@ -38,7 +38,7 @@ public class DistributeRankTask extends PageRankTask<DistributeRankTask.Distribu
     
   }
 
-  public static class DistributeRankTaskResult extends PageRankTaskResult { 
+  public static class DistributeRankTaskResult extends PageRankTask.PageRankTaskResult { 
     public boolean done = false;
     
     public DistributeRankTaskResult() { 

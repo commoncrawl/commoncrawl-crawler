@@ -147,5 +147,125 @@ module org.commoncrawl.protocol.shared {
       
       byte    cacheControlFlags = 28;       
    }
-   
+ 
+  class RedirectData { 
+  	ustring sourceURL  = 1;
+  	vint    httpResult = 2;
+  	int     serverIP = 3;
+  	ustring httpHeaders = 4;
+  }
+
+  class HTMLLink { 
+    ustring href = 1;
+    ustring attributes = 2;
+  }
+
+  class HTMLContent { 
+    ustring title = 1;
+    vector<ustring> metaTags = 2;
+    vector<HTMLLink> links = 3;  
+  }
+
+  class FeedLink { 
+    ustring rel = 1;
+    ustring type = 2;
+    ustring href = 3;
+	ustring title = 4;
+  }
+
+  class FeedAuthor { 
+    ustring name = 1;
+    ustring url  = 2;
+  }
+
+  class FeedItem { 
+    ustring title = 1;
+    vector<FeedLink> links  = 2;
+    ustring description = 3;
+    vector<FeedAuthor> authors  = 4;
+    vector<ustring> categories = 5;
+    vlong published   = 6;
+    vlong updated = 7;
+    ustring guid = 8;
+    vector<HTMLLink> embeddedLinks = 9;
+  }
+
+  class FeedContent { 
+    enum Type { 
+      RSS = 0;
+      ATOM = 1;
+    }
+    vint type     = 1;
+    ustring title = 2;
+    vector<FeedLink> links  = 3;
+    ustring description = 4;
+    vlong   updated   = 5;
+    ustring generator = 6;
+    vector<ustring> categories = 7;
+    vint ttl = 8;
+	vector<FeedAuthor> authors = 9;
+
+  }
+
+  class CrawlMetadata { 
+	 enum CrawlDisposition {
+		SUCCESS = 0;
+    FAILURE = 1;
+	 }
+
+	 enum FailureReason { 
+      NONE              = 0;
+      UNKNOWN           = 1;
+      UnknownProtocol   = 2;
+      MalformedURL      = 3;
+      Timeout           = 4;
+      DNSFailure        = 5;
+      ResolverFailure   = 6;
+      IOException       = 7;
+      RobotsExcluded    = 8;
+      NoData            = 9;
+      RobotsParseError  = 10;
+      RedirectFailed    = 11;
+      RuntimeError      = 12;
+      ConnectTimeout    = 13;
+      BlackListedHost   = 14;
+      BlackListedURL    = 15;
+      TooManyErrors     = 16;
+      InCache           = 17;
+      InvalidResponseCode = 18;
+      BadRedirectData   = 19;
+   }
+   enum Flags { 
+     Download_Truncated = 1;
+     ContentWas_GZIP    = 2;
+     GUNZIP_Failed      = 4;
+   }
+   enum ParsedAs { 
+    UNKNOWN = 0;
+    HTML = 1;
+    FEED = 2;
+   }
+
+	 vint flags 			   = 1;
+	 long attemptTime          = 2;  
+	 byte crawlDisposition     = 3;
+	 RedirectData redirectData = 4;
+	 vint    failureReason     = 5;
+	 ustring failureDetail     = 6;
+	 int     serverIP          = 7;
+	 vint    httpResult        = 8;
+	 ustring httpHeaders       = 9;
+	 vint    contentLength     = 10;
+	 ustring mimeType          = 11;
+	 vint    downloadSize      = 12;
+	 vint    gunzipSize        = 13;
+	 buffer  md5               = 14;
+	 ustring charsetDetected   = 15;
+	 vint    charsetDetector   = 16;
+	 long    textSimHash       = 17;   
+	 vint    parsedAs          = 18;
+
+	HTMLContent htmlContent    = 20;
+	FeedContent feedContent    = 21;
+  }  
 }

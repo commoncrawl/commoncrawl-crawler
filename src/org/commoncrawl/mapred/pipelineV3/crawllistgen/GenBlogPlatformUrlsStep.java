@@ -32,7 +32,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.StringUtils;
-import org.commoncrawl.mapred.database.PostFrequencyInfo;
+import org.commoncrawl.mapred.PostFrequencyInfo;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineStep;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTask;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.blogs.postfrequency.GenPostFrequencyStep;

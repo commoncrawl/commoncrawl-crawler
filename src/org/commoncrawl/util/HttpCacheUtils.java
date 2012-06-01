@@ -22,7 +22,7 @@ import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.CrawlURLMetadata;
 import org.junit.Test;
 

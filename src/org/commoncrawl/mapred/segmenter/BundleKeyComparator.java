@@ -19,7 +19,7 @@ package org.commoncrawl.mapred.segmenter;
 
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
-import org.commoncrawl.crawl.database.SegmentGeneratorBundleKey;
+import org.commoncrawl.mapred.SegmentGeneratorBundleKey;
 
 /**
  * 

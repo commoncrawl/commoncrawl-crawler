@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.util.URLFingerprint;
 import org.commoncrawl.util.URLUtils;
 

@@ -162,7 +162,7 @@ SPECIAL_TOKEN :
 TOKEN :
 {
     <MODULE_TKN: "module">
-|	<SERVICE_TKN: "service">
+|	<SERVICE_TKN: "Service">
 |   <RECORD_TKN: "class">
 |   <METHOD_TKN: "method">
 |   <ENUM_TKN: "enum">

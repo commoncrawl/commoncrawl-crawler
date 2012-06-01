@@ -27,7 +27,7 @@ module org.commoncrawl.service.stats {
     vector<StatsRecord> recordsOut = 1;
   }
   
-  service StatsService { 
+  Service StatsService { 
   
     method writeStatsRecord(in WriteStatsRecordRequest, out WriteStatsRecordResponse);
     method readStatsRecord(in ReadStatsRecordsRequest, out ReadStatsRecordResponse);

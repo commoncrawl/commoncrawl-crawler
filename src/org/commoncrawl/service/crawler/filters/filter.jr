@@ -1,4 +1,4 @@
-module org.commoncrawl.crawl.filter {
+module org.commoncrawl.service.crawler.filters {
 
   class DomainFilterData { 
     

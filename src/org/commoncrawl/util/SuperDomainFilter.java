@@ -25,7 +25,7 @@ import java.io.InputStreamReader;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.commoncrawl.io.internal.NIODNSCache;
+import org.commoncrawl.io.NIODNSCache;
 
 /**
  * 

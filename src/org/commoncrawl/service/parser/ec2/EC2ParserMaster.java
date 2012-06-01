@@ -41,9 +41,12 @@ import org.commoncrawl.server.CommonCrawlServer;
 import org.commoncrawl.util.CCStringUtils;
 import org.iq80.leveldb.DB;
 
-import com.amazon.s3.AWSAuthConnection;
-import com.amazon.s3.ListBucketResponse;
-import com.amazon.s3.ListEntry;
+import com.amazonaws.*;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
@@ -234,23 +237,21 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
   private boolean doScan(boolean initialScan)throws IOException { 
     try { 
       LOG.info("Scanner Thread Starting");
-      AWSAuthConnection bucketListConnection = new AWSAuthConnection(s3AccessKeyId,s3SecretKey);
-
-      String marker = null;
+      AmazonS3Client s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AccessKeyId,s3SecretKey));
+      
+      ObjectListing response = s3Client.listObjects(new ListObjectsRequest().withBucketName("aws-publicdatasets").withPrefix(CC_BUCKET_ROOT+CC_CRAWLLOG_SOURCE));
       
       do { 
-       
-        ListBucketResponse response = bucketListConnection.listBucket("aws-publicdatasets", CC_BUCKET_ROOT+CC_CRAWLLOG_SOURCE,  marker, null, null);
         
-        LOG.info("Response Key Count:" + response.entries.size());
+        LOG.info("Response Key Count:" + response.getObjectSummaries().size());
         
-        for (Object entry : response.entries) { 
-          ListEntry listEntry = (ListEntry)entry;
-          Matcher matcher = crawlLogPattern.matcher(listEntry.key);
+        for (S3ObjectSummary entry : response.getObjectSummaries()) { 
+          
+          Matcher matcher = crawlLogPattern.matcher(entry.getKey());
           if (matcher.matches()) {
-            ParseCandidate candidate = ParseCandidate.candidateFromBucketEntry(listEntry.key);
+            ParseCandidate candidate = ParseCandidate.candidateFromBucketEntry(entry.getKey());
             if (candidate == null) { 
-              LOG.error("Failed to Parse Candidate for:" + listEntry.key);
+              LOG.error("Failed to Parse Candidate for:" + entry.getKey());
             }
             else { 
               LOG.info("Candidate is:" + candidate);
@@ -261,7 +262,7 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
                 else {
                   if (!_candidates.containsEntry(candidate._timestamp, candidate) && !_active.containsKey(candidate)) {
                     // update candidate size here ... 
-                    candidate._size = listEntry.size;
+                    candidate._size = entry.getSize();
                     LOG.info("New Candidate:" + candidate._crawlLogName + " Found");
                     _candidates.put(candidate._timestamp,candidate);
                   }
@@ -274,14 +275,14 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
           }
         }
         
-        if (false && response.isTruncated) { 
-          marker = ((ListEntry)response.entries.get(response.entries.size()-1)).key;
+        if (response.isTruncated()) { 
+          response = s3Client.listNextBatchOfObjects(response);
         }
         else { 
-          marker = null;
+          break;
         }
       }
-      while (marker != null && !shutdownFlag.get());
+      while (!shutdownFlag.get());
       
       if (initialScan) { 
         // search for completions 
@@ -517,19 +518,20 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
   }
   
   public void scanForCompletions() throws IOException { 
-    AWSAuthConnection bucketListConnection = new AWSAuthConnection(s3AccessKeyId,s3SecretKey);
-    String marker = null;
+    AmazonS3Client s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AccessKeyId,s3SecretKey));
+    
+    ObjectListing response = s3Client.listObjects(new ListObjectsRequest().withBucketName("aws-publicdatasets").withPrefix(CC_BUCKET_ROOT+CC_PARSER_INTERMEDIATE));
     
     do {
-      ListBucketResponse response = bucketListConnection.listBucket("aws-publicdatasets", CC_BUCKET_ROOT+CC_PARSER_INTERMEDIATE,  null, null, null);
+
+      LOG.info("Response Key Count:" + response.getObjectSummaries().size());
       
-      for (Object entry : response.entries) { 
-        ListEntry listEntry = (ListEntry)entry;
-        Matcher matcher = doneFilePattern.matcher(listEntry.key);
+      for (S3ObjectSummary entry : response.getObjectSummaries()) { 
+        Matcher matcher = doneFilePattern.matcher(entry.getKey());
         if (matcher.matches()) {
-          ParseCandidate candidate = ParseCandidate.candidateFromBucketEntry(listEntry.key);
+          ParseCandidate candidate = ParseCandidate.candidateFromBucketEntry(entry.getKey());
           if (candidate == null) { 
-            LOG.error("Failed to Parse Candidate for:" + listEntry.key);
+            LOG.error("Failed to Parse Candidate for:" + entry.getKey());
           }
           else {
             long partialTimestamp = Long.parseLong(matcher.group(2));
@@ -557,14 +559,14 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
           }
         }
       }      
-      if (response.isTruncated) { 
-        marker = ((ListEntry)response.entries.get(response.entries.size()-1)).key;
+      if (response.isTruncated()) { 
+        response = s3Client.listNextBatchOfObjects(response);
       }
       else { 
-        marker = null;
+        break;
       }
     }
-    while (marker != null);
+    while (true);
   }
   
   public static void main(String[] args) throws IOException {

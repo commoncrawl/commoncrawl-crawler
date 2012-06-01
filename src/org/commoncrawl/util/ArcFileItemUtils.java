@@ -19,7 +19,7 @@ package org.commoncrawl.util;
 
 import java.util.ArrayList;
 
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 
 /**

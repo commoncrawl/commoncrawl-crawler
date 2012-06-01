@@ -41,6 +41,7 @@ import org.apache.log4j.Layout;
 import org.apache.log4j.spi.LoggingEvent;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
+import org.commoncrawl.db.RecordStore;
 import org.commoncrawl.io.DNSQueryResult;
 import org.commoncrawl.io.NIODNSQueryClient;
 import org.commoncrawl.io.NIODNSResolver;
@@ -53,9 +54,6 @@ import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
 import org.commoncrawl.server.ServletLauncher;
 import org.commoncrawl.service.crawler.CrawlTarget;
 import org.commoncrawl.service.crawler.CrawlerServer;
-import org.commoncrawl.service.crawler.index_jsp;
-import org.commoncrawl.service.crawler.showHostDetails_jsp;
-import org.commoncrawl.service.crawler.showQueueDetail_jsp;
 import org.commoncrawl.service.crawler.filters.URLPatternBlockFilter;
 import org.commoncrawl.service.crawler.filters.Filter.FilterResult;
 import org.commoncrawl.service.listcrawler.CrawlListDatabaseRecord;
@@ -93,6 +91,7 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
   private URLPatternBlockFilter       _urlBlockFilter         = null;
   private int                         _debugMode              = 0;
   private File                        _crawlHistoryLogDir     = null;
+  private RecordStore                 _recordStore = new RecordStore();
 
   public ProxyServer() {
 
@@ -249,6 +248,13 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
     _server = this;
     if (super.initServer()) {
       try {
+        
+        // get database path ... 
+        File databasePath = new File(getDataDirectory().getAbsolutePath() + "/" + CrawlEnvironment.PROXY_SERVICE_DB);
+        LOG.info("Config says Proxy db path is: "+databasePath);
+        // initialize record store
+        _recordStore.initialize(databasePath, null);
+        
         _requestLog = new CustomLogger("RequestLog");
         LOG.info("Initializing Proxy Request Log");
         _requestLog.addAppender(new DailyRollingFileAppender(
@@ -350,23 +356,12 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
       getWebServer().addServlet("requeueBrokenLists", "/RequeueBrokenLists",
           ListUploadServlet.RequeueBrokenListsServlet.class);
 
-      getWebServer().addServlet("index.jsp", "/index.jsp", index_jsp.class);
-      getWebServer().addServlet("showHostDetails.jsp", "/showHostDetails.jsp",
-          showHostDetails_jsp.class);
-      getWebServer().addServlet("showQueueDetail.jsp", "/showQueueDetail.jsp",
-          showQueueDetail_jsp.class);
 
       // add doc uploader filter and servlet
-      getWebServer().getWebAppContext().addFilter(
-          DocUploadMultiPartFilter.class, "/DocUploader", Handler.ALL);
-      getWebServer().addServlet("docuploader", "/DocUploader",
-          DocUploadServlet.class);
-      getWebServer().addServlet("docuploader-direct", "/DocUploaderPUT",
-          DocUploadServlet.class);
-      getWebServer().addServlet("docuploader-ui", "/DocUploadForm",
-          DocUploadServlet.DocUploadForm.class);
-      getWebServer().addServlet("docuploader-check", "/DocInCache",
-          DocUploadServlet.DocInCacheCheck.class);
+      //getWebServer().getWebAppContext().addFilter(
+      //    DocUploadMultiPartFilter.class, "/DocUploader", Handler.ALL);
+      //getWebServer().addServlet("docuploader-check", "/DocInCache",
+      //    DocUploadServlet.DocInCacheCheck.class);
 
       // disable list loader if in debug mode
 

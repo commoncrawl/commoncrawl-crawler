@@ -755,6 +755,11 @@ public class RPCCompiler implements RPCCompilerConstants {
     finally { jj_save(0, xla); }
   }
 
+  final private boolean jj_3R_12() {
+    if (jj_scan_token(KEY_TKN)) return true;
+    return false;
+  }
+
   final private boolean jj_3R_13() {
     if (jj_scan_token(TRANSIENT_TKN)) return true;
     return false;
@@ -767,11 +772,6 @@ public class RPCCompiler implements RPCCompilerConstants {
     jj_scanpos = xsp;
     if (jj_3R_13()) return true;
     }
-    return false;
-  }
-
-  final private boolean jj_3R_12() {
-    if (jj_scan_token(KEY_TKN)) return true;
     return false;
   }
 

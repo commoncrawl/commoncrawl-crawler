@@ -29,7 +29,7 @@ import java.util.regex.PatternSyntaxException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.service.crawler.filters.Filter;
 import org.commoncrawl.util.CCStringUtils;
 import org.junit.Test;

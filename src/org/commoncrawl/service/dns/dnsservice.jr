@@ -22,7 +22,7 @@ module org.commoncrawl.service.dns {
     ustring     sourceServer = 7;
   }
 
-  service DNSService {
+  Service DNSService {
     
     method doQuery(in DNSQueryInfo,out DNSQueryResponse);
   }

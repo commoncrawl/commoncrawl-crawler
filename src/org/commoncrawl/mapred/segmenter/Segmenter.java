@@ -33,8 +33,8 @@ import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.apache.hadoop.mapred.lib.IdentityMapper;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.crawl.database.SegmentGeneratorBundleKey;
-import org.commoncrawl.crawl.database.SegmentGeneratorItemBundle;
+import org.commoncrawl.mapred.SegmentGeneratorBundleKey;
+import org.commoncrawl.mapred.SegmentGeneratorItemBundle;
 import org.commoncrawl.util.CCStringUtils;
 
 public class Segmenter {

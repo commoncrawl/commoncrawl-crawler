@@ -114,7 +114,7 @@ module org.commoncrawl.service.pagerank {
     long blockCRC = 3;    
   }
  
-  service PageRankSlave {
+  Service PageRankSlave {
   
     method initialize(in BaseConfig,out SlaveStatus);
     

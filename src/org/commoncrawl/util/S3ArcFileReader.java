@@ -27,7 +27,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
-import org.commoncrawl.io.internal.NIOBufferList;
+import org.commoncrawl.io.NIOBufferList;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 
 /**

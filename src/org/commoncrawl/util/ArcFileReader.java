@@ -46,7 +46,7 @@ import java.util.zip.InflaterInputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.crawl.common.shared.Constants;
-import org.commoncrawl.io.shared.NIODataSink;
+import org.commoncrawl.io.NIODataSink;
 import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 import org.junit.Assert;

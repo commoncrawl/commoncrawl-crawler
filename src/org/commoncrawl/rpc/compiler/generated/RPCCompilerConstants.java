@@ -58,7 +58,7 @@ public interface RPCCompilerConstants {
     "\"*/\"",
     "<token of kind 10>",
     "\"module\"",
-    "\"service\"",
+    "\"Service\"",
     "\"class\"",
     "\"method\"",
     "\"enum\"",

@@ -18,7 +18,7 @@
 
 package org.commoncrawl.async;
 
-import org.commoncrawl.util.internal.RuntimeStatsCollector;
+import org.commoncrawl.util.RuntimeStatsCollector;
 
 /**
  * Stats Collection Namespace

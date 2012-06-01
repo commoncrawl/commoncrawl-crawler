@@ -27,7 +27,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.rpc.base.shared.BinaryProtocol;
 import org.commoncrawl.rpc.base.shared.RPCStruct;
-import org.commoncrawl.service.crawler.filter.DomainFilterData;
+import org.commoncrawl.service.crawler.filters.DomainFilterData;
 import org.commoncrawl.service.directory.BlockingClient;
 
 public class Utils {

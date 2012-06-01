@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.regex.PatternSyntaxException;
 
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.filter.FilterResults;
+import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.service.crawler.filters.URLPatternBlockFilter;
 import org.commoncrawl.util.CCStringUtils;
 

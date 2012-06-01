@@ -173,10 +173,10 @@ public class JRecord extends JCompType {
       cb.append("import org.apache.hadoop.io.Writable;\n");
       cb.append("import org.apache.hadoop.io.WritableComparable;\n");
       cb.append("import org.apache.hadoop.record.Buffer;\n");
-      cb.append("import org.commoncrawl.util.shared.FlexBuffer;\n");
-      cb.append("import org.commoncrawl.util.shared.TextBytes;\n");
-      cb.append("import org.commoncrawl.util.shared.MurmurHash;\n");
-      cb.append("import org.commoncrawl.util.shared.ImmutableBuffer;\n");
+      cb.append("import org.commoncrawl.util.FlexBuffer;\n");
+      cb.append("import org.commoncrawl.util.TextBytes;\n");
+      cb.append("import org.commoncrawl.util.MurmurHash;\n");
+      cb.append("import org.commoncrawl.util.ImmutableBuffer;\n");
       cb.append("import org.commoncrawl.rpc.base.shared.BinaryProtocol;\n");
       cb.append("import org.apache.hadoop.util.ReflectionUtils;\n");
       cb.append("import org.apache.hadoop.conf.Configuration;\n");

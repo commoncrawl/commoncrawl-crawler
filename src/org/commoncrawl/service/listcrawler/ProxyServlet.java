@@ -43,7 +43,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.record.Buffer;
-import org.apache.nutch.util.GZIPUtils;
+import org.commoncrawl.util.GZIPUtils;
 import org.apache.tools.ant.filters.StringInputStream;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
@@ -69,6 +69,8 @@ import org.commoncrawl.util.ArcFileItemUtils;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CharsetUtils;
 import org.commoncrawl.util.FlexBuffer;
+import org.commoncrawl.util.GZIPUtils.UnzipResult;
+import org.commoncrawl.util.Tuples.Pair;
 
 import com.google.common.collect.ImmutableSet;
 
@@ -349,8 +351,10 @@ public class ProxyServlet extends HttpServlet {
       debugWriter.println("***** Charset(via HttpHeaders):" + charset);
     }
     else { 
-      charset = CharsetUtils.sniffCharacterEncoding(content,0,contentLength);
-      if (charset != null) { 
+      Pair<Integer,Charset> charsetTuple = CharsetUtils.bestEffortDetectCharset(headers.toString(),content,0,contentLength);
+      
+      if (charsetTuple != null) { 
+        charset = charsetTuple.e1.toString();
         debugWriter.println("***** Charset(via HTML MetaTag):" + charset);
       }
     }
@@ -463,8 +467,12 @@ public class ProxyServlet extends HttpServlet {
       byte contentData[] = responseItem.getContent().getReadOnlyBytes();
       
       if ((responseItem.getFlags() & CacheItem.Flags.Flag_IsCompressed) != 0) {
-        contentData = GZIPUtils.unzipBestEffort(contentData,CrawlEnvironment.CONTENT_SIZE_LIMIT);
-        contentLength = contentData.length;
+        
+        UnzipResult result = GZIPUtils.unzipBestEffort(contentData,CrawlEnvironment.CONTENT_SIZE_LIMIT);
+        if (result != null) { 
+          contentData   = result.data.get();
+          contentLength = result.data.getCount();
+        }
       }
       
       NIOHttpHeaders headers = ArcFileItemUtils.buildHeaderFromArcFileItemHeaders(responseItem.getHeaderItems());
@@ -609,8 +617,11 @@ public class ProxyServlet extends HttpServlet {
         byte contentData[] = url.getContentRaw().getReadOnlyBytes();
         
         if (contentEncoding != null && contentEncoding.equalsIgnoreCase("gzip")) {
-          contentData = GZIPUtils.unzipBestEffort(contentData,CrawlEnvironment.CONTENT_SIZE_LIMIT);
-          contentLength = contentData.length;
+          UnzipResult result = GZIPUtils.unzipBestEffort(contentData,CrawlEnvironment.CONTENT_SIZE_LIMIT);
+          if (result != null) {
+            contentData   = result.data.get();
+            contentLength = result.data.getCount();
+          }
         }
         
         BufferedReader bufferedReader = readerForCharset(headers, contentData, contentLength, writer);

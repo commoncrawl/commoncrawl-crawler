@@ -20,7 +20,7 @@ package org.commoncrawl.util;
 
 import java.util.Iterator;
 
-import org.commoncrawl.io.shared.NIOHttpHeaders;
+import org.commoncrawl.io.NIOHttpHeaders;
 
 public class HttpHeaderUtils {
 

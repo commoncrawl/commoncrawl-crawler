@@ -31,9 +31,9 @@ import junit.framework.Assert;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.commoncrawl.crawl.crawler.CrawlHostImpl;
-import org.commoncrawl.io.internal.HttpCookie;
-import org.commoncrawl.io.internal.HttpCookieStore;
+import org.commoncrawl.service.crawler.CrawlHostImpl;
+import org.commoncrawl.io.HttpCookie;
+import org.commoncrawl.io.HttpCookieStore;
 import org.junit.Test;
 
 /**

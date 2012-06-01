@@ -45,7 +45,7 @@ public class CalculateRankTask extends PageRankTask<CalculateRankTask.CalculateR
     
   }
 
-  public static class CalculateRankTaskResult extends PageRankTaskResult { 
+  public static class CalculateRankTaskResult extends PageRankTask.PageRankTaskResult { 
     public boolean done = false;
     
     public CalculateRankTaskResult() { 

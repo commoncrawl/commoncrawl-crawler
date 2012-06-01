@@ -3,6 +3,7 @@ package org.commoncrawl.service.statscollector;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Map;
@@ -25,7 +26,6 @@ import org.apache.hadoop.record.Buffer;
 import org.codehaus.jackson.JsonEncoding;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.commoncrawl.async.CallbackWithResult;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
@@ -53,6 +53,7 @@ import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.SortedSetMultimap;
 import com.google.common.collect.TreeMultimap;
+import com.google.gson.stream.JsonWriter;
 
 /** abstract class representing a collection of hourly & daily stats
  * 
@@ -425,22 +426,23 @@ public abstract class StatsCollection<ValueType extends Comparable> {
   }
   
   public void dumpHourlyToJSON(OutputStream stream)throws IOException { 
-    JsonFactory f = new JsonFactory();
-    JsonGenerator g = f.createJsonGenerator(stream,JsonEncoding.UTF8);
-    ObjectMapper mapper = new ObjectMapper();
+    PrintWriter pw = new PrintWriter(stream);
+    JsonWriter jsonWriter = new JsonWriter(pw);
     
-    g.writeStartArray();
+    jsonWriter.beginArray();
     Hour now = new Hour(new Date(System.currentTimeMillis()));
     
     Set<Entry<Hour,ValueType>> set = _hourlyValues.entries();
     
     for (Entry<Hour,ValueType> item : set) { 
       // skip latest hour 
-      if (item.getKey().compareTo(now) != 0) { 
-        mapper.writeValue(g, item.getValue());
+      if (item.getKey().compareTo(now) != 0) {
+        jsonWriter.value(item.getValue().toString());
        }
     }
-    g.writeEndArray();
+    jsonWriter.endArray();
+    pw.flush();
+    pw.close();
   }
   
   public void collectHourlyStats(Multimap<Date,ValueType> multiMap) throws IOException { 
@@ -481,16 +483,16 @@ public abstract class StatsCollection<ValueType extends Comparable> {
       @Override
       public void taskComplete(ImmutableSortedMap<Day, ValueType> loadResult) {
         try { 
-          JsonFactory f = new JsonFactory();
-          JsonGenerator g = f.createJsonGenerator(stream,JsonEncoding.UTF8);
-          ObjectMapper mapper = new ObjectMapper();
+          PrintWriter writer = new PrintWriter(stream);
+          JsonWriter jsonWriter = new JsonWriter(writer);
           
-          g.writeStartArray();
+          jsonWriter.beginArray();
   
           for (Entry<Day,ValueType> entry : loadResult.entrySet()) { 
-            mapper.writeValue(g, entry.getValue());
+            jsonWriter.value(entry.getValue().toString());
           }
-          g.writeEndArray();
+          jsonWriter.endArray();
+          writer.flush();
           
           completionCallback.execute(new Boolean(true));
         }

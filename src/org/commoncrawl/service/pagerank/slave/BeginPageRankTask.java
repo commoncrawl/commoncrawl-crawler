@@ -50,7 +50,7 @@ public class BeginPageRankTask extends PageRankTask<BeginPageRankTask.BeginPageR
     _prMasterStatus = serverStatus;
   }
 
-  public static class BeginPageRankTaskResult extends PageRankTaskResult { 
+  public static class BeginPageRankTaskResult extends PageRankTask.PageRankTaskResult { 
     public PRValueMap _valueMap = null;
   }
 
