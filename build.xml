@@ -24,8 +24,8 @@
   <property name="lib.dir" value="${basedir}/lib"/>
   <property name="conf.dir" value="${basedir}/conf"/>
   <property name="bin.dir" value="${basedir}/bin"/>	
-  <property name="webapps.dir" value="${basedir}/webapps"/>	
-  
+  <property name="webapps.dir" value="${basedir}/src/webapps"/>	
+
   <property name="build.dir" value="${basedir}/build"/>
   <property name="build.native" value="${basedir}/build"/>
   <property name="build.classes" value="${build.dir}/classes"/>
@@ -90,6 +90,31 @@
     <mkdir dir="${build.dir}"/>
     <mkdir dir="${build.lib.dir}"/>
     <mkdir dir="${build.tools.dir}"/>
+    <mkdir dir="${build.webapps}/crawler/WEB-INF"/>
+    <mkdir dir="${build.webapps}/database/WEB-INF"/>
+    <mkdir dir="${build.webapps}/qmaster/WEB-INF"/>
+    <mkdir dir="${build.webapps}/qslave/WEB-INF"/>
+    <mkdir dir="${build.webapps}/prslave/WEB-INF"/>
+  	<mkdir dir="${build.webapps}/prmaster/WEB-INF"/>
+    <mkdir dir="${build.webapps}/qslave/WEB-INF"/>    
+
+    <!-- copy all of the jsp and static files -->
+    <copy todir="${build.webapps}">
+      <fileset dir="${webapps.dir}">
+        <exclude name="**/*.jsp" />
+      </fileset>
+    </copy>
+    <copy todir="${eclipse.webapps}">
+      <fileset dir="${webapps.dir}">
+        <exclude name="**/*.jsp" />
+      </fileset>
+    </copy>
+    
+    <copy todir="${conf.dir}" verbose="true">
+      <fileset dir="${conf.dir}" includes="**/*.template"/>
+      <mapper type="glob" from="*.template" to="*"/>
+    </copy>
+
   </target>
 
   <!-- maven properties -->
@@ -186,8 +211,35 @@
     <!-- ====================================================== -->
     <!-- Compile the Java files                                 -->
     <!-- ====================================================== -->
+    <echo message="Processing JSPC TaskDef"/>
+    <taskdef classname="org.apache.jasper.JspC" name="jsp-compile" >
+      <classpath refid="classpath"/>
+    </taskdef>
+
     <echo message="Processing Compile Core Classes Target"/>                
     <target name="compile-core-classes" depends="init,gen-records">
+	  <echo message="Compiling JSP Files"/>
+	  
+      <jsp-compile
+                  uriroot="${webapps.dir}/crawler"
+                  outputdir="${build.src}"
+                  package="org.commoncrawl.service.crawler"
+                  webxml="${build.webapps}/crawler/WEB-INF/web.xml">
+      </jsp-compile>
+
+      <jsp-compile
+                  uriroot="${webapps.dir}/dservice"
+                  outputdir="${build.src}"
+                  package="org.commoncrawl.service.directory"
+                  webxml="${build.webapps}/dservice/WEB-INF/web.xml">
+      </jsp-compile>
+
+      <jsp-compile
+                  uriroot="${webapps.dir}/dnsservice"
+                  outputdir="${build.src}"
+                  package="org.commoncrawl.service.dns"
+                  webxml="${build.webapps}/dnsservice/WEB-INF/web.xml">
+      </jsp-compile>
 
       <!-- Compile Java files (excluding JSPs) checking warnings -->
 	  <echo message="Compiling Core Files"/>
