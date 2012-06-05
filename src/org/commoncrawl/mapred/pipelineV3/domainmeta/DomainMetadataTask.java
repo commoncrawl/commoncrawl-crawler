@@ -47,7 +47,6 @@ import org.commoncrawl.mapred.pipelineV3.domainmeta.iptohost.DomainIPCollectorSt
 import org.commoncrawl.mapred.pipelineV3.domainmeta.iptohost.IPAddressToHostMappingStep;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.iptohost.QuantcastIPListStep;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.linkstats.CountInLinksStep;
-import org.commoncrawl.mapred.pipelineV3.domainmeta.pornkeywords.PornKeywordScannerStep;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.quantcast.ImportQuantcastStep;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.rank.RankTask;
 import org.commoncrawl.mapred.pipelineV3.domainmeta.subdomaincounts.SubDomainCountsStep;
@@ -163,7 +162,6 @@ public class DomainMetadataTask extends CrawlPipelineTask {
     addStep(new IPAddressToHostMappingStep(this));
     addStep(new QuantcastIPListStep(this));
     addStep(new DomainIPCollectorStep(this));
-    addStep(new PornKeywordScannerStep(this));
     addStep(new FuzzyDedupeStep1(this));
     addStep(new FuzzyDedupeStep2(this));
     addStep(new CrossDomainDupes(this));
