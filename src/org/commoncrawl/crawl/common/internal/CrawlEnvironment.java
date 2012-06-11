@@ -31,7 +31,7 @@ public final class CrawlEnvironment extends Environment {
   public static final int      MAX_URL_LENGTH_ALLOWED                  = 2048;
 
   /** ccbot user agent string **/
-  public static final String   CCBOT_UA                                = "Mozilla/5.0 (compatible; CCBot/1.1; +http://www.commoncrawl.org/bot.html)";
+  public static final String   CCBOT_UA                                = "";
 
   public static final int      MIN_DNS_CACHE_TIME                      = 60 * 60 * 1000;
 
