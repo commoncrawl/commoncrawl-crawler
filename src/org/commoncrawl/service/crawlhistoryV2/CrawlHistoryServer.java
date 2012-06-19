@@ -297,7 +297,8 @@ public class CrawlHistoryServer extends CommonCrawlServer
     FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
     Path dataFilePath = getDataFileFinalPath();
     
-    if (!fs.exists(dataFilePath) || !fs.isDirectory(dataFilePath)) {
+    FileStatus fileStatus = fs.getFileStatus(dataFilePath);
+    if (fileStatus == null || !fileStatus.isDir()) {
       IOException e = new IOException("Data File Path:" + dataFilePath + " is not a valid directory!");
       LOG.error(e.getMessage());
       throw e;
