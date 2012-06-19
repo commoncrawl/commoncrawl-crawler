@@ -499,7 +499,15 @@ public class CrawlerStatsQuery extends HttpServlet {
         }
       }
       else { 
-        ImmutableSortedSet.Builder<CrawlerStats> aggregatedStatsBuilder = ImmutableSortedSet.naturalOrder();
+        
+        ImmutableSortedSet.Builder<CrawlerStats> aggregatedStatsBuilder = new ImmutableSortedSet.Builder<CrawlerStats>(new Comparator<CrawlerStats>() {
+
+          @Override
+          public int compare(CrawlerStats o1, CrawlerStats o2) {
+            return o1.compareTo(o2);
+          } 
+          
+        });
         
         LOG.info("Request Completed. Building Aggregated Stats");
         

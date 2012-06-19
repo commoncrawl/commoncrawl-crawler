@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
@@ -148,7 +149,14 @@ public abstract class StatsCollection<ValueType extends Comparable> {
           // get the result set ... 
           ArrayList<KeyValueTuple<Long, BytesWritable>> tuples = _dailyEventsFile.readFromTail(maxDays, -1);
           // walk items adding to builder 
-          final ImmutableSortedMap.Builder<Day,ValueType> builder = ImmutableSortedMap.naturalOrder();
+          final ImmutableSortedMap.Builder<Day,ValueType> builder = new ImmutableSortedMap.Builder<Day, ValueType>(new Comparator<Day>() {
+
+            @Override
+            public int compare(Day o1, Day o2) {
+              return o1.compareTo(o2);
+            } 
+            
+          });
           
           for (KeyValueTuple<Long,BytesWritable> tuple : tuples) { 
             ValueType value = bufferToValueType(new Buffer(tuple.value.getBytes()));
