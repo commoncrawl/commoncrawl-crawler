@@ -64,6 +64,7 @@ import org.commoncrawl.util.IntrusiveList.IntrusiveListElement;
 import org.junit.Test;
 
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 /**
  * CrawlList - a collection of CrawlTargets (disk backed)
@@ -2000,7 +2001,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                               flushList = new IntrusiveList<CrawlTarget>();
                               
                               // reverse candidate list and start removing items from pending 
-                              for (CrawlTarget candidate : Iterables.reverse(candidates)) { 
+                              for (CrawlTarget candidate : Lists.reverse(candidates)) { 
                                 domain._pending.removeElement(candidate);
                                 flushList.addHead(candidate);
                                 // if we are back to ideal target count bail ... 

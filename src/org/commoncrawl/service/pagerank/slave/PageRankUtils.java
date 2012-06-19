@@ -581,7 +581,7 @@ public class PageRankUtils {
     public void close(boolean deleteUnderlyingFile) throws IOException {
       _writer.close();
       if (deleteUnderlyingFile) { 
-        _fileSystem.delete(_path);
+        _fileSystem.delete(_path,false);
       }
     }
 
@@ -648,7 +648,7 @@ public class PageRankUtils {
   		Path remotePath = new Path(remoteOutputPath,fileName);
   		
   		LOG.info("Deleting:" + remotePath);
-  		remoteFS.delete(remotePath);
+  		remoteFS.delete(remotePath,true);
   	}
   }
   
@@ -2039,8 +2039,11 @@ public class PageRankUtils {
     public PRSequenceFileInputSource(Configuration conf,FileSystem fs,Path path,SortedPRInputReader reader)throws IOException { 
       _path = path;
       _reader = new SequenceFile.Reader(fs, path, conf);
-      _totalLength = fs.getLength(_path);
-
+      FileStatus fileStatus = fs.getFileStatus(_path);
+      _totalLength = 0L;
+      if (fileStatus != null) { 
+        _totalLength = fileStatus.getLen();
+      }
     }
     
     @Override
@@ -2082,7 +2085,7 @@ public class PageRankUtils {
   	public PROldInputSource(Path path,SortedPRInputReader reader) throws IOException { 
       _path = path;
       _istream = CrawlEnvironment.getDefaultFileSystem().open(_path);
-      _bytesTotal = CrawlEnvironment.getDefaultFileSystem().getLength(_path);
+      _bytesTotal = CrawlEnvironment.getDefaultFileSystem().getFileStatus(_path).getLen();
 
       // wrap the stream so that we can monitor progress ...
       _istream = new FilterInputStream(_istream) {
@@ -2553,7 +2556,8 @@ public class PageRankUtils {
             	fsForOutlinksFile = FileSystem.getLocal(conf);
             }
 
-            long bytesToReadTotal = fsForOutlinksFile.getLength(outlinksFile);
+            FileStatus outlinksFileStatus = fsForOutlinksFile.getFileStatus(outlinksFile);
+            long bytesToReadTotal = (outlinksFileStatus != null) ? outlinksFileStatus.getLen() : 0;
             
             reader = new SequenceFile.Reader(fsForOutlinksFile,outlinksFile,conf);
             OutlinkItem item = new OutlinkItem();
@@ -2561,8 +2565,8 @@ public class PageRankUtils {
             boolean isCancelled = false;
             while (!isCancelled && reader.next(key,value)) {
             	
-            	keyStream.reset(key.get(),0,key.getLength());
-            	valueStream.reset(value.get(),0,value.getLength());
+            	keyStream.reset(key.getBytes(),0,key.getLength());
+            	valueStream.reset(value.getBytes(),0,value.getLength());
             	
             	//populate item from data 
             	readURLFPFromStream(keyStream, item.targetFingerprint);
@@ -3039,7 +3043,7 @@ public class PageRankUtils {
       valueMap.open(FileSystem.get(conf),valueFile, rangeFile);
       
       fs.mkdirs(new Path(remoteOutputDir));
-      fs.delete(new Path(remoteOutputDir,"*"));
+      fs.delete(new Path(remoteOutputDir,"*"),false);
       
       //File localOutputFile = new File(localOutputDir,getOutlinksBaseName(0,0) + "-" + NUMBER_FORMAT.format(0));
       //localOutputFile.delete();

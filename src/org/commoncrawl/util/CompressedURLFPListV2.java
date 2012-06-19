@@ -565,7 +565,7 @@ public class CompressedURLFPListV2 {
       while (reader.next(fp, bytes)) {
         if (bytes.getLength() != 0) {
           DataInputBuffer inputStream = new DataInputBuffer();
-          inputStream.reset(bytes.get(), bytes.getLength());
+          inputStream.reset(bytes.getBytes(), bytes.getLength());
           CompressedURLFPListV2.Reader listReader = new CompressedURLFPListV2.Reader(
               inputStream);
           while (listReader.hasNext()) {

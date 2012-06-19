@@ -890,10 +890,10 @@ public final class CrawlLog {
         } catch (Exception e) {
           LOG.error("Checkpoint:" + _checkpointId + " FAILED with exception:" + CCStringUtils.stringifyException(e));
           for (Path segmentPath : segmentLogStagingPaths) {
-            hdfs.delete(segmentPath);
+            hdfs.delete(segmentPath,false);
           }
           for (Path segmentPath : segmentLogFinalPaths) {
-            hdfs.delete(segmentPath);
+            hdfs.delete(segmentPath,false);
           }
           throw e;
         }

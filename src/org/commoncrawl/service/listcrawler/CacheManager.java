@@ -75,6 +75,7 @@ import org.junit.Assert;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 /** 
  * Class that encapsulates most of the serving side of the crawler
@@ -416,7 +417,7 @@ public class CacheManager {
     // first check local item cache ...
     TreeSet<Long> cachedItems = new TreeSet<Long>();
             
-    for (HDFSFileIndex index : Iterables.reverse(indexList)) { 
+    for (HDFSFileIndex index : Lists.reverse(indexList)) { 
       try {
         CacheItem itemFound = index.findItem(urlFingerprint,!returnDate);
         if (itemFound != null) { 
@@ -988,7 +989,7 @@ public class CacheManager {
         }
         long timeStart = System.currentTimeMillis();
         LOG.info("Starting Search of:" + indexList.size() + " hdfs indexes for fp:" + loadRequest._fingerprint);        
-        for (HDFSFileIndex index : Iterables.reverse(indexList)) { 
+        for (HDFSFileIndex index : Lists.reverse(indexList)) { 
           CacheItem item = index.findItem(loadRequest._fingerprint,false);
           
           if (item != null) { 
@@ -1047,7 +1048,7 @@ public class CacheManager {
       long timeStart = System.currentTimeMillis();
   
       // LOG.info("Starting Search of:" + indexList.size() + " hdfs indexes for fp:" + loadRequest._fingerprint);        
-      for (HDFSFileIndex index : Iterables.reverse(indexList)) { 
+      for (HDFSFileIndex index : Lists.reverse(indexList)) { 
         CacheItem item = index.findItem(loadRequest._fingerprint,false);
         
         if (item != null) { 

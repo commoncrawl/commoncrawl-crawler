@@ -279,7 +279,7 @@ public class ArcFileWriter {
 
       LOG.info("REWIND - Deleting File :" + _hdfsPath);
       // delete existing ...
-      _hdfs.delete(_hdfsPath);
+      _hdfs.delete(_hdfsPath,false);
       LOG.info("REWIND - ReCreating File :" + _hdfsPath);
       // create new file stream ...
       _hdfsStream = _hdfs.create(_hdfsPath);
@@ -320,7 +320,7 @@ public class ArcFileWriter {
       // and the path to our arc file ...
       _hdfsPath = arcFilePath;
       // delete existing ...
-      _hdfs.delete(_hdfsPath);
+      _hdfs.delete(_hdfsPath,false);
       // create new file stream ...
       _hdfsStream = _hdfs.create(_hdfsPath);
       // and setup the consumer queue relationship
@@ -518,7 +518,7 @@ public class ArcFileWriter {
         }
         // time to delete the underlying file since it is corrupt ...
         try {
-          _hdfs.delete(_hdfsPath);
+          _hdfs.delete(_hdfsPath,false);
         } catch (IOException e) {
           LOG.error(CCStringUtils.stringifyException(e));
         }
@@ -532,7 +532,7 @@ public class ArcFileWriter {
 
     public void delete() {
       try {
-        _hdfs.delete(_hdfsPath);
+        _hdfs.delete(_hdfsPath,false);
       } catch (IOException e) {
         LOG.error(CCStringUtils.stringifyException(e));
       }

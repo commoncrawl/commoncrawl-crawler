@@ -544,8 +544,8 @@ public class CrawlHistoryServer extends CommonCrawlServer
                   LOG.info("Deleting Existing Checkpoint Files");
                   // safely delete checkpoint files ... 
                   FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
-                  fs.delete(getDataFileCheckpointPath());
-                  fs.delete(getDataFileFinalPath());
+                  fs.delete(getDataFileCheckpointPath(),false);
+                  fs.delete(getDataFileFinalPath(),false);
                   
                   LOG.info("Reseting BloomFilter");
                   // safely reset bloom filter 
@@ -607,7 +607,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
     
     // delete existing ... 
-    fs.delete(checkpointPath);
+    fs.delete(checkpointPath,false);
     
     FSDataOutputStream outputStream = fs.create(checkpointPath);
     
@@ -809,7 +809,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
                         
                         LOG.info("Checkpoint Thread Deleting Old Checkpoint Data");
                         // ok now everything seems to have gone fine ... delete existing data file 
-                        fs.delete(finalPath);
+                        fs.delete(finalPath,false);
                         LOG.info("Checkpoint Thread ReWriting New Checkpoint Data");
                         // rename checkpoint to final ... 
                         fs.rename(checkpointPath, finalPath);
@@ -818,7 +818,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
                           LOG.info("Checkpoint Thread Deleting Processed Files");
                           // ok safely delete all processed files
                           for (Path processedFilePath: _processedPaths){ 
-                            fs.delete(processedFilePath);
+                            fs.delete(processedFilePath,false);
                           }
                           _processedPaths.clear();
                         }

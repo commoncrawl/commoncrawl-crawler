@@ -27,6 +27,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.FileInputFormat;
+import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
@@ -76,7 +78,7 @@ public class Segmenter {
 
       for (FileStatus candidate : fs.globStatus(new Path(bundleInputPath,"part-*"))) { 
         LOG.info("Adding File:" + candidate.getPath());
-        job.addInputPath(candidate.getPath());
+        FileInputFormat.addInputPath(job,candidate.getPath());
       }
       
 
@@ -92,7 +94,7 @@ public class Segmenter {
       job.setOutputKeyClass(NullWritable.class);
       job.setOutputValueClass(NullWritable.class);
       job.setOutputFormat(SequenceFileOutputFormat.class);
-      job.setOutputPath(tempOutputDir);
+      FileOutputFormat.setOutputPath(job,tempOutputDir);
       job.setNumTasksToExecutePerJvm(1000);
       job.setNumReduceTasks(crawlerArray.length * NUM_BUCKETS_PER_CRAWLER);
 

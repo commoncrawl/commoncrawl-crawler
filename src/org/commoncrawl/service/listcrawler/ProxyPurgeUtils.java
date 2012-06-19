@@ -151,7 +151,7 @@ public class ProxyPurgeUtils {
     
     for (FileStatus candidate : purgeCandidates) { 
       System.out.println("Purging Candidate:" + candidate.getPath());
-      fs.delete(candidate.getPath());
+      fs.delete(candidate.getPath(),false);
     }
 
     
@@ -160,7 +160,7 @@ public class ProxyPurgeUtils {
     
     for (FileStatus candidate : localcacheDataPurgeCandidates) { 
       System.out.println("Purging Candidate:" + candidate.getPath());
-      localFS.delete(candidate.getPath());
+      localFS.delete(candidate.getPath(),false);
     }
     
     // now delete bloom filter data

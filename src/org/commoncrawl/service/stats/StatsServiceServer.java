@@ -213,7 +213,7 @@ public class StatsServiceServer
 
             recordOut.setTimestamp(item.key);
             recordOut.setRecordPosition(item.recordPos);
-            recordOut.setData(new Buffer(item.value.get()));
+            recordOut.setData(new Buffer(item.value.getBytes()));
             
             rpcContext.getOutput().getRecordsOut().add(recordOut);
           }

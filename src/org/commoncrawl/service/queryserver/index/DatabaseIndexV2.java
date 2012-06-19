@@ -424,7 +424,7 @@ public class DatabaseIndexV2 {
       try {
 
         TFile.Reader reader = new TFile.Reader(inputStream, localFS
-            .getLength(filePath), _conf);
+            .getFileStatus(filePath).getLen(), _conf);
 
         try {
           // scanner
@@ -437,7 +437,7 @@ public class DatabaseIndexV2 {
               // ok return raw data
               scanner.entry().getValue(dataOut);
               // and return it
-              return new FlexBuffer(dataOut.get(), 0, dataOut.getLength());
+              return new FlexBuffer(dataOut.getBytes(), 0, dataOut.getLength());
             }
           } finally {
             scanner.close();
@@ -604,7 +604,7 @@ public class DatabaseIndexV2 {
               FSDataInputStream indexDataInputStream = fs.open(indexFilePath);
               try {
                 TFile.Reader reader = new TFile.Reader(indexDataInputStream, fs
-                    .getLength(indexFilePath), conf);
+                    .getFileStatus(indexFilePath).getLen(), conf);
                 try {
                   TFile.Reader.Scanner scanner = reader.createScanner();
 
@@ -789,7 +789,7 @@ public class DatabaseIndexV2 {
         FSDataInputStream indexDataInputStream = _fs.open(indexDataPath);
         try {
           TFile.Reader reader = new TFile.Reader(indexInputStream, _fs
-              .getLength(indexPath), _conf);
+              .getFileStatus(indexPath).getLen(), _conf);
           try {
             TFile.Reader.Scanner scanner = reader.createScanner();
 
@@ -800,7 +800,7 @@ public class DatabaseIndexV2 {
                 // establish data start ..
                 long dataPosStart = scanner.entry().getValueStream().readLong();
                 // now establish default end pos
-                long dataPosEnd = _fs.getLength(indexDataPath);
+                long dataPosEnd = _fs.getFileStatus(indexDataPath).getLen();
                 // and if not last index item .. use next item as stop point
                 if (scanner.advance()) {
                   dataPosEnd = scanner.entry().getValueStream().readLong();
@@ -971,7 +971,7 @@ public class DatabaseIndexV2 {
 
       FSDataInputStream inputStream = _fs.open(metadataDBPath);
 
-      long indexLength = _fs.getLength(metadataDBPath);
+      long indexLength = _fs.getFileStatus(metadataDBPath).getLen();
 
       long recordCount = 0;
 
@@ -990,11 +990,11 @@ public class DatabaseIndexV2 {
               // get key bytes ...
               scanner.entry().getKey(keyBytes);
               // reset stream
-              keyStream.reset(keyBytes.get(), keyBytes.getLength());
+              keyStream.reset(keyBytes.getBytes(), keyBytes.getLength());
               // read text bytes length
               int textBytesLength = WritableUtils.readVInt(keyStream);
               // initialize text bytes to remaining bytes
-              textBytes.set(keyBytes.get(), keyStream.getPosition(), keyStream
+              textBytes.set(keyBytes.getBytes(), keyStream.getPosition(), keyStream
                   .getLength()
                   - keyStream.getPosition());
               // decode ...
@@ -1005,8 +1005,8 @@ public class DatabaseIndexV2 {
                 BytesWritable valueBytes = new BytesWritable();
                 scanner.entry().getValue(valueBytes);
                 // SPILL
-                spillWriter.spillRawRecord(keyBytes.get(), 0, keyBytes
-                    .getLength(), valueBytes.get(), 0, valueBytes.getLength());
+                spillWriter.spillRawRecord(keyBytes.getBytes(), 0, keyBytes
+                    .getLength(), valueBytes.getBytes(), 0, valueBytes.getLength());
                 // increment record count
                 recordCount++;
 

@@ -48,6 +48,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
@@ -150,7 +151,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
           final ImmutableSortedMap.Builder<Day,ValueType> builder = ImmutableSortedMap.naturalOrder();
           
           for (KeyValueTuple<Long,BytesWritable> tuple : tuples) { 
-            ValueType value = bufferToValueType(new Buffer(tuple.value.get()));
+            ValueType value = bufferToValueType(new Buffer(tuple.value.getBytes()));
             builder.put(new Day(new Date(tuple.key)), value);
           }
           
@@ -253,7 +254,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
     Day   yesterday = (Day) today.previous();
      
     // walk events in reverse order  
-    Iterable<KeyValueTuple<Long, BytesWritable>> reverseList = Iterables.reverse(events);
+    Iterable<KeyValueTuple<Long, BytesWritable>> reverseList = Lists.reverse(events);
     for (KeyValueTuple<Long, BytesWritable> event : reverseList) {
       // collect all events up to yesterday's events 
       Day eventDay = new Day(new Date(event.key));
@@ -262,7 +263,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
         // process the event ... 
         Hour eventHour = new Hour(new Date(event.key));
         // create the typed object ... 
-        ValueType value = bufferToValueType(new Buffer(event.value.get()));
+        ValueType value = bufferToValueType(new Buffer(event.value.getBytes()));
         // add it to event list ... 
         SortedSet<ValueType> values = _hourlyValues.get(eventHour);
         if (values.size() != 0) { 

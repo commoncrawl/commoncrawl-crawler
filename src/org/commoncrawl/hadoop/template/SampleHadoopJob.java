@@ -29,6 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapRunner;
@@ -148,7 +149,7 @@ public class SampleHadoopJob extends MapRunner<Text, ArcFileItem, Text, Text> {
     // standard output format ...
     job.setOutputFormat(SequenceFileOutputFormat.class);
     // set output path
-    job.setOutputPath(tempDir);
+    FileOutputFormat.setOutputPath(job,tempDir);
     // map output types
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Text.class);

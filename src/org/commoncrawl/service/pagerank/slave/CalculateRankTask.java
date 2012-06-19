@@ -127,7 +127,7 @@ public class CalculateRankTask extends PageRankTask<CalculateRankTask.CalculateR
 	      
 	      LOG.info("Serializing Values to Path:" + valuesPath + " for Iteration:" + _server.getActiveJobConfig().getIterationNumber());
 	      
-	      _server.getFileSystem().delete(valuesPath);
+	      _server.getFileSystem().delete(valuesPath,true);
 	      
 	      OutputStream valueStream = null;
 	      // create new stream .. 

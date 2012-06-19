@@ -35,6 +35,7 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.file.tfile.TFile;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -700,7 +701,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 			catch (IOException e) { 
 				LOG.error(CCStringUtils.stringifyException(e));
 				// delete output file 
-				_fs.delete(outputPath);
+				_fs.delete(outputPath,true);
 				// and delete local output dir 
 				FileUtils.recursivelyDeleteFile(new File(localSpillOutputPath.toString()));
 				throw e;
@@ -728,8 +729,8 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setJobName("InverseLinkDB By Domain - Phase 1");
 	    
 	    // add link db and page rank db to input 
-	  	job.addInputPath(linkDBPath);
-	  	job.addInputPath(crawlDBPath);
+	  	FileInputFormat.addInputPath(job,linkDBPath);
+	  	FileInputFormat.addInputPath(job,crawlDBPath);
 	
 	    job.setInputFormat(MultiFileMergeInputFormat.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
@@ -740,7 +741,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setOutputKeyClass(FlexBuffer.class);
 	    job.setOutputValueClass(URLFPV2.class);
 	    job.setPartitionerClass(MultiFileMergePartitioner.class);
-	    job.setOutputPath(phase1DataPath);
+	    FileOutputFormat.setOutputPath(job,phase1DataPath);
 	    job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 	    job.setNumTasksToExecutePerJvm(1000);
 	    
@@ -754,7 +755,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 		}
 		catch (IOException e) { 
 			LOG.error(CCStringUtils.stringifyException(e));
-			fs.delete(phase1DataPath);
+			fs.delete(phase1DataPath,true);
 		}
 	}
 	
@@ -772,7 +773,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setJobName("InverseLinkDB By Domain - Phase 2");
 	    
 	    // add link db and page rank db to input 
-	  	job.addInputPath(phase1DataPath);
+	  	FileInputFormat.addInputPath(job,phase1DataPath);
 	
 	    job.setInputFormat(MultiFileMergeInputFormat.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
@@ -783,7 +784,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setOutputKeyClass(LongWritable.class);
 	    job.setOutputValueClass(IntWritable.class);
 	    job.setPartitionerClass(MultiFileMergePartitioner.class);
-	    job.setOutputPath(phase2DataPath);
+	    FileOutputFormat.setOutputPath(job,phase2DataPath);
 	    job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 	    job.setNumTasksToExecutePerJvm(1000);
 	    job.setInt("mapred.task.timeout", Integer.MAX_VALUE);
@@ -798,7 +799,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 		}
 		catch (IOException e) { 
 			LOG.error(CCStringUtils.stringifyException(e));
-			fs.delete(phase2DataPath);
+			fs.delete(phase2DataPath,true);
 		}
 		
 	}
@@ -935,7 +936,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    // add only part files from phase2 data path ... 
 	    FileStatus parts[] = fs.globStatus(new Path(phase2DataPath,"part-*"));
 	    for (FileStatus candidate : parts) { 
-	    	job.addInputPath(candidate.getPath());
+	    	FileInputFormat.addInputPath(job,candidate.getPath());
 	    }
 	    ////////////////////////
 	
@@ -947,7 +948,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setOutputFormat(NullOutputFormat.class);
 	    job.setOutputKeyClass(NullWritable.class);
 	    job.setOutputValueClass(NullWritable.class);
-	    job.setOutputPath(phase3DataPath);
+	    FileOutputFormat.setOutputPath(job,phase3DataPath);
 	    job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 	    job.setNumTasksToExecutePerJvm(1000);
 	    job.setInt("mapred.task.timeout", Integer.MAX_VALUE);
@@ -957,7 +958,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 		}
 		catch (IOException e) { 
 			LOG.error(CCStringUtils.stringifyException(e));
-			fs.delete(phase3DataPath);
+			fs.delete(phase3DataPath,true);
 		}
 		
 	}
@@ -978,7 +979,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    URLFPV2 fp = URLUtils.getURLFPV2FromURL("http://www.factual.com/");
 	    
 	    job.setLong("TargetFP",fp.getRootDomainHash());
-	    job.addInputPath(phase1DataPath);
+	    FileInputFormat.addInputPath(job,phase1DataPath);
 	    job.setInputFormat(SequenceFileInputFormat.class);
 	    job.setMapOutputKeyClass(Text.class);
 	    job.setMapOutputValueClass(NullWritable.class);
@@ -987,7 +988,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setOutputFormat(TextOutputFormat.class);
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(NullWritable.class);
-	    job.setOutputPath(debugDataPath);
+	    FileOutputFormat.setOutputPath(job,debugDataPath);
 	    job.setNumReduceTasks(1);
 	    job.setNumTasksToExecutePerJvm(1000);
 	    job.setInt("mapred.task.timeout", Integer.MAX_VALUE);
@@ -998,7 +999,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 		}
 		catch (IOException e) { 
 			LOG.error(CCStringUtils.stringifyException(e));
-			fs.delete(debugDataPath);
+			fs.delete(debugDataPath,true);
 		}		
 	}
 	
@@ -1053,8 +1054,8 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    
 	    
 	    // add link db and page rank db to input 
-	  	job.addInputPath(linkDBPath);
-	  	job.addInputPath(crawlDBPath);
+	  	FileInputFormat.addInputPath(job,linkDBPath);
+	  	FileInputFormat.addInputPath(job,crawlDBPath);
 	
 	    job.setInputFormat(MultiFileMergeInputFormat.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
@@ -1065,7 +1066,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(NullWritable.class);
 	    job.setPartitionerClass(MultiFileMergePartitioner.class);
-	    job.setOutputPath(phase1DebugDataPath);
+	    FileOutputFormat.setOutputPath(job,phase1DebugDataPath);
 	    job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 	    job.setNumTasksToExecutePerJvm(1000);
 	    job.setBoolean("mapred.output.compress", false);
@@ -1081,7 +1082,7 @@ public class InverseLinksByDomainDBBuilder extends CrawlDBCustomJob  {
 		}
 		catch (IOException e) { 
 			LOG.error(CCStringUtils.stringifyException(e));
-			fs.delete(phase1DebugDataPath);
+			fs.delete(phase1DebugDataPath,true);
 		}
 	}	
 }

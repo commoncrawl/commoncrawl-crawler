@@ -28,6 +28,7 @@ import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.file.tfile.TFile;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -272,7 +273,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       for (FileStatus candidate : candidates) {
         if (!candidate.getPath().toString().endsWith(".log")) {
           LOG.info("Adding Path:" + candidate.getPath());
-          job.addInputPath(candidate.getPath());
+          FileInputFormat.addInputPath(job,candidate.getPath());
         }
       }
 
@@ -285,7 +286,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setOutputFormat(SequenceFileOutputFormat.class);
       job.setReducerClass(IdentityReducer.class);
       job.setNumTasksToExecutePerJvm(1000);
-      job.setOutputPath(outputPath);
+      FileOutputFormat.setOutputPath(job,outputPath);
       job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 
       LOG.info("Running  " + getJobDescription() + " OutputDir:" + outputPath);
@@ -369,7 +370,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setJobName(getJobDescription() + " - Generate SubDomain TFile");
 
       // add seed db as input
-      job.addInputPath(subDomainStatsRaw);
+      FileInputFormat.addInputPath(job,subDomainStatsRaw);
 
       job.setInputFormat(SequenceFileInputFormat.class);
       job.setMapOutputKeyClass(LongWritable.class);
@@ -380,7 +381,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setOutputFormat(NullOutputFormat.class);
       job.setReducerClass(SubDomainMetadataDomainIdToIndexWriter.class);
       job.setNumTasksToExecutePerJvm(1000);
-      job.setOutputPath(subDomainFinalTemp);
+      FileOutputFormat.setOutputPath(job,subDomainFinalTemp);
       job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 
       LOG.info("Running  " + getJobDescription() + " OutputDir:" + subDomainFinalTemp);
@@ -408,7 +409,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setJobName(getJobDescription() + " - Generate SubDomain Name to Metadata Index");
 
       // add seed db as input
-      job.addInputPath(subDomainStatsRaw);
+      FileInputFormat.addInputPath(job,subDomainStatsRaw);
 
       job.setInputFormat(SequenceFileInputFormat.class);
       job.setMapOutputKeyClass(Text.class);
@@ -419,7 +420,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setOutputFormat(NullOutputFormat.class);
       job.setReducerClass(SubDomainMetadataNameToIndexWriter.class);
       job.setNumTasksToExecutePerJvm(1000);
-      job.setOutputPath(subDomainFinalTemp);
+      FileOutputFormat.setOutputPath(job,subDomainFinalTemp);
       job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
 
       LOG.info("Running  " + getJobDescription() + " OutputDir:" + subDomainFinalTemp);
@@ -671,7 +672,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
     job.setJobName(getJobDescription() + " - Generate Domain List Intermediate");
 
     // add seed db as input
-    job.addInputPath(urlSeedPath);
+    FileInputFormat.addInputPath(job,urlSeedPath);
 
     job.setInputFormat(SequenceFileInputFormat.class);
     job.setMapOutputKeyClass(Text.class);
@@ -682,7 +683,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
     job.setCombinerClass(SeedDatabaseToHostNameCombiner.class);
     job.setReducerClass(SeedDatabaseToHostNameReducer.class);
     job.setNumTasksToExecutePerJvm(1000);
-    job.setOutputPath(outputPath);
+    FileOutputFormat.setOutputPath(job,outputPath);
 
     LOG.info("Running  " + getJobDescription() + " OutputDir:" + outputPath);
     JobClient.runJob(job);
@@ -782,9 +783,9 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setJobName(getJobDescription() + " - Merge Metadata");
 
       // add prior job outputs
-      // job.addInputPath(urldbSeedPath);
-      job.addInputPath(crawlDBPath);
-      job.addInputPath(s3Metadata);
+      // FileInputFormat.addInputPath(job,urldbSeedPath);
+      FileInputFormat.addInputPath(job,crawlDBPath);
+      FileInputFormat.addInputPath(job,s3Metadata);
 
       // set node affinity ...
       String affinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(FileSystem.get(job), crawlDBPath, null);
@@ -803,7 +804,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
       job.setOutputValueClass(NullWritable.class);
       job.setOutputFormat(NullOutputFormat.class);
       job.setPartitionerClass(MultiFileMergePartitioner.class);
-      job.setOutputPath(outputPath);
+      FileOutputFormat.setOutputPath(job,outputPath);
       job.setNumReduceTasks(92);
       job.setNumTasksToExecutePerJvm(1000);
 
@@ -833,7 +834,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
     Path crawlDBPath = new Path("crawl/crawldb/current");
 
     // add merged link db as input
-    job.addInputPath(crawlDBPath);
+    FileInputFormat.addInputPath(job,crawlDBPath);
 
     // set node affinity
     String nodeAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs, affinityPath, null);
@@ -848,7 +849,7 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
     job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setOutputKeyClass(URLFPV2.class);
     job.setOutputValueClass(CrawlDatum.class);
-    job.setOutputPath(outputPath);
+    FileOutputFormat.setOutputPath(job,outputPath);
     job.setNumReduceTasks(92);
     job.setNumTasksToExecutePerJvm(1000);
     job.setCompressMapOutput(false);
@@ -1370,7 +1371,9 @@ public class MetadataIndexBuilderV2 extends CrawlDBCustomJob {
         } else {
           LOG.info("Scanning:" + hdfsPath);
           inputStream = remoteFS.open(hdfsPath);
-          length = remoteFS.getLength(hdfsPath);
+          FileStatus status = remoteFS.getFileStatus(hdfsPath);
+          if (status != null) 
+            length = status.getLen();
           LOG.info("Using HDFS Stream");
         }
 

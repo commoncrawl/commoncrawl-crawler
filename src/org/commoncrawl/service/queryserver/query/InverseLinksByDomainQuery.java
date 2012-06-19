@@ -121,7 +121,7 @@ public class InverseLinksByDomainQuery extends Query<InlinksByDomainQueryInfo,Fl
 					
 								FSDataInputStream indexDataInputStream = fs.open(indexFilePath);
 								try { 
-									TFile.Reader reader = new TFile.Reader(indexDataInputStream,fs.getLength(indexFilePath),conf);
+									TFile.Reader reader = new TFile.Reader(indexDataInputStream,fs.getFileStatus(indexFilePath).getLen(),conf);
 									try { 
 										TFile.Reader.Scanner scanner = reader.createScanner();
 										
@@ -383,8 +383,8 @@ public class InverseLinksByDomainQuery extends Query<InlinksByDomainQueryInfo,Fl
     
     LOG.info("executeLocal called. Domain:" + getQueryData().getDomainName() + " cacheFilename:" + localURLListPath);
     
-    localFS.delete(localURLListPath);
-    localFS.delete(localURLListIndexPath);		
+    localFS.delete(localURLListPath,false);
+    localFS.delete(localURLListIndexPath,false);		
     
     String queryDomain = getQueryData().getDomainName();
     

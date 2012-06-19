@@ -37,7 +37,7 @@ public class SequenceFileUtils {
   
   @SuppressWarnings({ "unchecked", "deprecation" })
   public static Class sniffValueTypeFromSequenceFile(FileSystem fs,Configuration conf,Path path)throws IOException { 
-    if (fs.isDirectory(path)) { 
+    if (fs.exists(path) && fs.getFileStatus(path).isDir()) { 
       path = new Path(path,"part-00000");
     }
 

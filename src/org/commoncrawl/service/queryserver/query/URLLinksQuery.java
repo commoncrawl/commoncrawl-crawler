@@ -128,8 +128,8 @@ public class URLLinksQuery extends Query<URLLinkDetailQueryInfo,Writable,Writabl
       Path localURLListPath = new Path(getLocalQueryResultsPathPrefix(requestObject)+"DATA");
       Path localURLListIndexPath = new Path(getLocalQueryResultsPathPrefix(requestObject)+"DATA.index");
       
-      localFS.delete(localURLListPath);
-      localFS.delete(localURLListIndexPath);
+      localFS.delete(localURLListPath,false);
+      localFS.delete(localURLListIndexPath,false);
 
       if (getQueryData().getQueryType() == URLLinkDetailQueryInfo.QueryType.LINKS_QUERY || getQueryData().getQueryType() == URLLinkDetailQueryInfo.QueryType.INVERSE_QUERY) { 
       	recordCount = runOutlinkLocalQuery(remoteFileSystem,remoteFilePath,localFS,localURLListPath);
@@ -145,7 +145,7 @@ public class URLLinksQuery extends Query<URLLinkDetailQueryInfo,Writable,Writabl
     
   	long recordCount = 0L;
   	
-    outputFileSystem.delete(outlinksOutputPath);
+    outputFileSystem.delete(outlinksOutputPath,false);
     
     FSDataInputStream remoteInputStream = inputFileSystem.open(outlinksInputPath);
     
@@ -192,8 +192,8 @@ public class URLLinksQuery extends Query<URLLinkDetailQueryInfo,Writable,Writabl
     
   	long recordCount = 0L;
   	
-    outputFileSystem.delete(inlinksDomainIndexPath);
-    outputFileSystem.delete(inlinksDetailOutputPath);
+    outputFileSystem.delete(inlinksDomainIndexPath,false);
+    outputFileSystem.delete(inlinksDetailOutputPath,false);
     
     FSDataInputStream remoteInputStream = inputFileSystem.open(inlinksInputPath);
     
@@ -495,7 +495,7 @@ public class URLLinksQuery extends Query<URLLinkDetailQueryInfo,Writable,Writabl
   		LOG.error(CCStringUtils.stringifyException(e));
   		outputStream.close();
   		outputStream = null;
-  		fileSystem.delete(remoteFilePath);
+  		fileSystem.delete(remoteFilePath,false);
   	}
   	finally { 
   		if (outputStream != null) { 
@@ -642,7 +642,7 @@ public class URLLinksQuery extends Query<URLLinkDetailQueryInfo,Writable,Writabl
 		    //LOG.info("Calling ReadPaginationResults");
 		    readPaginatedResults(
 		    		masterIndex, 
-		    		inputStream, localFileSystem.getLength(cacheDataFileName),
+		    		inputStream, localFileSystem.getFileStatus(cacheDataFileName).getLen(),
 		        theClientRequest.getClientQueryInfo().getSortOrder(),
 		        theClientRequest.getClientQueryInfo().getPaginationOffset(),
 		        theClientRequest.getClientQueryInfo().getPageSize(),

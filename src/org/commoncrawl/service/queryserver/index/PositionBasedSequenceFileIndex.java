@@ -96,7 +96,7 @@ public class PositionBasedSequenceFileIndex<KeyType extends WritableComparable,V
   	_fileSystem = fileSystem; 
     _indexFileName = indexFilePath;
     
-    if (!_fileSystem.exists(_indexFileName) || _fileSystem.isDirectory(_indexFileName)) {
+    if (!_fileSystem.exists(_indexFileName) || _fileSystem.getFileStatus(_indexFileName).isDir()) {
       throw new IOException("Index Path:" + indexFilePath + " Points to Invalid File");
     }
     else { 
@@ -295,7 +295,7 @@ public class PositionBasedSequenceFileIndex<KeyType extends WritableComparable,V
   
   private ByteBuffer loadStreamIntoMemory(Path streamPath)throws IOException { 
     //LOG.info("Loading Stream:" + streamPath.getAbsolutePath());
-    if (!_fileSystem.exists(streamPath) || _fileSystem.isDirectory(streamPath)) {
+    if (!_fileSystem.exists(streamPath) || _fileSystem.getFileStatus(streamPath).isDir()) {
       throw new IOException("Stream Path:" + streamPath + " Points to Invalid File");
     }
     else { 
@@ -304,7 +304,7 @@ public class PositionBasedSequenceFileIndex<KeyType extends WritableComparable,V
       try { 
         
         //LOG.info("Allocating Buffer of size:" + streamPath.length() + " for Stream:" + streamPath.getAbsolutePath());
-        bufferOut = ByteBuffer.allocate((int) _fileSystem.getLength(streamPath));
+        bufferOut = ByteBuffer.allocate((int) _fileSystem.getFileStatus(streamPath).getLen());
         inputStream = _fileSystem.open(streamPath);
         long loadStart = System.currentTimeMillis();
         for (int offset=0,totalRead=0;offset<bufferOut.capacity();) { 
@@ -361,7 +361,7 @@ public class PositionBasedSequenceFileIndex<KeyType extends WritableComparable,V
     
     public PositionBasedIndexWriter(FileSystem fileSystem,Path indexFilePath)throws IOException {
     	_fileSystem = fileSystem;
-    	_fileSystem.delete(indexFilePath);
+    	_fileSystem.delete(indexFilePath,false);
       _indexFileName = indexFilePath;
       _tempFileName = File.createTempFile("indexTmp", Long.toString(System.currentTimeMillis()));
       _indexFile = new RandomAccessFile(_tempFileName,"rw");

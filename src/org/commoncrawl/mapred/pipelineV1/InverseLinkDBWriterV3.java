@@ -27,6 +27,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -233,7 +234,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
         while (linkDBParts.size() != 0) {
           Path pathToProcess = linkDBParts.remove(0);
           LOG.info("Processing Part:" + pathToProcess);
-          job.addInputPath(pathToProcess);
+          FileInputFormat.addInputPath(job,pathToProcess);
           if (++partCount == PARTS_TO_PROCESS_EVERY_ITERATION) {
             break;
           }
@@ -245,7 +246,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
             "mapred.temp.dir", ".")
             + "/generate-temp-" + tempDirSeed);
         // set output path ...
-        job.setOutputPath(tempOutputDir);
+        FileOutputFormat.setOutputPath(job,tempOutputDir);
         // add it to output paths list ...
         inverseLinkDBPaths.add(tempOutputDir);
 
@@ -259,7 +260,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
         job.setOutputFormat(SequenceFileOutputFormat.class);
         job.setOutputKeyClass(URLFPV2.class);
         job.setOutputValueClass(BytesWritable.class);
-        job.setOutputPath(tempOutputDir);
+        FileOutputFormat.setOutputPath(job,tempOutputDir);
         job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
         job.setNumTasksToExecutePerJvm(1000);
         job.setCompressMapOutput(false);
@@ -283,7 +284,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
 
     // add prior job outputs
     for (Path path : inverseLinkDBPaths) {
-      job.addInputPath(path);
+      FileInputFormat.addInputPath(job,path);
     }
 
     // set node affinity ...
@@ -307,7 +308,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
     job.setOutputValueClass(CrawlURLMetadata.class);
     job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setPartitionerClass(MultiFileMergePartitioner.class);
-    job.setOutputPath(tempOutputDir);
+    FileOutputFormat.setOutputPath(job,tempOutputDir);
     job.setNumReduceTasks(CrawlEnvironment.NUM_DB_SHARDS);
     job.setNumTasksToExecutePerJvm(1000);
 
@@ -627,8 +628,8 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
 
         BytesWritable intermediateRecord = values.next();
 
-        valueReader.reset(intermediateRecord.get(), 0, intermediateRecord
-            .getSize());
+        valueReader.reset(intermediateRecord.getBytes(), 0, intermediateRecord
+            .getLength());
 
         while (valueReader.getPosition() != valueReader.getLength()) {
 
@@ -768,7 +769,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
     public void map(URLFPV2 sourceFP, BytesWritable value,
         OutputCollector<URLFPV2, BytesWritable> output, Reporter reporter)
         throws IOException {
-      if (value.getSize() == 0) {
+      if (value.getLength() == 0) {
         reporter.incrCounter(Counters.EMPTY_LINLK_LIST, 1);
       } else {
 
@@ -778,7 +779,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
 
         // iterate list
         DataInputBuffer inputStream = new DataInputBuffer();
-        inputStream.reset(value.get(), 0, value.getSize());
+        inputStream.reset(value.getBytes(), 0, value.getLength());
 
         CompressedURLFPListV2.Reader reader = new CompressedURLFPListV2.Reader(inputStream);
 

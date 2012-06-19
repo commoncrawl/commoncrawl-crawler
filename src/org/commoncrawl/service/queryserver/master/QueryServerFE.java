@@ -1524,7 +1524,7 @@ public class QueryServerFE {
         FSDataInputStream indexInputStream = CrawlEnvironment.getDefaultFileSystem().open(shardedDataLocation);
         
 				try { 
-    			TFile.Reader reader = new TFile.Reader(indexInputStream,CrawlEnvironment.getDefaultFileSystem().getLength(shardedDataLocation),CrawlEnvironment.getHadoopConfig());
+    			TFile.Reader reader = new TFile.Reader(indexInputStream,CrawlEnvironment.getDefaultFileSystem().getFileStatus(shardedDataLocation).getLen(),CrawlEnvironment.getHadoopConfig());
     			try { 
     				TFile.Reader.Scanner scanner = reader.createScanner();
 

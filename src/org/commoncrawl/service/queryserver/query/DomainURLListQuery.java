@@ -173,7 +173,7 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
     	
     	LocalFileSystem localFS = FileSystem.getLocal(conf);
       Path localURLListPath = new Path(getLocalQueryResultsPathPrefix(request)+getURLOutputFileNameBasedOnSortByField(request.getClientQueryInfo().getSortByField()));
-      localFS.delete(localURLListPath);
+      localFS.delete(localURLListPath,false);
       LOG.info("Copying " + remoteURLListPath + " to LocalPath:"  + localURLListPath);
       fileSystem.copyToLocalFile(remoteURLListPath, localURLListPath);
     }
@@ -276,7 +276,7 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
 	    readPaginatedResults(
 	    		masterIndex, 
 	    		getQueryData().getDomainId(), 
-	    		inputStream, localFileSystem.getLength(outputFileName),
+	    		inputStream, localFileSystem.getFileStatus(outputFileName).getLen(),
 	    		theClientRequest.getClientQueryInfo().getSortByField(),
 	        theClientRequest.getClientQueryInfo().getSortOrder(),
 	        theClientRequest.getClientQueryInfo().getPaginationOffset(),
