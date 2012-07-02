@@ -24,6 +24,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
@@ -566,7 +567,7 @@ public class QueryServerFE {
           throw new IOException("name parameter not specified!");
         }
         else { 
-        	urlName = URLDecoder.decode(urlName);
+        	urlName = URLDecoder.decode(urlName,"UTF-8");
         }
 
         // compute fingerprint for given url 
@@ -909,7 +910,7 @@ public class QueryServerFE {
           return;
         }
         
-        urlName = URLDecoder.decode(urlName);
+        urlName = URLDecoder.decode(urlName,"UTF-8");
         
       	URLFPV2 fingerprint = URLUtils.getURLFPV2FromURL(urlName);
       	
@@ -1490,7 +1491,7 @@ public class QueryServerFE {
           throw new IOException("name parameter not specified!");
         }
         else { 
-        	domainName = URLDecoder.decode(domainName);
+        	domainName = URLDecoder.decode(domainName,"UTF-8");
         }
 
         // compute fingerprint for given url 

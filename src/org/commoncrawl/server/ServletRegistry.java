@@ -59,7 +59,7 @@ public abstract class ServletRegistry {
       for (File file : files) {
         if (!file.isDirectory()) {
           // LOG.info("Adding ClassPath Entry:" + file.toURL().toString());
-          urlListOut.add(file.toURL());
+          urlListOut.add(file.toURI().toURL());
         } else {
           addClassPathEntries(file, urlListOut);
         }
@@ -95,7 +95,7 @@ public abstract class ServletRegistry {
     // LOG.info("Classes Root is:" + classesRoot);
     try {
       ArrayList<URL> urls = new ArrayList<URL>();
-      urls.add(new File(classesRoot).toURL());
+      urls.add(new File(classesRoot).toURI().toURL());
       LOG.info("URL is:" + urls.get(0).toString());
 
       addClassPathEntries(new File(classesRoot, "lib"), urls);

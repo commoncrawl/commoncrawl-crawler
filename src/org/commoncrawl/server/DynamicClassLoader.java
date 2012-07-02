@@ -42,8 +42,8 @@ public class DynamicClassLoader extends URLClassLoader {
     if (files != null) {
       for (File file : files) {
         if (!file.isDirectory()) {
-          LOG.info("Adding ClassPath Entry:" + file.toURL().toString());
-          urlListOut.add(file.toURL());
+          LOG.info("Adding ClassPath Entry:" + file.toURI().toURL().toString());
+          urlListOut.add(file.toURI().toURL());
         } else {
           addClassPathEntries(file, urlListOut);
         }
@@ -54,7 +54,7 @@ public class DynamicClassLoader extends URLClassLoader {
   public static DynamicClassLoader loaderFromProjectRoot(File projectRoot, ClassLoader parent) {
     try {
       ArrayList<URL> urls = new ArrayList<URL>();
-      urls.add(projectRoot.toURL());
+      urls.add(projectRoot.toURI().toURL());
 
       LOG.info("Project Root is:" + urls.get(0).toString());
       addClassPathEntries(new File(projectRoot, "lib"), urls);
