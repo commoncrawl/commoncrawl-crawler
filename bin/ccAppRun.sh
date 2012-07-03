@@ -152,73 +152,10 @@ fi
 JAVA_LIBRARY_PATH="${JAVA_LIBRARY_PATH}:${CCAPP_SQLITE_LIBRARYPATH}"
 echo "JAVA_LIBRARY_PATH:$JAVA_LIBRARY_PATH"
 
-# figure out which class to run
-if [ "$CCAPP_NAME" = "db" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.database.CrawlDBServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "master" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.master.CrawlMasterServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "crawler" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.crawler.CrawlerServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "qmaster" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.queryserver.master.MasterServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "qslave" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.queryserver.slave.SlaveServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "prslave" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.pagerank.slave.PageRankSlaveServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "prmaster" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.pagerank.master.PageRankMaster'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "dservice" ] ; then
-  CCAPP_CLASS='org.commoncrawl.directoryservice.DirectoryServiceServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "dnsservice" ] ; then
-  CCAPP_CLASS='org.commoncrawl.dnsservice.DNSServiceServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "crawlerproxy" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.crawler.tests.TestHarness'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "proxyserviceProd" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.proxy.ProxyServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "proxyserviceDbg" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.proxy.ProxyServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "crawlhistory" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.crawler.history.CrawlHistoryServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "statsservice" ] ; then
-  CCAPP_CLASS='org.commoncrawl.statsservice.StatsServiceServer'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-elif [ "$CCAPP_NAME" = "crawlstats" ] ; then
-  CCAPP_CLASS='org.commoncrawl.crawl.statscollector.CrawlStatsCollectorService'
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=1
-else
-  CCAPP_CLASS=$CCAPP_NAME
-  CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
-  CCAPP_IS_CC_SERVER=0
-  CCAPP_ROOT_LOGGER="INFO,console,DRFA"
-fi
+# set app class name
+CCAPP_CLASS=$CCAPP_NAME
+CCAPP_VMARGS="-Dcom.sun.management.jmxremote $CCAPP_VMARGS" 
+CCAPP_ROOT_LOGGER="INFO,console,DRFA"
 
 if [ -e /dev/jdk_urandom_hack ]; then
 	echo "**************************************"

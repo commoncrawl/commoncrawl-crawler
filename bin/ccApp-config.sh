@@ -76,6 +76,7 @@ CCAPP_NODEFAULTARGS=""
 CCAPP_NOHUP=1
 CCAPP_GDB=""
 CCAPP_JAR_IN_CLASSPATH=0
+CCAPP_IS_CC_SERVER=0
 
 #check to see if the conf dir is given as an optional argument
 while [ $# -gt 2 ]; do
@@ -138,6 +139,9 @@ while [ $# -gt 2 ]; do
         shift
 	      CCAPP_WEB_PORT=$1
 	      shift
+    elif [ "--ccServer" = "$1" ]; then
+        shift
+              CCAPP_IS_CC_SERVER=1
     elif [ "--noDefaultArgs" = "$1" ]; then
         shift
 	      CCAPP_NODEFAULTARGS=1
