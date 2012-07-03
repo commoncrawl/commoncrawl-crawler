@@ -17,10 +17,12 @@
  **/
 package org.commoncrawl.service.parser.server;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -55,7 +57,12 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.io.ByteProcessor;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.InputSupplier;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.internal.Streams;
+import com.google.gson.stream.JsonWriter;
+
 
 /**
  * 
@@ -146,8 +153,15 @@ public class ParseWorker implements DocumentBuilder {
     parseResultOut.setParseSuccessful(false);
     this.baseURL = baseURL;
     try {
+
+      String mozillaLibPath = System.getenv().get("MOZILLA_LIB_PATH");
+      System.out.println("Mozilla Location:" + mozillaLibPath);
+      if (mozillaLibPath == null || !new File(mozillaLibPath).isDirectory()) { 
+        throw new IOException("Invalid Mozilla Root:" + mozillaLibPath);
+      }
+
       // init parser ... 
-      MozillaParser.init(null, "/usr/local/lib");
+      MozillaParser.init(null,mozillaLibPath);
       
       MozillaParser parser;
       
@@ -185,8 +199,13 @@ public class ParseWorker implements DocumentBuilder {
     
     if (data.getCount() != 0) { 
       try {
+        String mozillaLibPath = System.getenv().get("MOZILLA_LIB_PATH");
+        System.out.println("Mozilla Location:" + mozillaLibPath);
+        if (mozillaLibPath == null || !new File(mozillaLibPath).isDirectory()) { 
+          throw new IOException("Invalid Mozilla Root:" + mozillaLibPath);
+        }
         // init parser ... 
-        MozillaParser.init(null, "/usr/local/lib");
+        MozillaParser.init(null, mozillaLibPath);
         // load headers ... 
         NIOHttpHeaders headers = NIOHttpHeaders.parseHttpHeaders(rawHeaders);
         // detect content type ... 
@@ -268,17 +287,29 @@ public class ParseWorker implements DocumentBuilder {
     
   public static void main(String[] args) throws IOException {
     String baseURL = "http://unknown.com/";
+    NIOHttpHeaders headers = null;
     if (args.length != 0) { 
-      baseURL = args[0];
+      for (int i=0;i<args.length;++i) { 
+        if (args[i].equalsIgnoreCase("--noHeaders")) { 
+          headers = new NIOHttpHeaders();
+          headers.add("content-type", "text/html");
+        }
+        else if (args[i].equalsIgnoreCase("--baseURL")) { 
+          baseURL = args[++i];
+        }
+      }
     }
     URL baseURLObj;
     try {
       baseURLObj = new URL(baseURL);
     } catch (MalformedURLException e2) {
+      LOG.error(CCStringUtils.stringifyException(e2));
       throw new IOException("Invalid Base Link");
     }
+
     final DataOutputBuffer headerBuffer = new DataOutputBuffer();
     final DataOutputBuffer contentBuffer = new DataOutputBuffer();
+    final boolean processHeaders = (headers == null);
     
     try {
       ByteStreams.readBytes(
@@ -297,7 +328,7 @@ public class ParseWorker implements DocumentBuilder {
         }
 
         int currLineCharCount = 0;
-        boolean processingHeaders = true;
+        boolean processingHeaders = processHeaders;
         @Override
         public boolean processBytes(byte[] buf, int start, int length)
             throws IOException {
@@ -333,9 +364,7 @@ public class ParseWorker implements DocumentBuilder {
         }
       });
       
-      //LOG.info("HEADER LEN:" + headerBuffer.getLength());
-      // System.out.println(new String(headerBuffer.getData(),0,headerBuffer.getLength(),Charset.forName("UTF-8")));
-      //LOG.info("CONTENT LEN:" + contentBuffer.getLength());
+      LOG.info("CONTENT LEN:" + contentBuffer.getLength());
       //System.out.println(new String(contentBuffer.getData(),0,contentBuffer.getLength(),Charset.forName("UTF-8")));
       // decode header bytes ... 
       String header = "";
@@ -348,31 +377,34 @@ public class ParseWorker implements DocumentBuilder {
           header = new String(headerBuffer.getData(),0,headerBuffer.getLength(),Charset.forName("ASCII"));
         }
       }
+      else { 
+        if (headers != null) { 
+          header = headers.toString();
+        }
+      }
+      LOG.info("HEADER LEN:" + header.length());
+      System.out.println(header);
       
       //LOG.info("Parsing Document");
       ParseWorker worker = new ParseWorker();
       ParseResult result = new ParseResult();
       worker.parseDocument(result,0L,0L,baseURLObj,header,new FlexBuffer(contentBuffer.getData(),0,contentBuffer.getLength()));
-      //LOG.info("Parse Result:" + result.getParseSuccessful()); 
-      //LOG.info("Parse Data:" + result.toString());  
+      LOG.info("Parse Result:" + result.getParseSuccessful()); 
+      //LOG.info("Parse Data:" + result.toString());
       
+      JsonParser parser = new JsonParser();
+      JsonElement resultObj = parser.parse(result.toString());
+      JsonWriter writer = new JsonWriter(new OutputStreamWriter(System.out, "UTF-8"));
+      writer.setIndent("    ");
+      writer.setHtmlSafe(true);
+      writer.setLenient(true);
+      Streams.write(resultObj, writer);
+      writer.flush();      
       
     } catch (IOException e1) {
       // TODO Auto-generated catch block
       e1.printStackTrace();
     }
-    /*
-    List<String> lines;
-    try {
-      lines = IOUtils.readLines(System.in, "UTF-8");
-      for (String line : lines){ 
-        System.out.println(line);
-      }
-
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }*/
   }
 
   int inHeadTag = 0;
