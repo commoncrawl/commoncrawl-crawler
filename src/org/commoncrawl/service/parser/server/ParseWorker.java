@@ -540,7 +540,7 @@ public class ParseWorker implements DocumentBuilder {
               meta.setValue(value);
             }
             else if (validMetaTagKeys.contains(key)) { 
-              meta.setName(key);
+              meta.setName(value);
             }
           }
 
