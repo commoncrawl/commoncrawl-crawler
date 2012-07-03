@@ -186,14 +186,6 @@ while [ $# -gt 2 ]; do
 done
 
 if [ -z $1 ]; then
-  echo "action not specified (start/stop)"
-  exit 1;
-else
-  CCAPP_ACTION=$1
-  shift
-fi
-	
-if [ -z $1 ]; then
   echo "app name not specified"
   exit 1;
 else
@@ -201,6 +193,15 @@ else
   shift
 fi
 
+
+if [ -z $1 ]; then
+  echo "action not specified (start/stop)"
+  exit 1;
+else
+  CCAPP_ACTION=$1
+  shift
+fi
+	
 CCAPP_ARGS2=$@
 echo ARGS2:$CCAPP_ARGS2
 # Allow alternate conf dir location.
