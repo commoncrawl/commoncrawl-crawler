@@ -39,18 +39,19 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.record.Buffer;
 import org.apache.hadoop.util.Progressable;
-import org.commoncrawl.mapred.ArcFileContentItem;
 import org.commoncrawl.io.NIOHttpHeaders;
+import org.commoncrawl.mapred.ArcFileContentItem;
 import org.commoncrawl.protocol.ArchiveInfo;
 import org.commoncrawl.protocol.ParseOutput;
 import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 import org.commoncrawl.protocol.shared.ArcFileItem;
-import org.commoncrawl.protocol.shared.CrawlMetadata;
 import org.commoncrawl.util.ArcFileWriter;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.FlexBuffer;
-import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.ArcFileWriter.CompressedStream;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /** 
  * OutputFormat that splits the output from the ParseMapper into a bunch of 
@@ -85,8 +86,6 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
   public static final String METADATA_FILE_PREFIX   = "metadata-";
   public static final String TEXTDATA_FILE_PREFIX   = "textData-";
   public static final String ARC_FILE_PREFIX        = "arcContent-";
-  public static final String ARCMETA_FILE_PREFIX    = "arcMetadata-";
-  public static final String RAW_FILE_PREFIX    = "rawContent-";
   
   private  static NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
   static { 
@@ -104,8 +103,6 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
     int _partition;
     SequenceFile.Writer _metadataWriter = null;
     SequenceFile.Writer _textWriter = null;
-    SequenceFile.Writer _arcMetaWriter = null;
-    SequenceFile.Writer _contentWriter = null;
     ArcFileWriter       _arcWriter = null;
     
     public MultiFileRecordWriter(FileSystem fs,JobConf conf,String name,Progressable progress)throws IOException {
@@ -120,15 +117,13 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
       
       final Path metadataPath = new Path(outputPath,METADATA_FILE_PREFIX + NUMBER_FORMAT.format(_partition));
       final Path textContentPath = new Path(outputPath,TEXTDATA_FILE_PREFIX + NUMBER_FORMAT.format(_partition));
-      final Path arcMetadataPath = new Path(outputPath,ARCMETA_FILE_PREFIX + NUMBER_FORMAT.format(_partition));
-      final Path rawContentPath = new Path(outputPath,RAW_FILE_PREFIX + NUMBER_FORMAT.format(_partition));
       
       _metadataWriter = SequenceFile.createWriter(
           fs, 
           conf, 
           metadataPath, 
-          TextBytes.class, 
-          TextBytes.class, 
+          Text.class, 
+          Text.class, 
           65536*10,
           fs.getDefaultReplication(), 
           fs.getDefaultBlockSize(),
@@ -142,8 +137,8 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
           fs, 
           conf, 
           textContentPath, 
-          TextBytes.class, 
-          TextBytes.class, 
+          Text.class, 
+          Text.class, 
           65536*10,
           fs.getDefaultReplication(), 
           fs.getDefaultBlockSize(),
@@ -151,37 +146,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
           new SnappyCodec(),          
           progress,
           new Metadata());
-      
-      _arcMetaWriter = SequenceFile.createWriter(
-          fs, 
-          conf, 
-          arcMetadataPath, 
-          TextBytes.class, 
-          ArchiveInfo.class, 
-          fs.getConf().getInt("io.file.buffer.size", 4096),
-          fs.getDefaultReplication(), 
-          fs.getDefaultBlockSize(),
-          CompressionType.BLOCK, 
-          new SnappyCodec(),          
-          progress,
-          new Metadata());
-      
-      
-      _contentWriter = SequenceFile.createWriter(
-          fs, 
-          conf, 
-          rawContentPath, 
-          TextBytes.class, 
-          ParseOutput.class, 
-          65536*10,
-          fs.getDefaultReplication(), 
-          fs.getDefaultBlockSize(),
-          CompressionType.BLOCK, 
-          new GzipCodec(),          
-          progress,
-          new Metadata());
-      
-      
+            
       _arcWriter = new ArcFileWriter(fs,outputPath,_partition,1);
     }
     
@@ -203,24 +168,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
         catch (Exception e) { 
           LOG.error(CCStringUtils.stringifyException(e));
         }
-      }
-      if (_contentWriter != null) { 
-        try { 
-          _contentWriter.close();
-        }
-        catch (Exception e) { 
-          LOG.error(CCStringUtils.stringifyException(e));
-        }
-      }
-      if (_arcMetaWriter != null) { 
-        try { 
-          _arcMetaWriter.close();
-        }
-        catch (Exception e) { 
-          LOG.error(CCStringUtils.stringifyException(e));
-        }
-      }
-      
+      }      
       if (_arcWriter != null) { 
         try { 
           _arcWriter.close(false);
@@ -260,6 +208,18 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
       return item;
     }
     
+    
+    static final byte[] CRLF = "\r\n".getBytes();
+    
+    /**
+     * Build an ArcFileContentItem structure and popuate it's buffer with a 
+     * valid ArcFile entry given the ParseOutput data 
+     *  
+     * @param key
+     * @param parseOutput
+     * @return
+     * @throws IOException
+     */
     ArcFileContentItem buildArcFileItemFromParseOutput(String key,ParseOutput parseOutput)throws IOException {
       
       
@@ -289,6 +249,8 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
 
         // write out the headers ... 
         stream.write(parseOutput.getHeadersAsTextBytes().getBytes(),0,parseOutput.getHeadersAsTextBytes().getLength());
+        // write trailing crlf to signify transition to content 
+        stream.write(CRLF);
         // write out the content 
         stream.write(parseOutput.getRawContent().getReadOnlyBytes(),0,parseOutput.getRawContent().getCount());
         // line separator ... 
@@ -317,62 +279,89 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
       }
     }
     
+    JsonParser _parser = new JsonParser();
+    
     @Override
     public void write(Text key, ParseOutput value) throws IOException {
       String url = key.toString();
-
-      _metadataWriter.append(new TextBytes(key),value.getMetadataAsTextBytes());
-
-      if (value.getTextContentAsTextBytes().getLength() != 0) { 
-        _textWriter.append(new TextBytes(key),value.getTextContentAsTextBytes()); 
-      }
+      
+      // first write out the arc contents 
+      // and store arc offset info in ArchiveInfo struct
+      ArchiveInfo archiveInfo = null;
       
       if (value.getRawContent().getCount() != 0) {
         
         try {
-          
-          value.setFieldClean(ParseOutput.Field_METADATA);
-          value.setFieldClean(ParseOutput.Field_TEXTCONTENT);
-          value.setFieldClean(ParseOutput.Field_MD5HASH);
-          value.setFieldClean(ParseOutput.Field_SIMHASH);
-          value.setCrawlMetadata(new CrawlMetadata());
-          
-          _contentWriter.append(new TextBytes(key),value);
-          
           
           ArcFileContentItem itemOut = buildArcFileItemFromParseOutput(url,value);
           if (itemOut != null) {
             _arcWriter.writeRawArcFileItem(itemOut.getContentType(), itemOut.getContent().getReadOnlyBytes(), itemOut.getContent().getCount());
             
             // construct a record of the write ... 
-            ArchiveInfo info = new ArchiveInfo();
+            archiveInfo = new ArchiveInfo();
   
-            info.setArcfileDate(_arcWriter.getActiveFileTimestamp());
-            info.setArcfileIndex(_partition);
-            info.setArcfileOffset(_arcWriter.getLastItemPos());
-            info.setCompressedSize(itemOut.getContent().getCount());
-            info.setParseSegmentId(-1);
-  
-            if (itemOut.isFieldDirty(ArcFileContentItem.Field_MD5HASH)) { 
-              info.setSignature(new Buffer(itemOut.getMd5Hash().getReadOnlyBytes()));
-            }
-            if (itemOut.isFieldDirty(ArcFileContentItem.Field_SIMHASH)) { 
-              info.setSimhash(itemOut.getSimhash());
-            }
-            _arcMetaWriter.append(new TextBytes(key), info);
+            archiveInfo.setArcfileDate(_arcWriter.getActiveFileTimestamp());
+            archiveInfo.setArcfileIndex(_partition);
+            archiveInfo.setArcfileOffset(_arcWriter.getLastItemPos());
+            archiveInfo.setCompressedSize(itemOut.getContent().getCount());
+            archiveInfo.setParseSegmentId(-1);
           }
-          
         }
         catch (IOException e) { 
           LOG.error(CCStringUtils.stringifyException(e));
           throw e;
         }
+      }
+      
+      Text metadataOutput = null;
+      
+      // if archive info is not null, stir in information into JSON structure ... 
+      if (archiveInfo != null) { 
+        // ok super inefficient, but for the sake of expediency ... 
+        // bump output json back to ucs2, parse it, stir in archive info, and then 
+        // write it back out as utf-8
+        try { 
+          JsonObject archiveJson = new JsonObject();
+          
+          archiveJson.addProperty("arcFileDate",archiveInfo.getArcfileDate());
+          archiveJson.addProperty("arcFileParition",archiveInfo.getArcfileIndex());
+          archiveJson.addProperty("arcFileOffset", archiveInfo.getArcfileOffset());
+          archiveJson.addProperty("compressedSize", archiveInfo.getCompressedSize());
+          
+          JsonObject metadataJSON= _parser.parse(value.getMetadata()).getAsJsonObject();
+          // stir in archive info 
+          metadataJSON.add("archiveInfo",archiveJson);
+          // dump it back out 
+          metadataOutput = new Text(metadataJSON.toString());
+        }
+        catch (Exception e) { 
+          LOG.error(CCStringUtils.stringifyException(e));
+          throw new IOException(e);
+        }
+      }
+      else { 
+        metadataOutput = new Text();
+        // copy in original utf-8 bytes ... 
+        metadataOutput.set(
+            value.getMetadataAsTextBytes().getBytes(),
+            value.getMetadataAsTextBytes().getOffset(),
+            value.getMetadataAsTextBytes().getLength());
+      }
+      
+      // spill metadata output 
+      _metadataWriter.append(key,metadataOutput);
+      
+      // and text output
+      if (value.getTextContentAsTextBytes().getLength() != 0) {
+        Text textBytes = new Text();
         
+        textBytes.set(
+            value.getTextContentAsTextBytes().getBytes(),
+            value.getTextContentAsTextBytes().getOffset(),
+            value.getTextContentAsTextBytes().getLength());
+        
+        _textWriter.append(key,textBytes);
       }
     }
-    
-    
   }
-  
-
 }
