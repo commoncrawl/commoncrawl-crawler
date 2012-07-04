@@ -55,7 +55,7 @@
   <property name="javac.args.warnings" value=""/>
   <!-- native make support -->
   <property name="make.cmd" value="make"/>
-  <property name="cc.native.src.dir" value="${cc.src.root}/native"/>
+  <property name="cc.native.src.dir" value="./src/native"/>
 
   <mkdir dir="${build.dir}"/>
   <mkdir dir="${build.lib.dir}"/>
@@ -317,7 +317,7 @@
     <mkdir dir="${build.native}/src/libGoogleURL"/>
 
     <javah classpath="${build.classes}" destdir="${build.native}/src/libGoogleURL" force="yes" verbose="yes" >
-      <class name="org.commoncrawl.util.shared.GoogleURL" />
+      <class name="org.commoncrawl.util.GoogleURL" />
     </javah>
 	<!--
     <javah classpath="${build.classes}" destdir="${build.native}/src/libGoogleURL" force="yes" verbose="yes" >
@@ -326,7 +326,7 @@
 	-->
 	<echo message="forcing rebuild of Makefiles"/>
     <exec dir="${cc.native.src.dir}" executable="bash" failonerror="true">
-          <arg line='-c "mkdir ./config;aclocal --force;glibtoolize --force;automake --add-missing --force;autoconf;automake"'/>
+          <arg line='-c "mkdir ./config;aclocal --force;libtoolize --force;automake --add-missing --force;autoconf;automake"'/>
     </exec>
 
     <exec dir="${build.native}" executable="sh" failonerror="true">
