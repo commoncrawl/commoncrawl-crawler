@@ -220,7 +220,7 @@ public class EC2ParserTask {
     
     
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
-    jobConf.setInt("mapred.task.timeout", 60 * 60);
+    jobConf.setInt("mapred.task.timeout", 60 * 60 * 1000);
     jobConf.setLong("cc.segmet.id", segmentId);
     jobConf.setOutputCommitter(OutputCommitter.class);
     
