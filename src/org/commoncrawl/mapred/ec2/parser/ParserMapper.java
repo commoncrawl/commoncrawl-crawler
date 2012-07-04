@@ -117,7 +117,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     WROTE_RAW_CONTENT, GOT_UNHANDLED_IO_EXCEPTION,
     GOT_UNHANDLED_RUNTIME_EXCEPTION, MALFORMED_FINAL_URL, GOT_RSS_FEED,
     GOT_ATOM_FEED, TRYING_RSS_FEED_PARSER, EXCEPTION_DURING_FEED_PARSE,
-    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON
+    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT
   }
   
   private static ImmutableSet<String> dontKeepHeaders = ImmutableSet.of(
@@ -877,14 +877,11 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   @Override
   public void map(Text url, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
-    
     if (url.getLength() == 0) { 
       LOG.error("Hit NULL URL. Original URL:" + value.getRedirectURL());
       return;
     }
-    
-    
-    
+        
     try { 
       // allocate parse output 
       ParseOutput parseOutput = new ParseOutput();
@@ -904,6 +901,11 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       catch (MalformedURLException e) { 
         LOG.error("Malformed URL:" + CCStringUtils.stringifyException(e));
         reporter.incrCounter(Counters.MALFORMED_FINAL_URL, 1);
+        return;
+      }
+      
+      if (originalURL.getFile().equals("robots.txt")) { 
+        reporter.incrCounter(Counters.SKIPPING_ROBOTS_TXT, 1);
         return;
       }
       
