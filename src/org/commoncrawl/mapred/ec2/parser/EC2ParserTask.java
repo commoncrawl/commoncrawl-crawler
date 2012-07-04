@@ -215,7 +215,7 @@ public class EC2ParserTask {
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
-      .minSplitSize(134217728*2)
+      .minSplitSize(134217728*4)
       .build();      
 
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
