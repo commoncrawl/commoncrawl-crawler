@@ -144,7 +144,8 @@ module org.commoncrawl.protocol {
     vint  parseSegmentId  = 7;
     buffer signature = 8; // signature of last uploaded item
     vlong simhash = 9;
-    ustring cacheItemSrc = 10;// only valid when imported via cache 
+    ustring cacheItemSrc = 10;// only valid when imported via cache
+    vlong arcSourceSegmentId = 11; // segment in s3 public data set where this arc is located 
   }
   
   // tuple associating a parse segment with 
@@ -1021,6 +1022,7 @@ module org.commoncrawl.protocol {
       buffer  rawContent = 9;
       ustring compactMetadata = 10;
       org.commoncrawl.protocol.shared.CrawlMetadata crawlMetadata = 11;
+      long    destSegmentId = 12;
    }
 
   Service CrawlDBService { 

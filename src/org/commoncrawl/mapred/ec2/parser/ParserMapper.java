@@ -885,6 +885,8 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     try { 
       // allocate parse output 
       ParseOutput parseOutput = new ParseOutput();
+      // initialize segment id in output upfront ... 
+      parseOutput.setDestSegmentId(_segmentId);
       // json object out ... 
       JsonObject jsonObj = new JsonObject();
       // and create a crawl metadata 
@@ -1008,9 +1010,13 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
   }
 
+  long _segmentId;
+  
   @Override
   public void configure(JobConf job) {
     LOG.info("LIBRARY PATH:" + System.getenv().get("LD_LIBRARY_PATH"));
+    _segmentId = job.getLong("cc.segmet.id", -1L);
+    LOG.info("Job Conf says Segment Id is:" + _segmentId);
   }
 
   @Override

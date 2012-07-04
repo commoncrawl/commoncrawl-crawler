@@ -305,6 +305,8 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
             archiveInfo.setArcfileOffset(_arcWriter.getLastItemPos());
             archiveInfo.setCompressedSize(itemOut.getContent().getCount());
             archiveInfo.setParseSegmentId(-1);
+            // pass through destination segment id for this arc file
+            archiveInfo.setArcSourceSegmentId(value.getDestSegmentId());
           }
         }
         catch (IOException e) { 
@@ -323,6 +325,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
         try { 
           JsonObject archiveJson = new JsonObject();
           
+          archiveJson.addProperty("arcSourceSegmentId",archiveInfo.getArcSourceSegmentId());
           archiveJson.addProperty("arcFileDate",archiveInfo.getArcfileDate());
           archiveJson.addProperty("arcFileParition",archiveInfo.getArcfileIndex());
           archiveJson.addProperty("arcFileOffset", archiveInfo.getArcfileOffset());

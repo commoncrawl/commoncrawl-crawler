@@ -215,10 +215,13 @@ public class EC2ParserTask {
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
-      .minSplitSize(134217728*4)
-      .build();      
-
+      .minSplitSize(134217728*8)
+      .build();
+    
+    
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
+    jobConf.setInt("mapred.task.timeout", 60 * 60);
+    jobConf.setLong("cc.segmet.id", segmentId);
     jobConf.setOutputCommitter(OutputCommitter.class);
     
     JobClient.runJob(jobConf);
