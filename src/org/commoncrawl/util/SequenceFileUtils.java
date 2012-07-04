@@ -99,8 +99,9 @@ public class SequenceFileUtils {
   
   public static void main(String[] args)throws IOException {
     Configuration conf = new Configuration();
-    FileSystem fs = FileSystem.get(conf);
-    printContents(fs, conf, new Path(args[0]));
+    Path inputPath = new Path(args[0]);
+    FileSystem fs = FileSystem.get(inputPath.toUri(),conf);
+    printContents(fs, conf, inputPath);
   }
   
 }

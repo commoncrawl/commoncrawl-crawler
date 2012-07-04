@@ -155,10 +155,10 @@ public class ParseWorker implements DocumentBuilder {
     try {
 
       String mozillaLibPath = System.getenv().get("MOZILLA_LIB_PATH");
-      System.out.println("Mozilla Location:" + mozillaLibPath);
       if (mozillaLibPath == null || !new File(mozillaLibPath).isDirectory()) { 
-        throw new IOException("Invalid Mozilla Root:" + mozillaLibPath);
+        mozillaLibPath = "/usr/local/lib";
       }
+      System.out.println("Mozilla Location:" + mozillaLibPath);
 
       // init parser ... 
       MozillaParser.init(null,mozillaLibPath);
@@ -200,10 +200,11 @@ public class ParseWorker implements DocumentBuilder {
     if (data.getCount() != 0) { 
       try {
         String mozillaLibPath = System.getenv().get("MOZILLA_LIB_PATH");
-        System.out.println("Mozilla Location:" + mozillaLibPath);
         if (mozillaLibPath == null || !new File(mozillaLibPath).isDirectory()) { 
-          throw new IOException("Invalid Mozilla Root:" + mozillaLibPath);
+          mozillaLibPath = "/usr/local/lib";
         }
+        System.out.println("Mozilla Location:" + mozillaLibPath);
+
         // init parser ... 
         MozillaParser.init(null, mozillaLibPath);
         // load headers ... 
