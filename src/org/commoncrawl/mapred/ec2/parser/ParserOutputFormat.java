@@ -143,7 +143,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
           fs.getDefaultReplication(), 
           fs.getDefaultBlockSize(),
           CompressionType.BLOCK, 
-          new SnappyCodec(),          
+          new GzipCodec(),          
           progress,
           new Metadata());
             

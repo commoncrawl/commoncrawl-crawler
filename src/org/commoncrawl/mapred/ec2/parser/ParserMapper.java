@@ -906,7 +906,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
         return;
       }
       
-      if (originalURL.getFile().equals("robots.txt")) { 
+      if (originalURL.getPath().endsWith("/robots.txt")) { 
         reporter.incrCounter(Counters.SKIPPING_ROBOTS_TXT, 1);
         return;
       }
