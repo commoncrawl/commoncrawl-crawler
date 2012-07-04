@@ -176,4 +176,10 @@ public class GoogleURL {
   public GoogleURLComponent _ref       = new GoogleURLComponent();
   public String  _canonicalURL = null;
 
+  
+  public static void main(String[] args) {
+    GoogleURL test = new GoogleURL("http://www.google.com/");
+    System.out.print(test.isValid());
+    System.out.print(test.getCanonicalURL());
+  }
 }
