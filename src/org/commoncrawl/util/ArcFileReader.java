@@ -51,6 +51,11 @@ import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 import org.junit.Assert;
 import org.junit.Test;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.record.Buffer;
 import org.apache.hadoop.util.StringUtils;
 
@@ -918,9 +923,7 @@ public final class ArcFileReader extends InflaterInputStream implements
   }
 
   @Test
-  public void testReader(File file) throws Exception {
-
-    checkCRLFStateMachine();
+  public void testReader(InputStream stream) throws IOException {
 
     setIOTimeoutValue(30000);
 
@@ -971,7 +974,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     thread.start();
 
     ReadableByteChannel channel = Channels
-        .newChannel(new FileInputStream(file));
+        .newChannel(stream);
 
     try {
 
@@ -998,20 +1001,28 @@ public final class ArcFileReader extends InflaterInputStream implements
 
     // now wait for thread to die ...
     LOG.info("Done Reading File.... Waiting for ArcFileThread to DIE");
-    thread.join();
+    try {
+      thread.join();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
     LOG.info("Done Reading File.... ArcFileThread to DIED");
   }
 
-  public static void main(String[] args) {
-    File file = new File(args[0]);
-
-    ArcFileReader reader = new ArcFileReader();
-    try {
-      reader.testReader(file);
-    } catch (Exception e) {
-      e.printStackTrace();
+  public static void main(String[] args)throws IOException {
+    Configuration conf = new Configuration();
+    Path inputPath = new Path(args[0]);
+    FileSystem fs = FileSystem.get(inputPath.toUri(),conf);
+    
+    FSDataInputStream stream = fs.open(inputPath);
+    
+    try { 
+      ArcFileReader reader = new ArcFileReader();
+      reader.testReader(stream);
     }
-
+    finally { 
+      stream.close();
+    }
   }
 
 }
