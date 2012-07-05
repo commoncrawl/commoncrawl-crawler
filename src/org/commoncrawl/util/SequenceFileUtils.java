@@ -18,6 +18,7 @@
 package org.commoncrawl.util;
 
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -77,8 +78,10 @@ public class SequenceFileUtils {
               
             }
           }
-          if (!isJSON) { 
-            System.out.print(" Value:" + value.toString());
+          if (!isJSON) {
+            OutputStreamWriter writer = new OutputStreamWriter(System.out, "UTF-8");
+            writer.write(value.toString());
+            writer.flush();
           }
           else { 
             System.out.print("\n");
