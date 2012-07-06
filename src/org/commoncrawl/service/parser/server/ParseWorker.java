@@ -58,6 +58,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.io.ByteProcessor;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.InputSupplier;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -394,8 +395,7 @@ public class ParseWorker implements DocumentBuilder {
       LOG.info("Parse Result:" + result.getParseSuccessful()); 
       //LOG.info("Parse Data:" + result.toString());
       
-      JsonParser parser = new JsonParser();
-      JsonElement resultObj = parser.parse(result.toString());
+      JsonElement resultObj = parseResultToJSON(result);
       JsonWriter writer = new JsonWriter(new OutputStreamWriter(System.out, "UTF-8"));
       writer.setIndent("    ");
       writer.setHtmlSafe(true);
@@ -407,6 +407,60 @@ public class ParseWorker implements DocumentBuilder {
       // TODO Auto-generated catch block
       e1.printStackTrace();
     }
+  }
+  
+  public static final JsonObject parseResultToJSON(ParseResult result) {
+    JsonObject objectOut = new JsonObject();
+    if (result.isFieldDirty(ParseResult.Field_DOMAINID)) {
+      objectOut.addProperty("domainId",result.getDomainId());
+    }
+    if (result.isFieldDirty(ParseResult.Field_DOCID)) {
+      objectOut.addProperty("docId",result.getDocId());
+    }
+    if (result.isFieldDirty(ParseResult.Field_CONTENTTYPE)) {
+      objectOut.addProperty("contentType",result.getContentType().toString());
+    }
+    if (result.isFieldDirty(ParseResult.Field_CONTEXT)) {
+      objectOut.addProperty("context",result.getContext().toString());
+    }
+    if (result.isFieldDirty(ParseResult.Field_PARSESUCCESSFUL)) {
+      objectOut.addProperty("parseSuccessful",result.getParseSuccessful());
+    }
+    if (result.isFieldDirty(ParseResult.Field_PARSEFAILUREREASON)) {
+      objectOut.addProperty("parseFailureReason",result.getParseFailureReason());
+    }
+    if (result.isFieldDirty(ParseResult.Field_TITLE)) {
+      objectOut.addProperty("title",result.getTitle());
+    }
+    if (result.getMetaTags().size() != 0) {
+      JsonArray metaTagArray = new JsonArray();
+      
+      for(int vidx0 = 0; vidx0<result.getMetaTags().size();vidx0++) {
+        JsonObject metaTagJSON = new JsonObject();
+        HTMLMeta htmlMeta = result.getMetaTags().get(vidx0);
+        for (HTMLMetaAttribute attribute : htmlMeta.getAttributes()) { 
+          metaTagJSON.addProperty(attribute.getName(),attribute.getValue());
+        }
+        metaTagArray.add(metaTagJSON);
+      }
+      objectOut.add("meta_tags", metaTagArray);
+    }
+    if (result.getExtractedLinks().size() != 0) {
+      JsonArray extractedLinksArray = new JsonArray();
+      
+      for(int vidx0 = 0; vidx0<result.getExtractedLinks().size();vidx0++) {
+        JsonObject extractedLinkJSON = new JsonObject();
+        Link link = result.getExtractedLinks().get(vidx0);
+        extractedLinkJSON.addProperty("url",link.getUrl());
+        extractedLinkJSON.addProperty("attributes",link.getAttributes());
+        extractedLinksArray.add(extractedLinkJSON);
+      }
+      objectOut.add("extracted_links", extractedLinksArray);
+    }
+    if (result.isFieldDirty(ParseResult.Field_TEXT)) {
+      objectOut.addProperty("text",result.getText().toString());
+    }
+    return objectOut;
   }
 
   int inHeadTag = 0;
