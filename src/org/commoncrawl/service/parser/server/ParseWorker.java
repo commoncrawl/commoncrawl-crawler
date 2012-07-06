@@ -175,6 +175,7 @@ public class ParseWorker implements DocumentBuilder {
         // set content type ... 
         parseResultOut.setContentType("text/html");
         parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t]+", " "));
+        parseResultOut.setText(textAccumulator.toString().replaceAll("[\\n]+", "\n"));
         parseResultOut.setParseSuccessful(true);
       } catch (ParserInitializationException e) {
         LOG.error(CCStringUtils.stringifyException(e));
@@ -262,6 +263,7 @@ public class ParseWorker implements DocumentBuilder {
             // set content type ... 
             parseResultOut.setContentType(contentTypeInfo._contentType);
             parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t]+", " "));
+            parseResultOut.setText(textAccumulator.toString().replaceAll("[\\n]+", "\n"));
             parseResultOut.setParseSuccessful(true);
           } catch (ParserInitializationException e) {
             LOG.error(CCStringUtils.stringifyException(e));
