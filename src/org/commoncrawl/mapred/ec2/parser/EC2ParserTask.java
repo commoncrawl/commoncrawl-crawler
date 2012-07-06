@@ -77,7 +77,7 @@ public class EC2ParserTask {
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
-  static final int MAX_SIMULTANEOUS_JOBS = 3;
+  static final int MAX_SIMULTANEOUS_JOBS = 100;
   
   
   LinkedBlockingQueue<QueueItem> _queue = new LinkedBlockingQueue<QueueItem>();
@@ -94,7 +94,6 @@ public class EC2ParserTask {
     candidateSet.removeAll(processedLogs);
     // ok we are ready to go .. 
     LOG.info("There are: " + candidateSet.size() + " logs in need of parsing");
-    int iteration = 0;
     while (candidateSet.size() != 0) { 
       ImmutableList.Builder<Path> pathBuilder = new ImmutableList.Builder<Path>();
       Iterator<Path> iterator = Iterators.limit(candidateSet.iterator(),LOGS_PER_ITERATION);
@@ -215,12 +214,12 @@ public class EC2ParserTask {
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
-      .minSplitSize(134217728*8)
+      .minSplitSize(134217728*4)
       .build();
     
     
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
-    jobConf.setInt("mapred.task.timeout", 60 * 60 * 1000);
+    jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
     jobConf.setLong("cc.segmet.id", segmentId);
     jobConf.setOutputCommitter(OutputCommitter.class);
     

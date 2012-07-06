@@ -34,8 +34,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.commoncrawl.io.NIOHttpHeaders;
+import org.commoncrawl.protocol.shared.HTMLMeta;
+import org.commoncrawl.protocol.shared.HTMLMetaAttribute;
 import org.commoncrawl.service.parser.Link;
-import org.commoncrawl.service.parser.Meta;
 import org.commoncrawl.service.parser.ParseResult;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CharsetUtils;
@@ -448,7 +449,7 @@ public class ParseWorker implements DocumentBuilder {
     List<String> arguments = instructionsPool.arguments;
     LinkedList<Integer> nodeStack = new LinkedList<Integer>();
     LinkedList<BlockObjectInContext> blockStack = new LinkedList<BlockObjectInContext>();
-    Meta meta = null;
+    HTMLMeta meta = null;
     
     for (int i=0; i<operations.size(); i++)
     {
@@ -464,7 +465,7 @@ public class ParseWorker implements DocumentBuilder {
           blockInConstruction = null;
           String nodeName = domArgument.toLowerCase();
           if (nodeName.equals("meta")) { 
-            meta = new Meta();
+            meta = new HTMLMeta();
           }
           else if (linkTypeToSrcMap.containsKey(nodeName)) {
             //LOG.info("Node:" + nodeName + " is of type Link. Adding to LinksUnderConst");
@@ -561,48 +562,60 @@ public class ParseWorker implements DocumentBuilder {
         
        case ParserInstruction.WriteAttributeKey: {
          
-          // add an attribute with the next lookahead operation :
+          // grab key name .. 
           String key = domArgument.toLowerCase();
 
+          // and lookahead one to grab attribute value ... 
           i++;
-          domOperation = operations.get(i); 
-          String value = arguments.get(i); 
           
-          if (meta != null) {
-            if (key.equalsIgnoreCase("content")) {
-              meta.setValue(value);
-            }
-            else if (validMetaTagKeys.contains(key)) { 
-              meta.setName(value);
-            }
-          }
+          if (i < operations.size() && operations.get(i) == ParserInstruction.WriteAttributeValue) { 
+            // grab value ... 
+            String value = arguments.get(i); 
 
-          if(key.equals("href") && inBase != 0) { 
-            if (value.length() != 0) { 
-              try { 
-                baseURL = new URL(value);
-              }
-              catch (Exception e) { 
-                LOG.error(CCStringUtils.stringifyException(e));
-                throw new IOException(e);
-              }
-            }
-          }
-          else if (activeLink != null) {
-            if (linkTypeToSrcMap.get(activeLink.type).equalsIgnoreCase(key)) { 
-              activeLink.linkURL = value;
+            // if metatag capture key/value ... 
+            if (meta != null) {
+              // create a new attribute object  
+              HTMLMetaAttribute attribute = new HTMLMetaAttribute();
+              
+              attribute.setName(key);
+              attribute.setValue(value);
+              
+              // append to meta tag 
+              meta.getAttributes().add(attribute);
             }
             else { 
-              activeLink.jsonObject.addProperty(key, value);
+              if(key.equals("href") && inBase != 0) { 
+                if (value.length() != 0) { 
+                  try { 
+                    baseURL = new URL(value);
+                  }
+                  catch (Exception e) { 
+                    LOG.error(CCStringUtils.stringifyException(e));
+                    throw new IOException(e);
+                  }
+                }
+              }
+              else if (activeLink != null) {
+                if (linkTypeToSrcMap.get(activeLink.type).equalsIgnoreCase(key)) { 
+                  activeLink.linkURL = value;
+                }
+                else { 
+                  activeLink.jsonObject.addProperty(key, value);
+                }
+              }
+              else if (blockInConstruction != null){ 
+                if (key.equals("class")) { 
+                  blockInConstruction.classId = value;
+                }
+                else if (key.equals("id")) { 
+                  blockInConstruction.htmlId = value;
+                }
+              }
             }
           }
-          else if (blockInConstruction != null){ 
-            if (key.equals("class")) { 
-              blockInConstruction.classId = value;
-            }
-            else if (key.equals("id")) { 
-              blockInConstruction.htmlId = value;
-            }
+          else { 
+            // rewind and let outer control block deal with it 
+            --i;
           }
         }
         break;

@@ -160,9 +160,17 @@ module org.commoncrawl.protocol.shared {
     ustring attributes = 2;
   }
 
+  class HTMLMetaAttribute { 
+    ustring name=1;
+    ustring value=2;
+  }
+  class HTMLMeta {
+    vector<HTMLMetaAttribute> attributes = 1;   
+  }
+  
   class HTMLContent { 
     ustring title = 1;
-    vector<ustring> metaTags = 2;
+    vector<HTMLMeta> metaTags = 2;
     vector<HTMLLink> links = 3;  
   }
 

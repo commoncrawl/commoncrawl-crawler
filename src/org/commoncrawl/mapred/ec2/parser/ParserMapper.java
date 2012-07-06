@@ -42,7 +42,6 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.service.parser.Meta;
 import org.commoncrawl.service.parser.ParseResult;
 import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.CrawlURL;
@@ -55,6 +54,8 @@ import org.commoncrawl.protocol.shared.FeedItem;
 import org.commoncrawl.protocol.shared.FeedLink;
 import org.commoncrawl.protocol.shared.HTMLContent;
 import org.commoncrawl.protocol.shared.HTMLLink;
+import org.commoncrawl.protocol.shared.HTMLMeta;
+import org.commoncrawl.protocol.shared.HTMLMetaAttribute;
 import org.commoncrawl.service.parser.server.ParseWorker;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CharsetUtils;
@@ -197,13 +198,14 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     
     if (result.getMetaTags().size() != 0) { 
       JsonArray metaArray = new JsonArray();
-      for (Meta meta : result.getMetaTags()) { 
-        JsonObject metaTag = new JsonObject();
-        metaTag.addProperty("name",meta.getName());
-        metaTag.addProperty("value",meta.getValue());
-        
-        metaArray.add(metaTag);
-        htmlMeta.getMetaTags().add(new TextBytes(meta.getName().trim()+"\t"+meta.getValue()));
+      for (HTMLMeta htmlMetaObject : result.getMetaTags()) { 
+        JsonObject jsonMetaObject = new JsonObject();
+        // populate meta tag based on attributes 
+        for (HTMLMetaAttribute attribute : htmlMetaObject.getAttributes()) { 
+          jsonMetaObject.addProperty(attribute.getName(),attribute.getValue());
+        }
+        metaArray.add(jsonMetaObject);
+        htmlMeta.getMetaTags().add(htmlMetaObject);
       }
       objectOut.add("meta_tags", metaArray);
     }

@@ -8,17 +8,7 @@ module org.commoncrawl.service.parser {
     ustring url = 1; 
     ustring attributes = 2;
   }
-  
-  class Meta { 
-    ustring name=1;
-    ustring value=2;
-    byte flags=3;
     
-    enum Flag { 
-      IsHttpEquiv =1;
-    }
-  }
-  
   class ParseRequest {     
     long     domainId = 1;
     long     docId    = 2;
@@ -36,7 +26,7 @@ module org.commoncrawl.service.parser {
     boolean parseSuccessful = 5;
     ustring parseFailureReason = 6;
     ustring title = 7;
-    vector<Meta> metaTags = 8;
+    vector<org.commoncrawl.protocol.shared.HTMLMeta> metaTags = 8;
     vector<Link> extractedLinks =9; 
     ustring text = 10;   
   }
