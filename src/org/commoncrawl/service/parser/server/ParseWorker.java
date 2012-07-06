@@ -61,7 +61,6 @@ import com.google.common.io.InputSupplier;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.internal.Streams;
 import com.google.gson.stream.JsonWriter;
 
@@ -175,7 +174,7 @@ public class ParseWorker implements DocumentBuilder {
         activeParseResult = null;
         // set content type ... 
         parseResultOut.setContentType("text/html");
-        parseResultOut.setText(textAccumulator.toString().replaceAll("[\\s]+", " "));
+        parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t]+", " "));
         parseResultOut.setParseSuccessful(true);
       } catch (ParserInitializationException e) {
         LOG.error(CCStringUtils.stringifyException(e));
@@ -262,7 +261,7 @@ public class ParseWorker implements DocumentBuilder {
             activeParseResult = null;
             // set content type ... 
             parseResultOut.setContentType(contentTypeInfo._contentType);
-            parseResultOut.setText(textAccumulator.toString().replaceAll("[\\s]+", " "));
+            parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t]+", " "));
             parseResultOut.setParseSuccessful(true);
           } catch (ParserInitializationException e) {
             LOG.error(CCStringUtils.stringifyException(e));
@@ -488,13 +487,44 @@ public class ParseWorker implements DocumentBuilder {
       this.id = id;
     }
   }
-  
-  static ImmutableSet<String> validMetaTagKeys = new ImmutableSet.Builder<String>() 
-    .add("name")
-    .add("property")
-    .add("http-equiv")
-    .build();
     
+  static ImmutableSet<String> blockLevelHTMLTags = new ImmutableSet.Builder<String>() 
+    .add("address")
+    .add("blockquote")
+    .add("div")
+    .add("dl")
+    .add("fieldset")
+    .add("form")
+    .add("h1")
+    .add("h2")
+    .add("h3")
+    .add("h4")
+    .add("h5")
+    .add("h6")
+    .add("hr")
+    .add("noscript")
+    .add("ol")
+    .add("p")
+    .add("pre")
+    .add("table")
+    .add("ul")
+    .add("dd")
+    .add("dt")
+    .add("li")
+    .add("tbody")
+    .add("td")
+    .add("tfoot")
+    .add("th")
+    .add("thead")
+    .add("tr")
+    .add("button")
+    .add("del")
+    .add("ins")
+    .add("map")
+    .add("object")
+    .add("script")
+    .build();
+  
   @Override
   public Document buildDocument(InstructionsPool instructionsPool,FileOutputStream optionalOutputStream) throws IOException {
     
@@ -518,6 +548,13 @@ public class ParseWorker implements DocumentBuilder {
           activeLink = null;
           blockInConstruction = null;
           String nodeName = domArgument.toLowerCase();
+          
+          // append new-line of start of a block level tag ... 
+          if (domOperation == ParserInstruction.OpenNode && blockLevelHTMLTags.contains(nodeName)) {
+            if (textAccumulator.length() != 0 && textAccumulator.charAt(textAccumulator.length() -1) != '\n')
+              textAccumulator.append("\n");
+          }
+          
           if (nodeName.equals("meta")) { 
             meta = new HTMLMeta();
           }
@@ -559,6 +596,13 @@ public class ParseWorker implements DocumentBuilder {
         case ParserInstruction.CloseLeaf: {
           int arguementPos = nodeStack.pop();
           String nodeName = arguments.get(arguementPos).toLowerCase();
+          
+          // append new-line of start of a block level tag ... 
+          if (domOperation == ParserInstruction.CloseNode && blockLevelHTMLTags.contains(nodeName)) {
+            if (textAccumulator.length() != 0 && textAccumulator.charAt(textAccumulator.length() -1) != '\n')
+              textAccumulator.append("\n");
+          }
+          
           //LOG.info("Close Node Called on Node:" + nodeName);
           if (nodeName.equals("head")) { 
             inHeadTag--;
