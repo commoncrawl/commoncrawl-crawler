@@ -174,7 +174,11 @@ public class ParseWorker implements DocumentBuilder {
         activeParseResult = null;
         // set content type ... 
         parseResultOut.setContentType("text/html");
-        parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t\\x0B\\f]+", " ").replaceAll("[\\n\\r]+", "\n"));
+        String finalText = textAccumulator.toString().replaceAll("[ \\t\\x0B\\f]+", " ");
+        while (finalText.indexOf("\n \n") != -1)
+          finalText = finalText.replaceAll("(\\n \\n)+", "\n");
+        finalText = finalText.replaceAll("[\\n]+", "\n");
+        parseResultOut.setText(finalText);
         parseResultOut.setParseSuccessful(true);
       } catch (ParserInitializationException e) {
         LOG.error(CCStringUtils.stringifyException(e));
@@ -261,7 +265,11 @@ public class ParseWorker implements DocumentBuilder {
             activeParseResult = null;
             // set content type ... 
             parseResultOut.setContentType(contentTypeInfo._contentType);
-            parseResultOut.setText(textAccumulator.toString().replaceAll("[ \\t\\x0B\\f]+", " ").replaceAll("[\\n\\r]+", "\n"));
+            String finalText = textAccumulator.toString().replaceAll("[ \\t\\x0B\\f]+", " ");
+            while (finalText.indexOf("\n \n") != -1)
+              finalText = finalText.replaceAll("(\\n \\n)+", "\n");
+            finalText = finalText.replaceAll("[\\n]+", "\n");
+            parseResultOut.setText(finalText);
             parseResultOut.setParseSuccessful(true);
           } catch (ParserInitializationException e) {
             LOG.error(CCStringUtils.stringifyException(e));
@@ -405,7 +413,7 @@ public class ParseWorker implements DocumentBuilder {
       
       outputWriter.write("******** TEXT OUTPUT **********\n");
       outputWriter.write(result.getText());
-      
+      outputWriter.flush();
     } catch (IOException e1) {
       // TODO Auto-generated catch block
       e1.printStackTrace();
