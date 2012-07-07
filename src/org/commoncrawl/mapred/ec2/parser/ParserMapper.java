@@ -63,6 +63,7 @@ import org.commoncrawl.util.FlexBuffer;
 import org.commoncrawl.util.GZIPUtils;
 import org.commoncrawl.util.HttpHeaderInfoExtractor;
 import org.commoncrawl.util.IPAddressUtils;
+import org.commoncrawl.util.JSONUtils;
 import org.commoncrawl.util.MimeTypeFilter;
 import org.commoncrawl.util.SimHash;
 import org.commoncrawl.util.TextBytes;
@@ -1059,8 +1060,8 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
    */
   public static void main(String[] args)throws IOException {
     Configuration conf = new Configuration();
-    FileSystem fs = FileSystem.get(conf);
     Path pathToCrawlLog = new Path(args[0]);
+    FileSystem fs = FileSystem.get(pathToCrawlLog.toUri(),conf);
     SequenceFile.Reader reader = new SequenceFile.Reader(fs, pathToCrawlLog, conf);
     
     Text url = new Text();
@@ -1081,16 +1082,14 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
               JsonObject metadata = parser.parse(new JsonReader(new StringReader(value.getMetadata()))).getAsJsonObject();
               long timeEnd   = System.currentTimeMillis();
               
-              if (metadata.has("parsed_as")) { 
-                if (metadata.get("parsed_as").getAsString().equalsIgnoreCase("feed")) { 
-                  LOG.info("Got FEED for URL:" + key.toString() + " Parse Took:" + (timeEnd - timeStart) + " Redirect:" + metadata.get("redirect"));
-                  //LOG.info("FEED METADATA:" + metadata.toString());
-                }
-              }
-              
-              //LOG.info("Key:" + key.toString() + " Metadata Size:" + value.getMetadataAsTextBytes().getLength());
-              //LOG.info("Key:" + key.toString() + " Text-Size" + value.getTextContentAsTextBytes().getLength());
-              //LOG.info("Key:" + key.toString() + " RAW-Size" + value.getRawContent().getCount());
+              System.out.println("Key:" + key.toString() + " Parse Took:" + (timeEnd-timeStart));
+              System.out.println("Key:" + key.toString() + " Metadata Size:" + value.getMetadataAsTextBytes().getLength());
+              System.out.println("Key:" + key.toString() + " Text-Size" + value.getTextContentAsTextBytes().getLength());
+              System.out.println("Key:" + key.toString() + " RAW-Size" + value.getRawContent().getCount());
+              System.out.println("Key:" + key.toString() + " Metadata:");
+              JSONUtils.prettyPrintJSON(metadata);
+              System.out.println("Key:" + key.toString() + " Text:");
+              System.out.println(value.getTextContent());
             }
           }, reporter);
     }
