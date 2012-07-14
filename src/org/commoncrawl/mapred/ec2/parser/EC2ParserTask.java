@@ -203,6 +203,10 @@ public class EC2ParserTask {
     	
     	// scan segment manifest file ... 
         List<Path> paths = scanSegmentManifestFile(fs,fileStatus.getPath());
+        
+        for (Path path : paths) { 
+        	System.out.println("Input Path:" + path);
+        }
         // create a Job Conf
         
         JobConf jobConf = new JobBuilder("parse job",conf)
