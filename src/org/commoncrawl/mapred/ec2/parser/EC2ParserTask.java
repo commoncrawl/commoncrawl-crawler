@@ -25,6 +25,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -204,14 +205,15 @@ public class EC2ParserTask {
     	// scan segment manifest file ... 
         List<Path> paths = scanSegmentManifestFile(fs,fileStatus.getPath());
         
-        for (Path path : paths) { 
-        	System.out.println("Input Path:" + path);
+        ArrayList<Path> absolutePaths = new ArrayList<Path>();
+        for (Path relativePath : paths) { 
+        	absolutePaths.add(new Path(new Path("s3n://aws-publicdatasets"),relativePath));
         }
         // create a Job Conf
         
         JobConf jobConf = new JobBuilder("parse job",conf)
         
-        .inputs(paths)
+        .inputs(absolutePaths)
         .inputFormat(SequenceFileInputFormat.class)
         .keyValue(Text.class, ParseOutput.class)
         .mapper(ParserMapper.class)
