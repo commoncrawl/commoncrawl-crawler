@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
@@ -191,8 +192,42 @@ public class EC2ParserTask {
     conf.addResource(new Path("/home/hadoop/conf/core-site.xml"));
     conf.addResource(new Path("/home/hadoop/conf/mapred-site.xml"));
 
-    EC2ParserTask task = new EC2ParserTask(conf);
-    task.run();
+    //EC2ParserTask task = new EC2ParserTask(conf);
+    //task.run();
+    
+    FileSystem fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
+    
+    for (FileStatus fileStatus : fs.globStatus(new Path(VALID_SEGMENTS_PATH+"[0-9]*"))) {
+    	
+    	System.out.println("Building Splits for Segment:" + fileStatus.getPath().getName());
+    	
+    	// scan segment manifest file ... 
+        List<Path> paths = scanSegmentManifestFile(fs,fileStatus.getPath());
+        // create a Job Conf
+        
+        JobConf jobConf = new JobBuilder("parse job",conf)
+        
+        .inputs(paths)
+        .inputFormat(SequenceFileInputFormat.class)
+        .keyValue(Text.class, ParseOutput.class)
+        .mapper(ParserMapper.class)
+        .maxMapAttempts(3)
+        .maxMapTaskFailures(100)
+        .speculativeExecution(true)
+        .numReducers(0)
+        .outputFormat(ParserOutputFormat.class)
+        .minSplitSize(134217728*4)
+        .build();
+      
+      
+        jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
+        
+        InputSplit[] splits = jobConf.getInputFormat().getSplits(jobConf, jobConf.getNumMapTasks());
+        
+        for (InputSplit split : splits) { 
+        	System.out.println(split.toString());
+        }
+    }
   }
   
   private static void parse(FileSystem fs,Configuration conf,ImmutableList<Path> paths)throws IOException { 
