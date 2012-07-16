@@ -103,7 +103,6 @@ public class EC2StatsCollectorJob {
       .maxMapAttempts(7)
       .maxReduceAttempts(7)
       .maxMapTaskFailures(1000)
-      .reuseJVM(1000)
       .numReducers(500)
       .speculativeExecution(true)
       .output(outputPath)
