@@ -68,7 +68,7 @@ public class EC2StatsCollectorJob {
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
   
-  static final int MAX_SIMULTANEOUS_JOBS = 1;
+  static final int MAX_SIMULTANEOUS_JOBS = 3;
   
   public static final String ARC_TO_BAD_URL_NAMED_OUTPUT = "arcRecords";
   public static final String CRAWL_RECORD_NAMED_OUTPUT = "crawlRecords";
@@ -103,7 +103,7 @@ public class EC2StatsCollectorJob {
       .maxMapAttempts(7)
       .maxReduceAttempts(7)
       .maxMapTaskFailures(1000)
-      .numReducers(500)
+      .numReducers(2000)
       .speculativeExecution(true)
       .output(outputPath)
       .outputFormat(SequenceFileOutputFormat.class)
@@ -112,7 +112,7 @@ public class EC2StatsCollectorJob {
       .build();
     
     // slow start the reducers  
-    jobConf.setFloat("mapred.reduce.slowstart.completed.maps",1.0f);
+    //jobConf.setFloat("mapred.reduce.slowstart.completed.maps",1.0f);
     // set up multi output streams 
     MultipleOutputs.addNamedOutput(jobConf, ARC_TO_BAD_URL_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
     MultipleOutputs.addNamedOutput(jobConf, CRAWL_RECORD_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
