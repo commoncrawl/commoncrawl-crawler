@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,22 +33,21 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.compress.SnappyCodec;
+import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
+import org.apache.hadoop.mapred.TaskCompletionEvent;
 import org.apache.hadoop.mapred.lib.MultipleOutputs;
-import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey.LinkKeyComparator;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey.LinkKeyPartitioner;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
-import org.commoncrawl.util.TextBytes;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 
 /**
@@ -68,7 +68,7 @@ public class EC2StatsCollectorJob {
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
   
-  static final int MAX_SIMULTANEOUS_JOBS = 1;
+  static final int MAX_SIMULTANEOUS_JOBS = 100;
   
   public static final String ARC_TO_BAD_URL_NAMED_OUTPUT = "arcRecords";
   public static final String CRAWL_RECORD_NAMED_OUTPUT = "crawlRecords";
@@ -77,51 +77,127 @@ public class EC2StatsCollectorJob {
   Semaphore jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
 
 
+  // we queue up multiple jobs but only allow a single job to run a time 
+  // with the caveat that IF the active job reaches 98% capacity, it releases
+  // its semaphore and lets the next job start up. This (partially) avoids the
+  // trailing reducer problem where one or more unbalanced reducers takes
+  // excessively long to complete and idles the rest of the cluster. In a NORMAL
+  // scenario, in a normal cluster with enought RAM, we would run N mappers and 
+  // N reducers, but in the EMR memory STARVED scenario (where either you get
+  // lots of memory and very little compute horsepower or vice versa), we run
+  // mappers to 100% before starting reducers and then don't start a second job
+  // in parallel so that all the memory on the machine can be dedicated to the 
+  // reducer. Now the same  rules will apply, but we are going to take the hit 
+  // and start the mappers back up, even when there are a few trailing reducers 
+  // holding up the last job. (CLUSTER F@#@)
+  
+  static Semaphore singleJobSemaphore = new Semaphore(1);
   
   public static void processSegmentEC2(FileSystem s3fs,Configuration conf,long segmentId)throws IOException { 
     Path outputPath = new Path(S3N_BUCKET_PREFIX + STATS_INTERMEDIATE_OUTPUT_PATH+Long.toString(segmentId));
-    LOG.info("Starting Intermedaite Merge of Segment:" + segmentId + " Output path is:" + outputPath);
     
-    if (s3fs.exists(outputPath)) { 
-      LOG.warn("Output Path Already Exists for Segment:" + segmentId +".Deleting!");
-      s3fs.delete(outputPath,true);
+    
+    LOG.info("WAITING TO START Intermedaite Merge of Segment:" + segmentId + " Output path is:" + outputPath);
+    singleJobSemaphore.acquireUninterruptibly();
+    LOG.info("Semaphore Acquired! - Starting Intermedaite Merge of Segment:" + segmentId + " Output path is:" + outputPath);
+    AtomicBoolean semahoreReleased = new AtomicBoolean();
+    try { 
+      if (s3fs.exists(outputPath)) { 
+        LOG.warn("Output Path Already Exists for Segment:" + segmentId +".Deleting!");
+        s3fs.delete(outputPath,true);
+      }
+      
+      // ok collect merge files
+      ArrayList<Path> pathList = new ArrayList<Path>();
+      for (FileStatus metadataFile : s3fs.globStatus(new Path(SEGMENTS_PATH,segmentId + "/metadata-*"))) { 
+        pathList.add(metadataFile.getPath().makeQualified(s3fs));
+      }
+      LOG.info("Input Paths for Segment:" + segmentId + " are:" + pathList);
+      
+      JobConf jobConf = new JobBuilder("Intermediate merge for:" + segmentId, conf)
+        .inputs(pathList)
+        .inputFormat(SequenceFileInputFormat.class)
+        .keyValue(Text.class, Text.class)
+        .mapper(CrawlStatsMapper.class)
+        .reducer(CrawlStatsReducer.class, false)
+        .maxMapAttempts(7)
+        .maxReduceAttempts(7)
+        .maxMapTaskFailures(1000)
+        .numReducers(2000)
+        .speculativeExecution(true)
+        .output(outputPath)
+        .outputFormat(SequenceFileOutputFormat.class)
+        .compressMapOutput(true)
+        .compressor(CompressionType.BLOCK, SnappyCodec.class)
+        .build();
+      
+      // slow start the reducers  
+      jobConf.setFloat("mapred.reduce.slowstart.completed.maps",1.0f);
+      // set up multi output streams 
+      MultipleOutputs.addNamedOutput(jobConf, ARC_TO_BAD_URL_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
+      MultipleOutputs.addNamedOutput(jobConf, CRAWL_RECORD_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
+          
+      runJobInternal(jobConf,singleJobSemaphore,semahoreReleased);
+      
+      LOG.info("Merge of Segment:" + segmentId + " Finished. Output path is:" + outputPath);
+
     }
-    
-    // ok collect merge files
-    ArrayList<Path> pathList = new ArrayList<Path>();
-    for (FileStatus metadataFile : s3fs.globStatus(new Path(SEGMENTS_PATH,segmentId + "/metadata-*"))) { 
-      pathList.add(metadataFile.getPath().makeQualified(s3fs));
+    finally { 
+      if (semahoreReleased.compareAndSet(false, true)) { 
+        LOG.info("Releasing Semaphore for Segment on Exit:" + segmentId + " Finished. Output path is:" + outputPath);
+        singleJobSemaphore.release();
+      }
     }
-    LOG.info("Input Paths for Segment:" + segmentId + " are:" + pathList);
-    
-    JobConf jobConf = new JobBuilder("Intermediate merge for:" + segmentId, conf)
-      .inputs(pathList)
-      .inputFormat(SequenceFileInputFormat.class)
-      .keyValue(Text.class, Text.class)
-      .mapper(CrawlStatsMapper.class)
-      .reducer(CrawlStatsReducer.class, false)
-      .maxMapAttempts(7)
-      .maxReduceAttempts(7)
-      .maxMapTaskFailures(1000)
-      .numReducers(2000)
-      .speculativeExecution(true)
-      .output(outputPath)
-      .outputFormat(SequenceFileOutputFormat.class)
-      .compressMapOutput(true)
-      .compressor(CompressionType.BLOCK, SnappyCodec.class)
-      .build();
-    
-    // slow start the reducers  
-    jobConf.setFloat("mapred.reduce.slowstart.completed.maps",1.0f);
-    // set up multi output streams 
-    MultipleOutputs.addNamedOutput(jobConf, ARC_TO_BAD_URL_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
-    MultipleOutputs.addNamedOutput(jobConf, CRAWL_RECORD_NAMED_OUTPUT, SequenceFileOutputFormat.class, Text.class, Text.class);
-        
-    JobClient.runJob(jobConf);
   }
   
+  /**
+   * Monitor a job and print status in real-time as progress is made and tasks 
+   * fail.
+   * @param conf the job's configuration
+   * @param job the job to track
+   * @return true if the job succeeded
+   * @throws IOException if communication to the JobTracker fails
+   */
+  public static boolean runJobInternal(JobConf conf,Semaphore jobReleaseSemaphore,AtomicBoolean releaseIndicator) throws IOException {
+    
+    JobClient jc = new JobClient(conf);
+    RunningJob job = jc.submitJob(conf);
+    try {
+      JobID jobId = job.getID();
+      LOG.info("Running job: " + jobId);
+      int eventCounter = 0;
   
+      while (!job.isComplete()) {
+        Thread.sleep(1);
+        
+        if (job.reduceProgress() >= 0.98f) { 
+          if (releaseIndicator.compareAndSet(false, true)) {
+            LOG.info("Reducer Hit 98% - Releasing Job Semaphore for Job: " + jobId);
+            jobReleaseSemaphore.release();
+          }
+        }
   
+        TaskCompletionEvent[] events = job.getTaskCompletionEvents(eventCounter); 
+        eventCounter += events.length;
+      }
+      LOG.info("Job complete: " + jobId);
+      Counters counters = null;
+      try{
+         counters = job.getCounters();
+      } catch(IOException ie) {
+        counters = null;
+        LOG.info(ie.getMessage());
+      }
+      if (counters != null) {
+        counters.log(LOG);
+      }
+      return job.isSuccessful();
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+    }
+    return false;
+  }
+
   private static SortedSet<Long> scanForValidSegments(FileSystem fs) throws IOException { 
     SortedSet<Long> completeSegmentIds = Sets.newTreeSet(); 
     
