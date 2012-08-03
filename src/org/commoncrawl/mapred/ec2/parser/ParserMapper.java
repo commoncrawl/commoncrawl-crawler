@@ -61,12 +61,14 @@ import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CharsetUtils;
 import org.commoncrawl.util.FlexBuffer;
 import org.commoncrawl.util.GZIPUtils;
+import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.HttpHeaderInfoExtractor;
 import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.JSONUtils;
 import org.commoncrawl.util.MimeTypeFilter;
 import org.commoncrawl.util.SimHash;
 import org.commoncrawl.util.TextBytes;
+import org.commoncrawl.util.URLUtils;
 import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.MimeTypeFilter.MimeTypeDisposition;
 import org.commoncrawl.util.Tuples.Pair;
@@ -119,7 +121,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     WROTE_RAW_CONTENT, GOT_UNHANDLED_IO_EXCEPTION,
     GOT_UNHANDLED_RUNTIME_EXCEPTION, MALFORMED_FINAL_URL, GOT_RSS_FEED,
     GOT_ATOM_FEED, TRYING_RSS_FEED_PARSER, EXCEPTION_DURING_FEED_PARSE,
-    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT
+    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT, ERROR_CANONICALIZING_LINK_URL
   }
   
   private static ImmutableSet<String> dontKeepHeaders = ImmutableSet.of(
@@ -214,15 +216,21 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       JsonArray linkArray = new JsonArray();
       for (org.commoncrawl.service.parser.Link link : result.getExtractedLinks()) {
         try {
-          JsonObject linkObj = parser.parse(new JsonReader(new StringReader(link.getAttributes()))).getAsJsonObject();
-          linkObj.addProperty("href", link.getUrl());
-          linkArray.add(linkObj);
-
-          HTMLLink linkMeta = new HTMLLink();
-          linkMeta.setAttributes(link.getAttributes());
-          linkMeta.setHref(link.getUrl());
-          
-          htmlMeta.getLinks().add(linkMeta);
+          String canonicalLinkURL = canonicalizeURL(link.getUrl());
+          if (canonicalLinkURL == null) { 
+            reporter.incrCounter(Counters.ERROR_CANONICALIZING_LINK_URL, 1);
+          }
+          else { 
+            JsonObject linkObj = parser.parse(new JsonReader(new StringReader(link.getAttributes()))).getAsJsonObject();
+            linkObj.addProperty("href", canonicalLinkURL);
+            linkArray.add(linkObj);
+  
+            HTMLLink linkMeta = new HTMLLink();
+            linkMeta.setAttributes(link.getAttributes());
+            linkMeta.setHref(canonicalLinkURL);
+            
+            htmlMeta.getLinks().add(linkMeta);
+          }
         }
         catch (Exception e) { 
           LOG.error("Error Parsing JSON Link Attributes for Link: " + link.getUrl() + " in Doc:" + baseURL + " Exception:\n" + CCStringUtils.stringifyException(e));
@@ -361,40 +369,47 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       com.sun.syndication.feed.atom.Link linkObj = (com.sun.syndication.feed.atom.Link) link;
       if (linkObj.getHref() != null && linkObj.getRel() != null) { 
         
-        if (validLinkTypes.keySet().contains(linkObj.getRel())) {
-          JsonObject jsonLink = new JsonObject();
-          FeedLink metaLink = new FeedLink();
-          
-          safeSetString(jsonLink, "type", linkObj.getType());
-          if (linkObj.getType() != null) metaLink.setType(linkObj.getType());
-          safeSetString(jsonLink, "href",linkObj.getHref());
-          if (linkObj.getHref() != null) metaLink.setHref(linkObj.getHref());
-          safeSetString(jsonLink, "rel",linkObj.getRel());
-          if (linkObj.getRel() != null) metaLink.setRel(linkObj.getRel());
-          
-          safeSetString(jsonLink, "title", linkObj.getTitle());
-          if (linkObj.getTitle() != null) metaLink.setTitle(linkObj.getTitle());
-          
-          feedMetaLinks.add(metaLink);
-          
-          String linkName = validLinkTypes.get(linkObj.getRel());
-                    
-          JsonElement existing = feedOrItemObj.get(linkName);
-          if (existing != null) { 
-            JsonArray array = null;
-            if (!existing.isJsonArray()) { 
-              array = new JsonArray();
-              array.add(existing);
-              feedOrItemObj.remove(linkName);
-              feedOrItemObj.add(linkName, array);
+        String canonicalHref = canonicalizeURL(linkObj.getHref());
+        
+        if (canonicalHref == null) { 
+          LOG.error("Failed to Canoniclize Link URL:" + linkObj.getHref());
+        }
+        else { 
+          if (validLinkTypes.keySet().contains(linkObj.getRel())) {
+            JsonObject jsonLink = new JsonObject();
+            FeedLink metaLink = new FeedLink();
+            
+            safeSetString(jsonLink, "type", linkObj.getType());
+            if (linkObj.getType() != null) metaLink.setType(linkObj.getType());
+            safeSetString(jsonLink, "href",canonicalHref);
+            if (linkObj.getHref() != null) metaLink.setHref(canonicalHref);
+            safeSetString(jsonLink, "rel",linkObj.getRel());
+            if (linkObj.getRel() != null) metaLink.setRel(linkObj.getRel());
+            
+            safeSetString(jsonLink, "title", linkObj.getTitle());
+            if (linkObj.getTitle() != null) metaLink.setTitle(linkObj.getTitle());
+            
+            feedMetaLinks.add(metaLink);
+            
+            String linkName = validLinkTypes.get(linkObj.getRel());
+                      
+            JsonElement existing = feedOrItemObj.get(linkName);
+            if (existing != null) { 
+              JsonArray array = null;
+              if (!existing.isJsonArray()) { 
+                array = new JsonArray();
+                array.add(existing);
+                feedOrItemObj.remove(linkName);
+                feedOrItemObj.add(linkName, array);
+              }
+              else { 
+                array = existing.getAsJsonArray();
+              }
+              array.add(jsonLink);
             }
             else { 
-              array = existing.getAsJsonArray();
+              feedOrItemObj.add(linkName,jsonLink);
             }
-            array.add(jsonLink);
-          }
-          else { 
-            feedOrItemObj.add(linkName,jsonLink);
           }
         }
       }
@@ -412,7 +427,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           FeedAuthor metaAuthor = new FeedAuthor();
 
           safeSetString(jsonAuthor, "name", authorObj.getName());
-          safeSetString(jsonAuthor, "url", authorObj.getUrl());
+          safeSetString(jsonAuthor, "url", canonicalizeURL(authorObj.getUrl()));
           
           if (authorObj.getName() != null) metaAuthor.setName(authorObj.getName());
           if (authorObj.getUrl() != null) metaAuthor.setUrl(authorObj.getUrl());
@@ -425,18 +440,24 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
   }
   
-  private static void safeAppendLinkFromString(JsonObject jsonObj,List<FeedLink> metaLinks,String propertyName,String linkValue) { 
+  private static void safeAppendLinkFromString(JsonObject jsonObj,List<FeedLink> metaLinks,String propertyName,String linkValue)throws IOException { 
     if (linkValue != null && linkValue.length() != 0) { 
       
-      JsonObject jsonLink = new JsonObject();
-      FeedLink metaLink = new FeedLink();
+      String canonicalURL = canonicalizeURL(linkValue);
       
-      jsonLink.addProperty("href",linkValue);
-      metaLink.setHref(linkValue);
+      if (canonicalURL != null) { 
       
-
-      jsonObj.add(propertyName, jsonLink);
-      metaLinks.add(metaLink);
+        JsonObject jsonLink = new JsonObject();
+        FeedLink metaLink = new FeedLink();
+        
+        jsonLink.addProperty("href",canonicalURL);
+        metaLink.setHref(canonicalURL);
+        
+  
+        jsonObj.add(propertyName, jsonLink);
+        metaLinks.add(metaLink);
+      }
+      //TODO REPORT FAILURE
     }
   }
   
@@ -877,10 +898,15 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
   }
   
+  private static String canonicalizeURL(String sourceURL) throws IOException { 
+    GoogleURL urlObject = new GoogleURL(sourceURL);
+    return URLUtils.canonicalizeURL(urlObject, false);
+  }
+  
   @Override
-  public void map(Text url, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
+  public void map(Text sourceURL, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
-    if (url.getLength() == 0) { 
+    if (sourceURL.getLength() == 0) { 
       LOG.error("Hit NULL URL. Original URL:" + value.getRedirectURL());
       return;
     }
@@ -897,11 +923,20 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       
       // and content (if available) ... 
       Pair<String,Pair<TextBytes,FlexBuffer>> contentOut = null;
+
+      // canonicalize the url (minimally) 
+      String canonicalURL = canonicalizeURL(sourceURL.toString());
+      
+      // if canonicalization failed... bail early
+      if (canonicalURL == null) { 
+        reporter.incrCounter(Counters.MALFORMED_FINAL_URL, 1);
+        return;
+      }
       
       URL originalURL = null;
       
       try  { 
-        originalURL = new URL(url.toString());
+        originalURL = new URL(canonicalURL);
       }
       catch (MalformedURLException e) { 
         LOG.error("Malformed URL:" + CCStringUtils.stringifyException(e));
@@ -930,7 +965,20 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       if ((value.getFlags() & CrawlURL.Flags.IsRedirected) != 0) {
         Pair<URL,JsonObject> redirect = buildRedirectObject(originalURL,value,metadata,reporter);
         jsonObj.add("redirect_from",redirect.e1);
-        finalURL = redirect.e0;
+        
+        String canonicalRedirectURL = canonicalizeURL(redirect.e0.toString());
+        if (canonicalRedirectURL == null) { 
+          reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
+          return;
+        }
+        try { 
+          finalURL = new URL(canonicalRedirectURL);
+        }
+        catch (MalformedURLException e) { 
+          LOG.error("Malformed URL:" + CCStringUtils.stringifyException(e));
+          reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
+          return;
+        }        
       }
 
       if (value.getLastAttemptResult() == CrawlURL.CrawlResult.FAILURE) {
@@ -1000,13 +1048,13 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       output.collect(new Text(finalURL.toString()), parseOutput);
     }
     catch (IOException e) { 
-      LOG.error("Exception Processing URL:" + url.toString() + "\n" + CCStringUtils.stringifyException(e));
+      LOG.error("Exception Processing URL:" + sourceURL.toString() + "\n" + CCStringUtils.stringifyException(e));
       reporter.incrCounter(Counters.GOT_UNHANDLED_IO_EXCEPTION, 1);
       //TODO:HACK
       //throw e;
     }
     catch (Exception e) {
-      LOG.error("Exception Processing URL:" + url.toString() + "\n" + CCStringUtils.stringifyException(e));
+      LOG.error("Exception Processing URL:" + sourceURL.toString() + "\n" + CCStringUtils.stringifyException(e));
       reporter.incrCounter(Counters.GOT_UNHANDLED_RUNTIME_EXCEPTION, 1);
       //TODO: HACK 
       //throw new IOException(e);

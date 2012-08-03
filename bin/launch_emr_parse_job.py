@@ -63,10 +63,14 @@ for pname in required:
         print '\nERROR:%s is required' % pname
         usage()
 
+for p, v in params.iteritems():
+	print "param:" + `p`+ " value:" + `v`
+
 conn = boto.connect_emr(params['aws_key'],params['secret'])
 
 bootstrap_step1 = BootstrapAction("install_cc", "s3://commoncrawl-public/config64.sh",[params['aws_key'], params['secret']])
-bootstrap_step2 = BootstrapAction("configure_hadoop", "s3://elasticmapreduce/bootstrap-actions/configure-hadoop",["-m","mapred.tasktracker.map.tasks.maximum=8"])
+bootstrap_step2 = BootstrapAction("configure_maxtasktrackers", "s3://elasticmapreduce/bootstrap-actions/configure-hadoop",["-m","mapred.tasktracker.map.tasks.maximum=6"])
+bootstrap_step3 = BootstrapAction("configure_jobtrackerheap", "s3://elasticmapreduce/bootstrap-actions/configure-daemons",["--jobtracker-heap-size=12096"])
 
 namenode_instance_group = InstanceGroup(1,"MASTER","c1.xlarge","ON_DEMAND","MASTER_GROUP")
 core_instance_group = InstanceGroup(params['num_core'],"CORE","c1.xlarge","ON_DEMAND","CORE_GROUP")
@@ -87,16 +91,15 @@ else:
 step = JarStep(
 	name="CCParseJob",
 	jar="s3://commoncrawl-public/commoncrawl-0.1.jar",
-	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcer",
-	action_on_failure="TERMINATE_JOB_FLOW")
+	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcher",
+	action_on_failure="CANCEL_AND_WAIT")
 	
 print  instance_groups
-sys.exit()
 
 #	instance_groups=[namenode_instance_group,core_instance_group,spot_instance_group],
 jobid = conn.run_jobflow(
-	name="testbootstrap", 
-	availability_zone="us-east-1a",
+	name="EMR Parser JOB", 
+	availability_zone="us-east-1d",
     log_uri="s3://" + params['s3_bucket'] + "/logs", 
 	ec2_keyname=params['keypair'],
 	instance_groups=instance_groups,
@@ -104,7 +107,7 @@ jobid = conn.run_jobflow(
     enable_debugging=True,
 	hadoop_version="0.20.205",
 	steps = [step],    
-	bootstrap_actions=[bootstrap_step1,bootstrap_step2],
+	bootstrap_actions=[bootstrap_step1,bootstrap_step2,bootstrap_step3],
 	ami_version="2.0.4"
     )
 

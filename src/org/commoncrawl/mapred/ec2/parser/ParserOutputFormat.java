@@ -32,7 +32,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.SequenceFile.Metadata;
 import org.apache.hadoop.io.compress.GzipCodec;
-import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
@@ -210,6 +209,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
     
     
     static final byte[] CRLF = "\r\n".getBytes();
+    static final byte[] LF  = "\n".getBytes();
     
     /**
      * Build an ArcFileContentItem structure and popuate it's buffer with a 
@@ -233,7 +233,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
                 parseOutput.getNormalizedMimeType(), 
                 parseOutput.getHostIPAddress(), 
                 parseOutput.getFetchTime(),
-                parseOutput.getRawContent().getCount() + parseOutput.getHeadersAsTextBytes().getLength()).getBytes("UTF-8");
+                parseOutput.getRawContent().getCount() + parseOutput.getHeadersAsTextBytes().getLength() + CRLF.length + LF.length).getBytes("UTF-8");
       }
       catch (IOException e) {
         LOG.error("Metadata Line Validation FAILED with Exception:" + CCStringUtils.stringifyException(e));
@@ -254,8 +254,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
         // write out the content 
         stream.write(parseOutput.getRawContent().getReadOnlyBytes(),0,parseOutput.getRawContent().getCount());
         // line separator ... 
-        stream.write(ArcFileWriter.LINE_SEPARATOR);
-
+        stream.write(LF);
         stream.finish();
         stream.flush();
         stream.end();

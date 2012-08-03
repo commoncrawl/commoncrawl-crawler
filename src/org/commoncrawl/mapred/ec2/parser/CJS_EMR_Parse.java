@@ -92,10 +92,10 @@ public class CJS_EMR_Parse extends Configured implements Tool {
 		LOG.info("FileSystem is: " + fs.getUri());
 
 		LOG.info("Scanning for candidates at path: " + CRAWL_LOG_INTERMEDIATE_PATH);
-		TreeSet<Path> candidateSet = EMRParser.buildCandidateList(fs, new Path(CRAWL_LOG_INTERMEDIATE_PATH));
+		TreeSet<Path> candidateSet = CJS_EMR_Parse.buildCandidateList(fs, new Path(CRAWL_LOG_INTERMEDIATE_PATH));
 
 		LOG.info("Scanning for completed segments"); 
-		List<Path> processedLogs = EMRParser.scanForCompletedSegments(fs);
+		List<Path> processedLogs = CJS_EMR_Parse.scanForCompletedSegments(fs);
 
 		LOG.info("Found " + processedLogs.size() + " processed logs");
 
@@ -124,7 +124,7 @@ public class CJS_EMR_Parse extends Configured implements Tool {
       conf.set("commoncrawl.my.inputPath", path.toString());
 
 		  LOG.info("Running ToolRunner ...");
-      res = ToolRunner.run(conf, new EMRParser(), args);
+      res = ToolRunner.run(conf, new CJS_EMR_Parse(), args);
 
       if (res > 0)
         System.exit(res);
