@@ -42,6 +42,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
+import org.commoncrawl.crawl.common.shared.Constants;
 import org.commoncrawl.service.parser.ParseResult;
 import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.CrawlURL;
@@ -824,6 +825,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           crawlMeta.setCharsetDetected(decodeResult.e0.e1.toString());
           metadata.addProperty("charset_detector", decodeResult.e0.e0);
           crawlMeta.setCharsetDetector(decodeResult.e0.e0);
+          // add appropriate http header (for detected charset)
+          finalHeaders.add(Constants.ARCFileHeader_DetectedCharset, decodeResult.e0.e1.toString());
+          
           // get the content 
           String textContent = decodeResult.e1;
           // compute simhash 
@@ -896,7 +900,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
         }
       }
     }
-    return new Pair<String,Pair<TextBytes,FlexBuffer>>(textOut,new Pair<TextBytes,FlexBuffer>(value.getHeadersAsTextBytes(),contentOut));
+    return new Pair<String,Pair<TextBytes,FlexBuffer>>(textOut,new Pair<TextBytes,FlexBuffer>(new TextBytes(finalHeaders.toString()),contentOut));
   }
   
   static void safeSetJsonPropertyFromJsonProperty(JsonObject destinationObj,String destinationProperty,JsonElement sourceObj,String sourceProperty)throws IOException {
@@ -999,6 +1003,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
         metadata.setContentLength(value.getContentRaw().getCount());
         if (value.getResultCode() >= 200 && value.getResultCode() <= 299 && value.getContentRaw().getCount() > 0) { 
           contentOut = populateContentMetadata(finalURL,value,reporter,jsonObj,metadata);
+          if (metadata.isFieldDirty(CrawlMetadata.Field_CHARSETDETECTED)) { 
+            parseOutput.setDetectedCharset(metadata.getCharsetDetected());
+          }
         }
       }
       
