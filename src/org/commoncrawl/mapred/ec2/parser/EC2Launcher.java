@@ -22,6 +22,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.commoncrawl.util.CCStringUtils;
+
 
 /**
  * EC2Launcher Task (spawned by EMR)
@@ -29,7 +35,12 @@ import java.io.InputStream;
  * @author rana
  *
  */
+@SuppressWarnings("static-access")
 public class EC2Launcher {
+  
+  public static final Log LOG = LogFactory.getLog(EC2Launcher.class);
+
+
   
   static class InputStreamHandler extends Thread {
     /**
@@ -69,39 +80,56 @@ public class EC2Launcher {
     }
   }
 
-  public static void main(String[] args) {
-    System.out.println("Sleeping for 2 mins");
-    try {
-      Thread.sleep(10000);
-    } catch (InterruptedException e1) {
-    }
-    System.out.println("Done Sleeping");
-    
-    ProcessBuilder pb = new ProcessBuilder(
-        "./bin/ccAppRun.sh",
-        "--consoleMode",
-        "--heapSize",
-        "4096",
-        "--logdir",
-        "/mnt/var/EC2TaskLogs",
-        "org.commoncrawl.mapred.ec2.parser.EC2ParserTask",
-    "start");
-    pb.directory(new File("/home/hadoop/ccprod"));
 
-    try {
-      System.out.println("Starting Job");
-      Process p = pb.start();
-      new InputStreamHandler (p.getErrorStream());
-      new InputStreamHandler (p.getInputStream());
+  
+  public static void main(String[] args) {
+    
+    CommandLineParser parser = new GnuParser();
+
+    try {      
+      System.out.println("Sleeping for 2 mins");
+      try {
+        Thread.sleep(10000);
+      } catch (InterruptedException e1) {
+      }
+      System.out.println("Done Sleeping");
       
-      System.out.println("Waiting for Job to Finish");
-      p.waitFor();
-      System.out.println("Job Finished");
-    } catch (IOException e) {
-      e.printStackTrace();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+      ProcessBuilder pb = new ProcessBuilder(
+          "./bin/ccAppRun.sh",
+          "--consoleMode",
+          "--heapSize",
+          "4096",
+          "--logdir",
+          "/mnt/var/EC2TaskLogs",
+          "org.commoncrawl.mapred.ec2.parser.EC2ParserTask",
+      "start");
+      
+      for (String arg : args) { 
+        pb.command().add(arg);
+      }
+      
+      pb.directory(new File("/home/hadoop/ccprod"));
+  
+      try {
+        System.out.println("Starting Job");
+        Process p = pb.start();
+        new InputStreamHandler (p.getErrorStream());
+        new InputStreamHandler (p.getInputStream());
+        
+        System.out.println("Waiting for Job to Finish");
+        p.waitFor();
+        System.out.println("Job Finished");
+        System.exit(0);
+      } catch (IOException e) {
+        e.printStackTrace();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
     }
+    catch (Exception e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+    }
+    System.exit(1);
   }
 
 }
