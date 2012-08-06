@@ -167,15 +167,22 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     redirectObject.addProperty("source_url",originalURL.toString());
     metadata.getRedirectData().setSourceURL(originalURL.toString());
     
-    URL finalURLObj = null;
-    
-    try { 
-      finalURLObj = new URL(originalURL,value.getRedirectURL());
-    }
-    catch (Exception e) { 
+    String canonicalRedirectURL = canonicalizeURL(value.getRedirectURL());
+    if (canonicalRedirectURL == null) { 
       reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
-      throw new IOException("Bad Redirect Source URL:" + originalURL + " RedirectURL:" + value.getRedirectURL());
+      return null;
     }
+
+    URL finalURLObj = null;
+
+    try { 
+      finalURLObj = new URL(canonicalRedirectURL);
+    }
+    catch (MalformedURLException e) { 
+      LOG.error("Malformed URL:" + CCStringUtils.stringifyException(e));
+      reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
+      return null;
+    }        
     
     redirectObject.addProperty("http_result",(int)value.getOriginalResultCode());
     metadata.getRedirectData().setHttpResult(value.getOriginalResultCode());
@@ -426,11 +433,14 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           JsonObject jsonAuthor = new JsonObject();
           FeedAuthor metaAuthor = new FeedAuthor();
 
+          String canonicalURL = canonicalizeURL(authorObj.getUrl());
           safeSetString(jsonAuthor, "name", authorObj.getName());
-          safeSetString(jsonAuthor, "url", canonicalizeURL(authorObj.getUrl()));
+          if (canonicalURL != null) {
+            safeSetString(jsonAuthor, "url", canonicalURL);
+          }
           
           if (authorObj.getName() != null) metaAuthor.setName(authorObj.getName());
-          if (authorObj.getUrl() != null) metaAuthor.setUrl(authorObj.getUrl());
+          if (canonicalURL != null) metaAuthor.setUrl(canonicalURL);
           
           authorArray.add(jsonAuthor);
           metaAuthorList.add(metaAuthor);
@@ -964,21 +974,12 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       // deal with redirects ... 
       if ((value.getFlags() & CrawlURL.Flags.IsRedirected) != 0) {
         Pair<URL,JsonObject> redirect = buildRedirectObject(originalURL,value,metadata,reporter);
+        if (redirect == null) { 
+          return;
+        }
+         
         jsonObj.add("redirect_from",redirect.e1);
-        
-        String canonicalRedirectURL = canonicalizeURL(redirect.e0.toString());
-        if (canonicalRedirectURL == null) { 
-          reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
-          return;
-        }
-        try { 
-          finalURL = new URL(canonicalRedirectURL);
-        }
-        catch (MalformedURLException e) { 
-          LOG.error("Malformed URL:" + CCStringUtils.stringifyException(e));
-          reporter.incrCounter(Counters.BAD_REDIRECT_URL, 1);
-          return;
-        }        
+        finalURL = redirect.e0;
       }
 
       if (value.getLastAttemptResult() == CrawlURL.CrawlResult.FAILURE) {
