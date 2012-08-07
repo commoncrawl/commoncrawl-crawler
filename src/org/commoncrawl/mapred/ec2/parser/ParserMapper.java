@@ -844,6 +844,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           
           // write it out 
           if (mimeTypeDisposition == MimeTypeDisposition.ACCEPT_HTML) {
+            LOG.info("Parsing:" + finalURL.toString() + " Headers:" + value.getHeaders() + " ContentLen:" + contentLen);
              // ok parse as html 
             tupleOut = parseHTMLDocument(finalURL,value.getHeaders(),new FlexBuffer(contentBytes,0,contentLen),crawlMeta.getHtmlContent(),reporter);
              
