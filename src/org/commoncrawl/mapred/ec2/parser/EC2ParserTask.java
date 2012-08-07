@@ -111,7 +111,7 @@ public class EC2ParserTask {
   public EC2ParserTask(Configuration conf)throws Exception {
     
     
-    if (conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
+    if (!conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,SEGMENTS_PATH);
     }

@@ -27,7 +27,7 @@ def usage():
     sys.exit()
 
 try:
-	opts, args = getopt.getopt(sys.argv[1:],'',['awsKey=','awsSecret=','core-count=','spot-count=','spot-bid=','keypair='])
+	opts, args = getopt.getopt(sys.argv[1:],'',['awsKey=','awsSecret=','core-count=','spot-count=','spot-bid=','keypair=','test'])
 except:
 	usage()
 
@@ -39,7 +39,8 @@ params = {'aws_key' : None,
           's3_bucket' : 'commoncrawl-emr',
 		  'num_core' : 2,
 		  'num_spot' : 0,
-		  'spot_bid_price' : None
+		  'spot_bid_price' : None,
+		  'test_mode' : False
 		 }
 
 for o, a in opts:
@@ -55,6 +56,8 @@ for o, a in opts:
 		params['keypair']=a
 	if o in ('--spot-bid'):
 		params['spot_bid_price']=a
+	if o in ('--test'):
+		params['test_mode']=True
 	
 required = ['aws_key','secret','keypair']
 
@@ -88,11 +91,17 @@ else:
 		
 	instance_groups=[namenode_instance_group,core_instance_group,spot_instance_group]
 
+args = []
+
+if params['test_mode'] == True:
+	args.append('--testMode')
+
 step = JarStep(
 	name="CCParseJob",
 	jar="s3://commoncrawl-public/commoncrawl-0.1.jar",
 	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcher",
-	action_on_failure="CANCEL_AND_WAIT")
+	action_on_failure="CANCEL_AND_WAIT",
+	step_args=args)
 	
 print  instance_groups
 
