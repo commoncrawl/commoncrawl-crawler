@@ -96,7 +96,8 @@ public class EC2ParserTask {
   public static final String CONF_PARAM_TEST_MODE = "EC2ParserTask.TestMode";
   
   LinkedBlockingQueue<QueueItem> _queue = new LinkedBlockingQueue<QueueItem>();
-  Semaphore jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
+  Semaphore jobThreadSemaphore = null;
+  int maxSimultaneousJobs = MAX_SIMULTANEOUS_JOBS;
 
   
   static Options options = new Options();
@@ -110,14 +111,17 @@ public class EC2ParserTask {
   
   public EC2ParserTask(Configuration conf)throws Exception {
     
-    
     if (!conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,SEGMENTS_PATH);
+     jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
+     
     }
     else { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,TEST_VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,TEST_SEGMENTS_PATH);
+     jobThreadSemaphore = new Semaphore(0);
+     maxSimultaneousJobs = 1;
     }
     
     FileSystem fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
@@ -141,8 +145,9 @@ public class EC2ParserTask {
       queue(fs,conf,pathBuilder.build());
       LOG.info("Queued Parse");
     }
+
     // queue shutdown items 
-    for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+    for (int i=0;i<maxSimultaneousJobs;++i) { 
       _queue.put(new QueueItem());
     }
   }
@@ -150,7 +155,7 @@ public class EC2ParserTask {
   void run() { 
     LOG.info("Starting Threads");
     // startup threads .. 
-    for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+    for (int i=0;i<maxSimultaneousJobs;++i) { 
       Thread thread = new Thread(new QueueTask());
       thread.start();
     }
