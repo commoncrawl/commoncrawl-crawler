@@ -913,9 +913,12 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
   }
   
-  private static String canonicalizeURL(String sourceURL) throws IOException { 
-    GoogleURL urlObject = new GoogleURL(sourceURL);
-    return URLUtils.canonicalizeURL(urlObject, false);
+  private static String canonicalizeURL(String sourceURL) throws IOException {
+    if (sourceURL != null) { 
+      GoogleURL urlObject = new GoogleURL(sourceURL);
+      return URLUtils.canonicalizeURL(urlObject, false);
+    }
+    return null;
   }
   
   @Override
