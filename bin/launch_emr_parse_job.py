@@ -104,7 +104,7 @@ step = JarStep(
 	name="CCParseJob",
 	jar="s3://commoncrawl-public/commoncrawl-0.1.jar",
 	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcher",
-	action_on_failure="CANCEL_AND_WAIT",
+	action_on_failure="TERMINATE_JOB_FLOW",
 	step_args=args)
 	
 print  instance_groups
