@@ -81,7 +81,7 @@ public class EC2ParserTask {
   static final String CRAWL_LOG_INTERMEDIATE_PATH = "/common-crawl/crawl-intermediate/";
   
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
-  static final String TEST_VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments_test/";
+  static final String TEST_VALID_SEGMENTS_PATH = "/common-crawl/parse-output-test/valid_segments/";
   static final String VALID_SEGMENTS_PATH_PROPERTY = "cc.valid.segments.path";
   
   static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
@@ -282,6 +282,7 @@ public class EC2ParserTask {
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
       .minSplitSize(134217728*4)
+      .reuseJVM(1)
       .build();
     
     
