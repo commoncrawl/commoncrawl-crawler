@@ -88,6 +88,11 @@ public class EC2ParserTask {
   static final String TEST_SEGMENTS_PATH = "/common-crawl/parse-output-test/segment/";
   static final String SEGMENT_PATH_PROPERTY = "cc.segment.path";
   
+  static final String JOB_LOGS_PATH = "/common-crawl/job-logs/";
+  static final String TEST_JOB_LOGS_PATH = "/common-crawl/test-job-logs/";
+  static final String JOB_LOGS_PATH_PROPERTY = "cc.job.log.path";
+
+  
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
@@ -114,12 +119,14 @@ public class EC2ParserTask {
     if (!conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,SEGMENTS_PATH);
+     conf.set(JOB_LOGS_PATH_PROPERTY, JOB_LOGS_PATH);
      jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
      
     }
     else { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,TEST_VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,TEST_SEGMENTS_PATH);
+     conf.set(JOB_LOGS_PATH_PROPERTY, TEST_JOB_LOGS_PATH);
      jobThreadSemaphore = new Semaphore(0);
      maxSimultaneousJobs = 1;
     }
@@ -144,6 +151,12 @@ public class EC2ParserTask {
       LOG.info("Queueing Parse");
       queue(fs,conf,pathBuilder.build());
       LOG.info("Queued Parse");
+      
+      // in test mode, queue only a single segment's worth of data 
+      if (conf.getBoolean(CONF_PARAM_TEST_MODE, false)) {
+        LOG.info("Test Mode - Queueing only a single Item");
+        break;
+      }
     }
 
     // queue shutdown items 
@@ -285,7 +298,9 @@ public class EC2ParserTask {
       .reuseJVM(1)
       .build();
     
+    Path jobLogsPath = new Path(S3N_BUCKET_PREFIX + conf.get(JOB_LOGS_PATH_PROPERTY) + Long.toString(segmentId));
     
+    jobConf.set("hadoop.job.history.user.location", jobLogsPath.toString());
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
     jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
     jobConf.setLong("cc.segmet.id", segmentId);

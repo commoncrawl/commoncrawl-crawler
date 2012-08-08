@@ -125,6 +125,10 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT, ERROR_CANONICALIZING_LINK_URL
   }
   
+  public static final String MAX_MAPPER_RUNTIME_PROPERTY = "cc.max.mapper.runtime";
+  // 50 minutes per mapper MAX
+  public static final long   DEFAULT_MAX_MAPPER_RUNTIME = 50  * 60 * 1000; 
+  
   private static ImmutableSet<String> dontKeepHeaders = ImmutableSet.of(
       "proxy-connection",
       "connection",
@@ -924,6 +928,11 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   @Override
   public void map(Text sourceURL, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
+    if (System.currentTimeMillis() > _killTime) { 
+      LOG.error("Expended Max Allowed Time for Mapper!");
+      throw new IOException("Max Map Task Runtime Exceeded!");
+    }
+    
     if (sourceURL.getLength() == 0) { 
       LOG.error("Hit NULL URL. Original URL:" + value.getRedirectURL());
       return;
@@ -1074,12 +1083,17 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   }
 
   long _segmentId;
-  
+  long _startTime;
+  long _killTime;
   @Override
   public void configure(JobConf job) {
     LOG.info("LIBRARY PATH:" + System.getenv().get("LD_LIBRARY_PATH"));
     _segmentId = job.getLong("cc.segmet.id", -1L);
     LOG.info("Job Conf says Segment Id is:" + _segmentId);
+    _startTime = System.currentTimeMillis();
+    long maxRunTime = job.getLong(MAX_MAPPER_RUNTIME_PROPERTY, DEFAULT_MAX_MAPPER_RUNTIME);
+    LOG.info("Job Max Runtime (per config) is:" + maxRunTime);
+    _killTime = _startTime + maxRunTime;
   }
 
   @Override
