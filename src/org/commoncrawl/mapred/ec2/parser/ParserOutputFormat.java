@@ -32,7 +32,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.SequenceFile.Metadata;
 import org.apache.hadoop.io.compress.GzipCodec;
-import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
@@ -210,6 +209,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
     
     
     static final byte[] CRLF = "\r\n".getBytes();
+    static final byte[] LF  = "\n".getBytes();
     
     /**
      * Build an ArcFileContentItem structure and popuate it's buffer with a 
@@ -233,7 +233,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
                 parseOutput.getNormalizedMimeType(), 
                 parseOutput.getHostIPAddress(), 
                 parseOutput.getFetchTime(),
-                parseOutput.getRawContent().getCount() + parseOutput.getHeadersAsTextBytes().getLength()).getBytes("UTF-8");
+                parseOutput.getRawContent().getCount() + parseOutput.getHeadersAsTextBytes().getLength() + CRLF.length + LF.length).getBytes("UTF-8");
       }
       catch (IOException e) {
         LOG.error("Metadata Line Validation FAILED with Exception:" + CCStringUtils.stringifyException(e));
@@ -254,8 +254,7 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
         // write out the content 
         stream.write(parseOutput.getRawContent().getReadOnlyBytes(),0,parseOutput.getRawContent().getCount());
         // line separator ... 
-        stream.write(ArcFileWriter.LINE_SEPARATOR);
-
+        stream.write(LF);
         stream.finish();
         stream.flush();
         stream.end();
@@ -283,87 +282,94 @@ public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
     
     @Override
     public void write(Text key, ParseOutput value) throws IOException {
-      String url = key.toString();
-      
-      // first write out the arc contents 
-      // and store arc offset info in ArchiveInfo struct
-      ArchiveInfo archiveInfo = null;
-      
-      if (value.getRawContent().getCount() != 0) {
+      try { 
+
+        String url = key.toString();
         
-        try {
+        // first write out the arc contents 
+        // and store arc offset info in ArchiveInfo struct
+        ArchiveInfo archiveInfo = null;
+        
+        if (value.getRawContent().getCount() != 0) {
           
-          ArcFileContentItem itemOut = buildArcFileItemFromParseOutput(url,value);
-          if (itemOut != null) {
-            _arcWriter.writeRawArcFileItem(itemOut.getContentType(), itemOut.getContent().getReadOnlyBytes(), itemOut.getContent().getCount());
+          try {
             
-            // construct a record of the write ... 
-            archiveInfo = new ArchiveInfo();
-  
-            archiveInfo.setArcfileDate(_arcWriter.getActiveFileTimestamp());
-            archiveInfo.setArcfileIndex(_partition);
-            archiveInfo.setArcfileOffset(_arcWriter.getLastItemPos());
-            archiveInfo.setCompressedSize(itemOut.getContent().getCount());
-            archiveInfo.setParseSegmentId(-1);
-            // pass through destination segment id for this arc file
-            archiveInfo.setArcSourceSegmentId(value.getDestSegmentId());
+            ArcFileContentItem itemOut = buildArcFileItemFromParseOutput(url,value);
+            if (itemOut != null) {
+              _arcWriter.writeRawArcFileItem(itemOut.getContentType(), itemOut.getContent().getReadOnlyBytes(), itemOut.getContent().getCount());
+              
+              // construct a record of the write ... 
+              archiveInfo = new ArchiveInfo();
+    
+              archiveInfo.setArcfileDate(_arcWriter.getActiveFileTimestamp());
+              archiveInfo.setArcfileIndex(_partition);
+              archiveInfo.setArcfileOffset(_arcWriter.getLastItemPos());
+              archiveInfo.setCompressedSize(itemOut.getContent().getCount());
+              archiveInfo.setParseSegmentId(-1);
+              // pass through destination segment id for this arc file
+              archiveInfo.setArcSourceSegmentId(value.getDestSegmentId());
+            }
+          }
+          catch (IOException e) { 
+            LOG.error(CCStringUtils.stringifyException(e));
+            throw e;
           }
         }
-        catch (IOException e) { 
-          LOG.error(CCStringUtils.stringifyException(e));
-          throw e;
-        }
-      }
-      
-      Text metadataOutput = null;
-      
-      // if archive info is not null, stir in information into JSON structure ... 
-      if (archiveInfo != null) { 
-        // ok super inefficient, but for the sake of expediency ... 
-        // bump output json back to ucs2, parse it, stir in archive info, and then 
-        // write it back out as utf-8
-        try { 
-          JsonObject archiveJson = new JsonObject();
-          
-          archiveJson.addProperty("arcSourceSegmentId",archiveInfo.getArcSourceSegmentId());
-          archiveJson.addProperty("arcFileDate",archiveInfo.getArcfileDate());
-          archiveJson.addProperty("arcFileParition",archiveInfo.getArcfileIndex());
-          archiveJson.addProperty("arcFileOffset", archiveInfo.getArcfileOffset());
-          archiveJson.addProperty("compressedSize", archiveInfo.getCompressedSize());
-          
-          JsonObject metadataJSON= _parser.parse(value.getMetadata()).getAsJsonObject();
-          // stir in archive info 
-          metadataJSON.add("archiveInfo",archiveJson);
-          // dump it back out 
-          metadataOutput = new Text(metadataJSON.toString());
-        }
-        catch (Exception e) { 
-          LOG.error(CCStringUtils.stringifyException(e));
-          throw new IOException(e);
-        }
-      }
-      else { 
-        metadataOutput = new Text();
-        // copy in original utf-8 bytes ... 
-        metadataOutput.set(
-            value.getMetadataAsTextBytes().getBytes(),
-            value.getMetadataAsTextBytes().getOffset(),
-            value.getMetadataAsTextBytes().getLength());
-      }
-      
-      // spill metadata output 
-      _metadataWriter.append(key,metadataOutput);
-      
-      // and text output
-      if (value.getTextContentAsTextBytes().getLength() != 0) {
-        Text textBytes = new Text();
         
-        textBytes.set(
-            value.getTextContentAsTextBytes().getBytes(),
-            value.getTextContentAsTextBytes().getOffset(),
-            value.getTextContentAsTextBytes().getLength());
+        Text metadataOutput = null;
         
-        _textWriter.append(key,textBytes);
+        // if archive info is not null, stir in information into JSON structure ... 
+        if (archiveInfo != null) { 
+          // ok super inefficient, but for the sake of expediency ... 
+          // bump output json back to ucs2, parse it, stir in archive info, and then 
+          // write it back out as utf-8
+          try { 
+            JsonObject archiveJson = new JsonObject();
+            
+            archiveJson.addProperty("arcSourceSegmentId",archiveInfo.getArcSourceSegmentId());
+            archiveJson.addProperty("arcFileDate",archiveInfo.getArcfileDate());
+            archiveJson.addProperty("arcFileParition",archiveInfo.getArcfileIndex());
+            archiveJson.addProperty("arcFileOffset", archiveInfo.getArcfileOffset());
+            archiveJson.addProperty("compressedSize", archiveInfo.getCompressedSize());
+            
+            JsonObject metadataJSON= _parser.parse(value.getMetadata()).getAsJsonObject();
+            // stir in archive info 
+            metadataJSON.add("archiveInfo",archiveJson);
+            // dump it back out 
+            metadataOutput = new Text(metadataJSON.toString());
+          }
+          catch (Exception e) { 
+            LOG.error(CCStringUtils.stringifyException(e));
+            throw new IOException(e);
+          }
+        }
+        else { 
+          metadataOutput = new Text();
+          // copy in original utf-8 bytes ... 
+          metadataOutput.set(
+              value.getMetadataAsTextBytes().getBytes(),
+              value.getMetadataAsTextBytes().getOffset(),
+              value.getMetadataAsTextBytes().getLength());
+        }
+        
+        // spill metadata output 
+        _metadataWriter.append(key,metadataOutput);
+        
+        // and text output
+        if (value.getTextContentAsTextBytes().getLength() != 0) {
+          Text textBytes = new Text();
+          
+          textBytes.set(
+              value.getTextContentAsTextBytes().getBytes(),
+              value.getTextContentAsTextBytes().getOffset(),
+              value.getTextContentAsTextBytes().getLength());
+          
+          _textWriter.append(key,textBytes);
+        }
+      }
+      catch (Exception e) { 
+        LOG.error(CCStringUtils.stringifyException(e));
+        throw new IOException(e);
       }
     }
   }

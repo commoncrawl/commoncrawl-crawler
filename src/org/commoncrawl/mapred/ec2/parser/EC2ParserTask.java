@@ -34,6 +34,12 @@ import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -66,29 +72,70 @@ import com.google.common.collect.Iterators;
  * @author rana
  *
  */
+@SuppressWarnings("static-access")
 public class EC2ParserTask {
   
   public static final Log LOG = LogFactory.getLog(EC2ParserTask.class);
   
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String CRAWL_LOG_INTERMEDIATE_PATH = "/common-crawl/crawl-intermediate/";
+  
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
+  static final String TEST_VALID_SEGMENTS_PATH = "/common-crawl/parse-output-test/valid_segments/";
+  static final String VALID_SEGMENTS_PATH_PROPERTY = "cc.valid.segments.path";
+  
   static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
+  static final String TEST_SEGMENTS_PATH = "/common-crawl/parse-output-test/segment/";
+  static final String SEGMENT_PATH_PROPERTY = "cc.segment.path";
+  
+  static final String JOB_LOGS_PATH = "/common-crawl/job-logs/";
+  static final String TEST_JOB_LOGS_PATH = "/common-crawl/test-job-logs/";
+  static final String JOB_LOGS_PATH_PROPERTY = "cc.job.log.path";
+
+  
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
   static final int MAX_SIMULTANEOUS_JOBS = 100;
   
+  public static final String CONF_PARAM_TEST_MODE = "EC2ParserTask.TestMode";
   
   LinkedBlockingQueue<QueueItem> _queue = new LinkedBlockingQueue<QueueItem>();
-  Semaphore jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
+  Semaphore jobThreadSemaphore = null;
+  int maxSimultaneousJobs = MAX_SIMULTANEOUS_JOBS;
 
+  
+  static Options options = new Options();
+  static { 
+    
+    options.addOption(
+        OptionBuilder.withArgName("testMode").hasArg(false).withDescription("Test Mode").create("testMode"));
+    
+  }
+  
+  
   public EC2ParserTask(Configuration conf)throws Exception {
+    
+    if (!conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
+     conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
+     conf.set(SEGMENT_PATH_PROPERTY,SEGMENTS_PATH);
+     conf.set(JOB_LOGS_PATH_PROPERTY, JOB_LOGS_PATH);
+     jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
+     
+    }
+    else { 
+     conf.set(VALID_SEGMENTS_PATH_PROPERTY,TEST_VALID_SEGMENTS_PATH);
+     conf.set(SEGMENT_PATH_PROPERTY,TEST_SEGMENTS_PATH);
+     conf.set(JOB_LOGS_PATH_PROPERTY, TEST_JOB_LOGS_PATH);
+     jobThreadSemaphore = new Semaphore(0);
+     maxSimultaneousJobs = 1;
+    }
+    
     FileSystem fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
     LOG.info("FileSystem is:" + fs.getUri() +" Scanning for candidates at path:" + CRAWL_LOG_INTERMEDIATE_PATH);
     TreeSet<Path> candidateSet = buildCandidateList(fs, new Path(CRAWL_LOG_INTERMEDIATE_PATH));
     LOG.info("Scanning for completed segments"); 
-    List<Path> processedLogs = scanForCompletedSegments(fs);
+    List<Path> processedLogs = scanForCompletedSegments(fs,conf);
     LOG.info("Found " + processedLogs.size() + " processed logs");
     // remove processed from candidate set ... 
     candidateSet.removeAll(processedLogs);
@@ -104,9 +151,16 @@ public class EC2ParserTask {
       LOG.info("Queueing Parse");
       queue(fs,conf,pathBuilder.build());
       LOG.info("Queued Parse");
+      
+      // in test mode, queue only a single segment's worth of data 
+      if (conf.getBoolean(CONF_PARAM_TEST_MODE, false)) {
+        LOG.info("Test Mode - Queueing only a single Item");
+        break;
+      }
     }
+
     // queue shutdown items 
-    for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+    for (int i=0;i<maxSimultaneousJobs;++i) { 
       _queue.put(new QueueItem());
     }
   }
@@ -114,7 +168,7 @@ public class EC2ParserTask {
   void run() { 
     LOG.info("Starting Threads");
     // startup threads .. 
-    for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+    for (int i=0;i<maxSimultaneousJobs;++i) { 
       Thread thread = new Thread(new QueueTask());
       thread.start();
     }
@@ -188,18 +242,44 @@ public class EC2ParserTask {
   
   public static void main(String[] args)throws Exception {
     Configuration conf = new Configuration();
+    
     conf.addResource(new Path("/home/hadoop/conf/core-site.xml"));
     conf.addResource(new Path("/home/hadoop/conf/mapred-site.xml"));
 
-    EC2ParserTask task = new EC2ParserTask(conf);
-    task.run();
+    CommandLineParser parser = new GnuParser();
+
+    try {
+      // parse the command line arguments
+      CommandLine line = parser.parse( options, args );    
+      
+      boolean testMode = line.hasOption("testMode"); 
+      if (testMode) { 
+        LOG.info("Running in Test Mode");
+        conf.setBoolean(CONF_PARAM_TEST_MODE,true);
+      }
+      else { 
+        LOG.info("Running in Prod Mode");
+      }
+      
+      EC2ParserTask task = new EC2ParserTask(conf);
+      task.run();
+      System.exit(0);
+    }
+    catch (Exception e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+    }
+    System.exit(1);
+
   }
   
   private static void parse(FileSystem fs,Configuration conf,ImmutableList<Path> paths)throws IOException { 
     LOG.info("Need to Parse:" + paths.toString());
     // create output path 
     long segmentId = System.currentTimeMillis();
-    Path outputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH+Long.toString(segmentId));
+    
+    String segmentPathPrefix = conf.get(SEGMENT_PATH_PROPERTY);
+    
+    Path outputPath = new Path(S3N_BUCKET_PREFIX + segmentPathPrefix + Long.toString(segmentId));
     LOG.info("Starting Map-Reduce Job. SegmentId:" + segmentId + " OutputPath:" + outputPath);
     // run job...
     JobConf jobConf = new JobBuilder("parse job",conf)
@@ -215,9 +295,12 @@ public class EC2ParserTask {
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
       .minSplitSize(134217728*4)
+      .reuseJVM(1)
       .build();
     
+    Path jobLogsPath = new Path(S3N_BUCKET_PREFIX + conf.get(JOB_LOGS_PATH_PROPERTY) + Long.toString(segmentId));
     
+    jobConf.set("hadoop.job.history.user.location", jobLogsPath.toString());
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
     jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
     jobConf.setLong("cc.segmet.id", segmentId);
@@ -226,13 +309,15 @@ public class EC2ParserTask {
     JobClient.runJob(jobConf);
     
     LOG.info("Job Finished. Writing Segments Manifest File");
-    writeSegmentManifestFile(fs,segmentId,paths);
+    writeSegmentManifestFile(fs,conf,segmentId,paths);
   }
   
-  private static List<Path> scanForCompletedSegments(FileSystem fs) throws IOException { 
+  private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 
     ImmutableList.Builder<Path> pathListBuilder = new ImmutableList.Builder<Path>();
     
-    for (FileStatus fileStatus : fs.globStatus(new Path(VALID_SEGMENTS_PATH+"[0-9]*"))) { 
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+    
+    for (FileStatus fileStatus : fs.globStatus(new Path(validSegmentPathPrefix+"[0-9]*"))) { 
       pathListBuilder.addAll(scanSegmentManifestFile(fs,fileStatus.getPath()));
     }
     return pathListBuilder.build();
@@ -248,13 +333,16 @@ public class EC2ParserTask {
     return pathListBuilder.build();
   }
   
-  private static void writeSegmentManifestFile(FileSystem fs,long segmentTimestamp,List<Path> logsInSegment) throws IOException {
+  private static void writeSegmentManifestFile(FileSystem fs,Configuration conf,long segmentTimestamp,List<Path> logsInSegment) throws IOException {
     LOG.info("Writing Segment Manifest for Segment: " + segmentTimestamp + " itemCount:" + logsInSegment.size());
     ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
+    
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+
     for (Path logPath : logsInSegment) { 
       listBuilder.add(logPath.toString().substring(S3N_BUCKET_PREFIX.length()));
     }
-    listToTextFile(listBuilder.build(), fs, new Path(VALID_SEGMENTS_PATH+Long.toString(segmentTimestamp)+"/"+SEGMENT_MANIFEST_FILE));
+    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SEGMENT_MANIFEST_FILE));
   }
   
   
@@ -326,4 +414,11 @@ public class EC2ParserTask {
       writer.close();
     }
   }
+  
+
+  
+  static void printUsage() { 
+    HelpFormatter formatter = new HelpFormatter();
+    formatter.printHelp( "EC2Launcher", options );
+  }  
 }

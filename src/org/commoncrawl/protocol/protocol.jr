@@ -1023,6 +1023,7 @@ module org.commoncrawl.protocol {
       ustring compactMetadata = 10;
       org.commoncrawl.protocol.shared.CrawlMetadata crawlMetadata = 11;
       long    destSegmentId = 12;
+      ustring detectedCharset = 13;
    }
 
   Service CrawlDBService { 

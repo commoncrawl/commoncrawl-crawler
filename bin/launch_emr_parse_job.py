@@ -27,7 +27,7 @@ def usage():
     sys.exit()
 
 try:
-	opts, args = getopt.getopt(sys.argv[1:],'',['awsKey=','awsSecret=','core-count=','spot-count=','spot-bid=','keypair='])
+	opts, args = getopt.getopt(sys.argv[1:],'',['awsKey=','awsSecret=','core-count=','spot-count=','spot-bid=','keypair=','test'])
 except:
 	usage()
 
@@ -39,7 +39,8 @@ params = {'aws_key' : None,
           's3_bucket' : 'commoncrawl-emr',
 		  'num_core' : 2,
 		  'num_spot' : 0,
-		  'spot_bid_price' : None
+		  'spot_bid_price' : None,
+		  'test_mode' : False
 		 }
 
 for o, a in opts:
@@ -55,6 +56,8 @@ for o, a in opts:
 		params['keypair']=a
 	if o in ('--spot-bid'):
 		params['spot_bid_price']=a
+	if o in ('--test'):
+		params['test_mode']=True
 	
 required = ['aws_key','secret','keypair']
 
@@ -63,10 +66,18 @@ for pname in required:
         print '\nERROR:%s is required' % pname
         usage()
 
+for p, v in params.iteritems():
+	print "param:" + `p`+ " value:" + `v`
+
 conn = boto.connect_emr(params['aws_key'],params['secret'])
 
 bootstrap_step1 = BootstrapAction("install_cc", "s3://commoncrawl-public/config64.sh",[params['aws_key'], params['secret']])
-bootstrap_step2 = BootstrapAction("configure_hadoop", "s3://elasticmapreduce/bootstrap-actions/configure-hadoop",["-m","mapred.tasktracker.map.tasks.maximum=8"])
+bootstrap_step2 = BootstrapAction("configure_hadoop", "s3://elasticmapreduce/bootstrap-actions/configure-hadoop",
+	[
+	"-m","mapred.tasktracker.map.tasks.maximum=6",
+	"-m","mapred.child.java.opts=-XX:ErrorFile=/tmp/hs_err_${mapred.tip.id}.log -Xmx900m -XX:+UseParNewGC -XX:ParallelGCThreads=8 -XX:NewSize=100m -XX:+UseConcMarkSweepGC -XX:+UseTLAB -XX:+CMSIncrementalMode -XX:+CMSIncrementalPacing -XX:CMSIncrementalDutyCycleMin=0 -XX:CMSIncrementalDutyCycle=10"
+	])
+bootstrap_step3 = BootstrapAction("configure_jobtrackerheap", "s3://elasticmapreduce/bootstrap-actions/configure-daemons",["--jobtracker-heap-size=12096"])
 
 namenode_instance_group = InstanceGroup(1,"MASTER","c1.xlarge","ON_DEMAND","MASTER_GROUP")
 core_instance_group = InstanceGroup(params['num_core'],"CORE","c1.xlarge","ON_DEMAND","CORE_GROUP")
@@ -84,19 +95,24 @@ else:
 		
 	instance_groups=[namenode_instance_group,core_instance_group,spot_instance_group]
 
+args = []
+
+if params['test_mode'] == True:
+	args.append('--testMode')
+
 step = JarStep(
 	name="CCParseJob",
 	jar="s3://commoncrawl-public/commoncrawl-0.1.jar",
-	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcer",
-	action_on_failure="TERMINATE_JOB_FLOW")
+	main_class="org.commoncrawl.mapred.ec2.parser.EC2Launcher",
+	action_on_failure="TERMINATE_JOB_FLOW",
+	step_args=args)
 	
 print  instance_groups
-sys.exit()
 
 #	instance_groups=[namenode_instance_group,core_instance_group,spot_instance_group],
 jobid = conn.run_jobflow(
-	name="testbootstrap", 
-	availability_zone="us-east-1a",
+	name="EMR Parser JOB", 
+	availability_zone="us-east-1d",
     log_uri="s3://" + params['s3_bucket'] + "/logs", 
 	ec2_keyname=params['keypair'],
 	instance_groups=instance_groups,
@@ -104,7 +120,7 @@ jobid = conn.run_jobflow(
     enable_debugging=True,
 	hadoop_version="0.20.205",
 	steps = [step],    
-	bootstrap_actions=[bootstrap_step1,bootstrap_step2],
+	bootstrap_actions=[bootstrap_step1,bootstrap_step2,bootstrap_step3],
 	ami_version="2.0.4"
     )
 

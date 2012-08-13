@@ -35,6 +35,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.commoncrawl.protocol.URLFP;
 import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.rpc.base.shared.BinaryProtocol;
+import org.commoncrawl.util.GoogleURL;
 import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMultimap;
@@ -132,7 +133,11 @@ public class URLUtils {
 
     // phase 2 - remove common session id patterns
     canonicalizedURL = _sessionIdNormalizer.normalize(canonicalizedURL, "");
-
+    
+    // phase 3 - stir back in ref if #!
+    if (urlObject.getRef().length() != 0 && urlObject.getRef().charAt(0) == '!') { 
+      canonicalizedURL += "#" + urlObject.getRef();
+    }
     return canonicalizedURL;
   }
 
