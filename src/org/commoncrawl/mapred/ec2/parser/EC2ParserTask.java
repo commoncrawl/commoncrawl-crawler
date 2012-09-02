@@ -25,6 +25,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -47,6 +48,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
@@ -94,6 +96,7 @@ public class EC2ParserTask {
 
   
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
+  static final String SPLITS_MANIFEST_FILE = "splits.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
   static final int MAX_SIMULTANEOUS_JOBS = 100;
@@ -272,6 +275,50 @@ public class EC2ParserTask {
 
   }
   
+  private static void writeSplitsManifest(FileSystem fs, Configuration conf,
+      JobConf jobConf, long segmentTimestamp) throws IOException {
+    // calculate splits ...
+    InputSplit[] splits = jobConf.getInputFormat().getSplits(jobConf,
+        jobConf.getNumMapTasks());
+
+    LOG.info("Writing Splits Manifest for Segment: " + segmentTimestamp
+        + " splitCount:" + splits.length);
+    ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
+
+    // (taken from hadoop code to replicate split order and generate proper
+    // task id to split mapping)
+    // sort the splits into order based on size, so that the biggest
+    // go first
+    Arrays.sort(splits,
+        new Comparator<org.apache.hadoop.mapred.InputSplit>() {
+      public int compare(org.apache.hadoop.mapred.InputSplit a,
+          org.apache.hadoop.mapred.InputSplit b) {
+        try {
+          long left = a.getLength();
+          long right = b.getLength();
+          if (left == right) {
+            return 0;
+          } else if (left < right) {
+            return 1;
+          } else {
+            return -1;
+          }
+        } catch (IOException ie) {
+          throw new RuntimeException(
+              "Problem getting input split size", ie);
+        }
+      }
+    });
+
+    for (InputSplit sortedSplit : splits) {
+      listBuilder.add(sortedSplit.toString());
+    }
+    
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+
+    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SPLITS_MANIFEST_FILE));
+  }
+  
   private static void parse(FileSystem fs,Configuration conf,ImmutableList<Path> paths)throws IOException { 
     LOG.info("Need to Parse:" + paths.toString());
     // create output path 
@@ -288,28 +335,36 @@ public class EC2ParserTask {
       .inputFormat(SequenceFileInputFormat.class)
       .keyValue(Text.class, ParseOutput.class)
       .mapper(ParserMapper.class)
-      .maxMapAttempts(3)
-      .maxMapTaskFailures(100)
+      .maxMapAttempts(1)
+      .maxMapTaskFailures(1000)
       .speculativeExecution(true)
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)
       .minSplitSize(134217728*4)
-      .reuseJVM(1)
+      .reuseJVM(1000)
       .build();
     
     Path jobLogsPath = new Path(S3N_BUCKET_PREFIX + conf.get(JOB_LOGS_PATH_PROPERTY) + Long.toString(segmentId));
     
     jobConf.set("hadoop.job.history.user.location", jobLogsPath.toString());
-    jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);
-    jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
+    jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);    
     jobConf.setLong("cc.segmet.id", segmentId);
+    // set task timeout to 60 minutes 
+    jobConf.setInt("mapred.task.timeout", 60 * 60 * 1000);
+    // set mapper runtime to 4 hours ... 
+    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 4 * 60 * 60  *1000);
+    
     jobConf.setOutputCommitter(OutputCommitter.class);
+    // allow lots of failures per tracker per job 
+    jobConf.setMaxTaskFailuresPerTracker(1000);
+    
     
     JobClient.runJob(jobConf);
     
     LOG.info("Job Finished. Writing Segments Manifest File");
     writeSegmentManifestFile(fs,conf,segmentId,paths);
+    writeSplitsManifest(fs,conf,jobConf,segmentId);
   }
   
   private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 

@@ -74,8 +74,8 @@ conn = boto.connect_emr(params['aws_key'],params['secret'])
 bootstrap_step1 = BootstrapAction("install_cc", "s3://commoncrawl-public/config64.sh",[params['aws_key'], params['secret']])
 bootstrap_step2 = BootstrapAction("configure_hadoop", "s3://elasticmapreduce/bootstrap-actions/configure-hadoop",
 	[
-	"-m","mapred.tasktracker.map.tasks.maximum=6",
-	"-m","mapred.child.java.opts=-XX:ErrorFile=/tmp/hs_err_${mapred.tip.id}.log -Xmx900m -XX:+UseParNewGC -XX:ParallelGCThreads=8 -XX:NewSize=100m -XX:+UseConcMarkSweepGC -XX:+UseTLAB -XX:+CMSIncrementalMode -XX:+CMSIncrementalPacing -XX:CMSIncrementalDutyCycleMin=0 -XX:CMSIncrementalDutyCycle=10"
+	"-m","mapred.tasktracker.map.tasks.maximum=8",
+	"-m","mapred.child.java.opts=-XX:ErrorFile=/tmp/hs_err_${mapred.tip.id}.log -Xmx700m -XX:+UseParNewGC -XX:ParallelGCThreads=8 -XX:NewSize=100m -XX:+UseConcMarkSweepGC -XX:+UseTLAB -XX:+CMSIncrementalMode -XX:+CMSIncrementalPacing -XX:CMSIncrementalDutyCycleMin=0 -XX:CMSIncrementalDutyCycle=10"
 	])
 bootstrap_step3 = BootstrapAction("configure_jobtrackerheap", "s3://elasticmapreduce/bootstrap-actions/configure-daemons",["--jobtracker-heap-size=12096"])
 
