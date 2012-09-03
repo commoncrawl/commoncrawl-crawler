@@ -68,10 +68,12 @@ import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.JSONUtils;
 import org.commoncrawl.util.MimeTypeFilter;
 import org.commoncrawl.util.SimHash;
+import org.commoncrawl.util.TaskDataUtils;
 import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.URLUtils;
 import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.MimeTypeFilter.MimeTypeDisposition;
+import org.commoncrawl.util.TaskDataUtils.TaskDataClient;
 import org.commoncrawl.util.Tuples.Pair;
 import org.xml.sax.InputSource;
 
@@ -128,6 +130,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   public static final String MAX_MAPPER_RUNTIME_PROPERTY = "cc.max.mapper.runtime";
   // 50 minutes per mapper MAX
   public static final long   DEFAULT_MAX_MAPPER_RUNTIME = 50  * 60 * 1000; 
+  
+  
+  public static final String BAD_TASK_TASKDATA_KEY = "bad";
   
   private static ImmutableSet<String> dontKeepHeaders = ImmutableSet.of(
       "proxy-connection",
@@ -925,12 +930,26 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     return null;
   }
   
+  int mapCalls = 0;
+  
   @Override
   public void map(Text sourceURL, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
     if (System.currentTimeMillis() > _killTime) { 
       LOG.error("Expended Max Allowed Time for Mapper!");
+      // send message to the task data master ... 
+      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, "1");
+      // and bail from the task ... 
       throw new IOException("Max Map Task Runtime Exceeded!");
+    }
+    else { 
+      // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
+      if (++mapCalls % 10 == 0) { 
+        String badTaskDataValue = _taskDataClient.queryTaskData(BAD_TASK_TASKDATA_KEY);
+        if (badTaskDataValue != null && badTaskDataValue.equalsIgnoreCase("1")) { 
+          throw new IOException("Fast Failing Blacklisted (by TDC) Mapper");
+        }
+      }
     }
     
     if (sourceURL.getLength() == 0) { 
@@ -1085,6 +1104,8 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   long _segmentId;
   long _startTime;
   long _killTime;
+  
+  TaskDataClient _taskDataClient;
   @Override
   public void configure(JobConf job) {
     LOG.info("LIBRARY PATH:" + System.getenv().get("LD_LIBRARY_PATH"));
@@ -1094,11 +1115,19 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     long maxRunTime = job.getLong(MAX_MAPPER_RUNTIME_PROPERTY, DEFAULT_MAX_MAPPER_RUNTIME);
     LOG.info("Job Max Runtime (per config) is:" + maxRunTime);
     _killTime = _startTime + maxRunTime;
+    // initialize the Task Data Client ... 
+    try {
+      _taskDataClient = TaskDataUtils.getTaskDataClientForTask(job);
+    } catch (IOException e) {
+      LOG.fatal("Unable to Initialize Task Data Client with Error:" + CCStringUtils.stringifyException(e));
+      // hard fail
+      throw new RuntimeException("Unable to Initialize Task Data Client with Error:" + CCStringUtils.stringifyException(e));
+    }
   }
 
   @Override
   public void close() throws IOException {
-    
+    _taskDataClient.shutdown();
   }
   
   

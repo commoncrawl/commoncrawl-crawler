@@ -23,13 +23,19 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
+import java.util.Vector;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
@@ -52,12 +58,28 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
+import org.commoncrawl.async.EventLoop;
+import org.commoncrawl.protocol.CrawlDBService;
+import org.commoncrawl.protocol.LongQueryParam;
+import org.commoncrawl.protocol.MapReduceTaskIdAndData;
 import org.commoncrawl.protocol.ParseOutput;
+import org.commoncrawl.protocol.SimpleByteResult;
+import org.commoncrawl.protocol.URLFPV2;
+import org.commoncrawl.rpc.base.internal.AsyncContext;
+import org.commoncrawl.rpc.base.internal.AsyncRequest.Status;
+import org.commoncrawl.rpc.base.internal.AsyncServerChannel;
+import org.commoncrawl.rpc.base.internal.NullMessage;
+import org.commoncrawl.rpc.base.internal.RPCTestService;
+import org.commoncrawl.rpc.base.internal.Server;
+import org.commoncrawl.rpc.base.shared.RPCException;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
+import org.commoncrawl.util.TaskDataUtils;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.TreeMultimap;
 
 /**
  * EC2 ParserTask 
@@ -75,14 +97,14 @@ import com.google.common.collect.Iterators;
  *
  */
 @SuppressWarnings("static-access")
-public class EC2ParserTask {
+public class EC2ParserTask extends Server implements CrawlDBService{
   
   public static final Log LOG = LogFactory.getLog(EC2ParserTask.class);
   
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String CRAWL_LOG_INTERMEDIATE_PATH = "/common-crawl/crawl-intermediate/";
   
-  static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
+  static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments2/";
   static final String TEST_VALID_SEGMENTS_PATH = "/common-crawl/parse-output-test/valid_segments/";
   static final String VALID_SEGMENTS_PATH_PROPERTY = "cc.valid.segments.path";
   
@@ -97,9 +119,12 @@ public class EC2ParserTask {
   
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
   static final String SPLITS_MANIFEST_FILE = "splits.txt";
+  static final String BAD_SPLITS_MANIFEST_FILE = "bad_splits.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
   static final int MAX_SIMULTANEOUS_JOBS = 100;
+  
+  static final int    TASK_DATA_PORT = 9200;
   
   public static final String CONF_PARAM_TEST_MODE = "EC2ParserTask.TestMode";
   
@@ -116,8 +141,33 @@ public class EC2ParserTask {
     
   }
   
+  private EventLoop _eventLoop = new EventLoop();
+  private static InetAddress _serverAddress = null;
   
   public EC2ParserTask(Configuration conf)throws Exception {
+  
+    // start async event loop thread 
+    _eventLoop.start();
+    
+    // look for our ip address 
+    // ok get our ip address ... 
+    _serverAddress = getMasterIPAddress("eth0");
+    
+    // set the address and port for the task data server (if available) 
+    if (_serverAddress == null) {
+      throw new IOException("Unable to determine Master IP Address!");
+    }
+    else { 
+      LOG.info("Task Data IP is:" + _serverAddress.getHostAddress() + " and Port is:" + TASK_DATA_PORT);
+      
+      // ok establish the rpc server channel ... 
+      InetSocketAddress taskDataServerAddress = new InetSocketAddress(_serverAddress.getHostAddress(), TASK_DATA_PORT);
+      AsyncServerChannel channel = new AsyncServerChannel(this, _eventLoop, taskDataServerAddress, null);
+      // register the task data service 
+      registerService(channel, CrawlDBService.spec);
+      // and start processing rpc requests for it ... 
+      start();      
+    }
     
     if (!conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
@@ -181,6 +231,8 @@ public class EC2ParserTask {
     LOG.info("Waiting for Queue Threads to Die");
     jobThreadSemaphore.acquireUninterruptibly();
     LOG.info("Queue Threads Dead. Exiting");
+    // stop event loop 
+    _eventLoop.stop();
   }
   
   static class QueueItem {
@@ -275,6 +327,23 @@ public class EC2ParserTask {
 
   }
   
+  
+  private static void writeBadSplitsFile(FileSystem fs, Configuration conf,
+      JobConf jobConf, long segmentTimestamp) throws IOException {
+  
+    ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
+    // ok bad splits map ... 
+    synchronized (_badTaskIdMap) {
+      for (String badTaskEntry : _badTaskIdMap.get(Long.toString(segmentTimestamp))) { 
+        listBuilder.add(badTaskEntry);
+      }
+    }
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+
+    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+BAD_SPLITS_MANIFEST_FILE));
+  }
+  
+  
   private static void writeSplitsManifest(FileSystem fs, Configuration conf,
       JobConf jobConf, long segmentTimestamp) throws IOException {
     // calculate splits ...
@@ -335,7 +404,7 @@ public class EC2ParserTask {
       .inputFormat(SequenceFileInputFormat.class)
       .keyValue(Text.class, ParseOutput.class)
       .mapper(ParserMapper.class)
-      .maxMapAttempts(1)
+      .maxMapAttempts(3)
       .maxMapTaskFailures(1000)
       .speculativeExecution(true)
       .numReducers(0)
@@ -350,21 +419,24 @@ public class EC2ParserTask {
     jobConf.set("hadoop.job.history.user.location", jobLogsPath.toString());
     jobConf.set("fs.default.name", S3N_BUCKET_PREFIX);    
     jobConf.setLong("cc.segmet.id", segmentId);
-    // set task timeout to 60 minutes 
-    jobConf.setInt("mapred.task.timeout", 60 * 60 * 1000);
-    // set mapper runtime to 4 hours ... 
-    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 4 * 60 * 60  *1000);
+    // set task timeout to 20 minutes 
+    jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
+    // set mapper runtime to max 20 minutes ...  
+    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 20 * 60  * 1000);
     
     jobConf.setOutputCommitter(OutputCommitter.class);
     // allow lots of failures per tracker per job 
     jobConf.setMaxTaskFailuresPerTracker(1000);
     
+    // initialize task data client info 
+    TaskDataUtils.initializeTaskDataJobConfig(jobConf, segmentId, new InetSocketAddress(_serverAddress, TASK_DATA_PORT));
     
     JobClient.runJob(jobConf);
     
-    LOG.info("Job Finished. Writing Segments Manifest File");
+    LOG.info("Job Finished. Writing Segments Manifest Files");
     writeSegmentManifestFile(fs,conf,segmentId,paths);
     writeSplitsManifest(fs,conf,jobConf,segmentId);
+    writeBadSplitsFile(fs,conf,jobConf,segmentId);
   }
   
   private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 
@@ -470,10 +542,120 @@ public class EC2ParserTask {
     }
   }
   
-
   
   static void printUsage() { 
     HelpFormatter formatter = new HelpFormatter();
     formatter.printHelp( "EC2Launcher", options );
-  }  
+  }
+
+  /** 
+   * Task Data RPC Spec Implementation  
+   */
+
+  static Multimap<String,String> _badTaskIdMap = TreeMultimap.create();
+  
+  
+  @Override
+  public void updateMapReduceTaskValue(
+      AsyncContext<MapReduceTaskIdAndData, NullMessage> rpcContext)
+      throws RPCException {
+
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    // one big hack .. if we get the "bad" task data key, add the job/task to the bad task id map 
+    if (rpcContext.getInput().getDataKey().equalsIgnoreCase(ParserMapper.BAD_TASK_TASKDATA_KEY)) {
+      synchronized (_badTaskIdMap) {
+        _badTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId());
+      }
+      rpcContext.setStatus(Status.Success);
+    }
+    rpcContext.completeRequest();
+  }
+
+  @Override
+  public void queryMapReduceTaskValue(
+      AsyncContext<MapReduceTaskIdAndData, MapReduceTaskIdAndData> rpcContext)
+      throws RPCException {
+    
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    
+    // similarly if we ask for the "bad" task data key, check to see if the job/task 
+    // is in the map, and if so, return 1 
+    if (rpcContext.getInput().getDataKey().equalsIgnoreCase(ParserMapper.BAD_TASK_TASKDATA_KEY)) { 
+      
+      try {
+        rpcContext.getOutput().merge(rpcContext.getInput());
+      } catch (CloneNotSupportedException e) {
+      }
+      
+      synchronized (_badTaskIdMap) {
+        if (_badTaskIdMap.containsEntry(
+            rpcContext.getInput().getJobId(),
+            rpcContext.getInput().getTaskId())) { 
+          
+          rpcContext.getOutput().setDataValue("1");
+        }
+        else { 
+          rpcContext.getOutput().setDataValue("0");
+        }
+        rpcContext.setStatus(Status.Success);
+      }
+    }
+    rpcContext.completeRequest();
+  }
+
+  @Override
+  public void purgeMapReduceTaskValue(
+      AsyncContext<MapReduceTaskIdAndData, NullMessage> rpcContext)
+      throws RPCException {
+    //NOOP - NOT SUPPORTED
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    rpcContext.completeRequest();
+  }
+
+  @Override
+  public void queryDuplicateStatus(
+      AsyncContext<URLFPV2, SimpleByteResult> rpcContext) throws RPCException {
+    //NOOP - NOT SUPPORTED
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    rpcContext.completeRequest();
+  }
+
+  @Override
+  public void queryLongValue(
+      AsyncContext<LongQueryParam, LongQueryParam> rpcContext)
+      throws RPCException {
+    //NOOP - NOT SUPPORTED
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    rpcContext.completeRequest();
+  }
+
+  @Override
+  public void queryFingerprintStatus(
+      AsyncContext<URLFPV2, SimpleByteResult> rpcContext) throws RPCException {
+    //NOOP - NOT SUPPORTED
+    rpcContext.setStatus(Status.Error_RequestFailed);
+    rpcContext.completeRequest();
+  } 
+  
+  /** 
+   * get ip address for master 
+   */
+  private static InetAddress getMasterIPAddress(String intfc)throws IOException { 
+    NetworkInterface netIF = NetworkInterface.getByName(intfc);
+
+    if (netIF != null) {
+      Enumeration<InetAddress> e = netIF.getInetAddresses();
+
+      while (e.hasMoreElements()) {
+
+        InetAddress address = e.nextElement();
+        // only allow ipv4 addresses for now ...
+        if (address.getAddress().length == 4) {
+          LOG.info("IP for Master on interface:"+ intfc  + " is:" + address.getHostAddress());
+          return address;
+        }
+      }
+    }
+    return null;
+  }
 }
