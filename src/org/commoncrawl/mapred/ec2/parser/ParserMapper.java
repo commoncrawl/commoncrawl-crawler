@@ -938,7 +938,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     if (System.currentTimeMillis() > _killTime) { 
       LOG.error("Expended Max Allowed Time for Mapper!");
       // send message to the task data master ... 
-      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, "1");
+      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, _splitInfo);
       // and bail from the task ... 
       throw new IOException("Max Map Task Runtime Exceeded!");
     }
@@ -946,7 +946,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
       if (++mapCalls % 10 == 0) { 
         String badTaskDataValue = _taskDataClient.queryTaskData(BAD_TASK_TASKDATA_KEY);
-        if (badTaskDataValue != null && badTaskDataValue.equalsIgnoreCase("1")) { 
+        if (badTaskDataValue != null && badTaskDataValue.length() != 0) { 
           throw new IOException("Fast Failing Blacklisted (by TDC) Mapper");
         }
       }
@@ -1106,6 +1106,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   long _killTime;
   
   TaskDataClient _taskDataClient;
+  String         _splitInfo;
   @Override
   public void configure(JobConf job) {
     LOG.info("LIBRARY PATH:" + System.getenv().get("LD_LIBRARY_PATH"));
@@ -1123,6 +1124,10 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       // hard fail
       throw new RuntimeException("Unable to Initialize Task Data Client with Error:" + CCStringUtils.stringifyException(e));
     }
+    
+    _splitInfo = job.get("map.input.file");
+    _splitInfo += ":" +job.getLong("map.input.start",-1);
+    _splitInfo += ":" +job.getLong("map.input.length",-1);
   }
 
   @Override

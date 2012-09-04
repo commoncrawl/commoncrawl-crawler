@@ -552,7 +552,16 @@ public class EC2ParserTask extends Server implements CrawlDBService{
    * Task Data RPC Spec Implementation  
    */
 
-  static Multimap<String,String> _badTaskIdMap = TreeMultimap.create();
+  static Multimap<String,String> _badTaskIdMap = TreeMultimap.create(
+      String.CASE_INSENSITIVE_ORDER,new Comparator<String>() {
+
+        @Override
+        public int compare(String o1, String o2) {
+          String tid1 = o1.substring(0,o1.indexOf(":"));
+          String tid2 = o2.substring(0,o2.indexOf(":"));
+          return tid1.compareToIgnoreCase(tid2);
+        }
+      });
   
   
   @Override
@@ -564,7 +573,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     // one big hack .. if we get the "bad" task data key, add the job/task to the bad task id map 
     if (rpcContext.getInput().getDataKey().equalsIgnoreCase(ParserMapper.BAD_TASK_TASKDATA_KEY)) {
       synchronized (_badTaskIdMap) {
-        _badTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId());
+        _badTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId()+":"+rpcContext.getInput().getDataValue());
       }
       rpcContext.setStatus(Status.Success);
     }
@@ -590,12 +599,10 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       synchronized (_badTaskIdMap) {
         if (_badTaskIdMap.containsEntry(
             rpcContext.getInput().getJobId(),
-            rpcContext.getInput().getTaskId())) { 
+            rpcContext.getInput().getTaskId()+":")) { 
           
+          // hack ... caller doesn't need split info ... 
           rpcContext.getOutput().setDataValue("1");
-        }
-        else { 
-          rpcContext.getOutput().setDataValue("0");
         }
         rpcContext.setStatus(Status.Success);
       }
