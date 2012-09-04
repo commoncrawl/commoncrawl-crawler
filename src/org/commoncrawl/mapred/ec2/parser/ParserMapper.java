@@ -133,6 +133,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   
   
   public static final String BAD_TASK_TASKDATA_KEY = "bad";
+  public static final String GOOD_TASK_TASKDATA_KEY = "good";
   
   private static ImmutableSet<String> dontKeepHeaders = ImmutableSet.of(
       "proxy-connection",
@@ -935,12 +936,21 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   @Override
   public void map(Text sourceURL, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
-    if (System.currentTimeMillis() > _killTime) { 
-      LOG.error("Expended Max Allowed Time for Mapper!");
-      // send message to the task data master ... 
-      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, _splitInfo);
-      // and bail from the task ... 
-      throw new IOException("Max Map Task Runtime Exceeded!");
+    if (System.currentTimeMillis() > _killTime) {
+      
+      if (_runtimeAlreadyExtended || _lastProgressValue < .70) { 
+        LOG.error("Expended Max Allowed Time for Mapper! Progress was at:" + _lastProgressValue);
+        // send message to the task data master ... 
+        _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, _splitInfo);
+        // and bail from the task ... 
+        throw new IOException("Max Map Task Runtime Exceeded! Progress was at:" + _lastProgressValue);
+      }
+      else { 
+        // extend runtime ... 
+        LOG.info("Extending runtime by 1/2 of original max time ... ");
+        _killTime = System.currentTimeMillis() + (_maxRunTime / 2);
+        _runtimeAlreadyExtended = true;
+      }
     }
     else { 
       // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
@@ -1101,9 +1111,25 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     }
   }
 
+  /** 
+   * inform tdc of successful task completion ... 
+   * @throws IOException
+   */
+  public void commitTask() throws IOException { 
+    _taskDataClient.updateTaskData(GOOD_TASK_TASKDATA_KEY, _splitInfo);
+  }
+  
+  
+  public void updateProgress(double progress) { 
+    _lastProgressValue = progress;
+  }
+  
+  double _lastProgressValue;
   long _segmentId;
   long _startTime;
   long _killTime;
+  long _maxRunTime;
+  boolean  _runtimeAlreadyExtended = false;
   
   TaskDataClient _taskDataClient;
   String         _splitInfo;
@@ -1113,9 +1139,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     _segmentId = job.getLong("cc.segmet.id", -1L);
     LOG.info("Job Conf says Segment Id is:" + _segmentId);
     _startTime = System.currentTimeMillis();
-    long maxRunTime = job.getLong(MAX_MAPPER_RUNTIME_PROPERTY, DEFAULT_MAX_MAPPER_RUNTIME);
-    LOG.info("Job Max Runtime (per config) is:" + maxRunTime);
-    _killTime = _startTime + maxRunTime;
+    _maxRunTime = job.getLong(MAX_MAPPER_RUNTIME_PROPERTY, DEFAULT_MAX_MAPPER_RUNTIME);
+    LOG.info("Job Max Runtime (per config) is:" + _maxRunTime);
+    _killTime = _startTime + _maxRunTime;
     // initialize the Task Data Client ... 
     try {
       _taskDataClient = TaskDataUtils.getTaskDataClientForTask(job);

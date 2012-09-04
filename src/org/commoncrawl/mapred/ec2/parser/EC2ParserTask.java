@@ -119,7 +119,8 @@ public class EC2ParserTask extends Server implements CrawlDBService{
   
   static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
   static final String SPLITS_MANIFEST_FILE = "splits.txt";
-  static final String BAD_SPLITS_MANIFEST_FILE = "bad_splits.txt";
+  static final String TRAILING_SPLITS_MANIFEST_FILE = "trailing_splits.txt";
+  static final String FAILED_SPLITS_MANIFEST_FILE = "failed_splits.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
   static final int MAX_SIMULTANEOUS_JOBS = 100;
@@ -328,7 +329,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
   }
   
   
-  private static void writeBadSplitsFile(FileSystem fs, Configuration conf,
+  private static void writeTrailingSplitsFile(FileSystem fs, Configuration conf,
       JobConf jobConf, long segmentTimestamp) throws IOException {
   
     ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
@@ -340,7 +341,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     }
     String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
 
-    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+BAD_SPLITS_MANIFEST_FILE));
+    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+TRAILING_SPLITS_MANIFEST_FILE));
   }
   
   
@@ -352,7 +353,8 @@ public class EC2ParserTask extends Server implements CrawlDBService{
 
     LOG.info("Writing Splits Manifest for Segment: " + segmentTimestamp
         + " splitCount:" + splits.length);
-    ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
+    ImmutableList.Builder<String> allListBuilder = new ImmutableList.Builder<String>();
+    ImmutableList.Builder<String> failedListBuilder = new ImmutableList.Builder<String>();
 
     // (taken from hadoop code to replicate split order and generate proper
     // task id to split mapping)
@@ -379,13 +381,27 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       }
     });
 
+    String segmentIdStr = Long.toString(segmentTimestamp);
+    
+    int splitIndex = 0;
     for (InputSplit sortedSplit : splits) {
-      listBuilder.add(sortedSplit.toString());
+      allListBuilder.add(sortedSplit.toString());
+      synchronized (_goodTaskIdMap) {
+        // check to see of it the task data "good task" map contains the specified split ... 
+        if (!_goodTaskIdMap.containsEntry(segmentIdStr, Integer.toString(splitIndex))) { 
+          // if not, add it the failed list ... 
+          failedListBuilder.add(Integer.toString(splitIndex)+","+sortedSplit.toString());
+        }
+      }
+      ++splitIndex;
     }
     
     String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
-
-    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SPLITS_MANIFEST_FILE));
+    
+    // emit ALL splits file 
+    listToTextFile(allListBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SPLITS_MANIFEST_FILE));
+    // emit FAILED splits file (subset of all)
+    listToTextFile(failedListBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+FAILED_SPLITS_MANIFEST_FILE));
   }
   
   private static void parse(FileSystem fs,Configuration conf,ImmutableList<Path> paths)throws IOException { 
@@ -403,6 +419,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       .inputs(paths)
       .inputFormat(SequenceFileInputFormat.class)
       .keyValue(Text.class, ParseOutput.class)
+      .mapRunner(ParserMapRunner.class)
       .mapper(ParserMapper.class)
       .maxMapAttempts(3)
       .maxMapTaskFailures(1000)
@@ -422,7 +439,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     // set task timeout to 20 minutes 
     jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
     // set mapper runtime to max 20 minutes ...  
-    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 20 * 60  * 1000);
+    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 40 * 60  * 1000);
     
     jobConf.setOutputCommitter(OutputCommitter.class);
     // allow lots of failures per tracker per job 
@@ -436,7 +453,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     LOG.info("Job Finished. Writing Segments Manifest Files");
     writeSegmentManifestFile(fs,conf,segmentId,paths);
     writeSplitsManifest(fs,conf,jobConf,segmentId);
-    writeBadSplitsFile(fs,conf,jobConf,segmentId);
+    writeTrailingSplitsFile(fs,conf,jobConf,segmentId);
   }
   
   private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 
@@ -557,11 +574,14 @@ public class EC2ParserTask extends Server implements CrawlDBService{
 
         @Override
         public int compare(String o1, String o2) {
-          String tid1 = o1.substring(0,o1.indexOf(":"));
-          String tid2 = o2.substring(0,o2.indexOf(":"));
+          String tid1 = o1.substring(0,o1.indexOf(","));
+          String tid2 = o2.substring(0,o2.indexOf(","));
           return tid1.compareToIgnoreCase(tid2);
         }
       });
+
+  static Multimap<String,String> _goodTaskIdMap = TreeMultimap.create(
+      String.CASE_INSENSITIVE_ORDER,String.CASE_INSENSITIVE_ORDER);
   
   
   @Override
@@ -573,7 +593,13 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     // one big hack .. if we get the "bad" task data key, add the job/task to the bad task id map 
     if (rpcContext.getInput().getDataKey().equalsIgnoreCase(ParserMapper.BAD_TASK_TASKDATA_KEY)) {
       synchronized (_badTaskIdMap) {
-        _badTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId()+":"+rpcContext.getInput().getDataValue());
+        _badTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId()+","+rpcContext.getInput().getDataValue());
+      }
+      rpcContext.setStatus(Status.Success);
+    }
+    else if (rpcContext.getInput().getDataKey().equalsIgnoreCase(ParserMapper.GOOD_TASK_TASKDATA_KEY)) { 
+      synchronized (_goodTaskIdMap) { 
+        _goodTaskIdMap.put(rpcContext.getInput().getJobId(),rpcContext.getInput().getTaskId());
       }
       rpcContext.setStatus(Status.Success);
     }
@@ -599,7 +625,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       synchronized (_badTaskIdMap) {
         if (_badTaskIdMap.containsEntry(
             rpcContext.getInput().getJobId(),
-            rpcContext.getInput().getTaskId()+":")) { 
+            rpcContext.getInput().getTaskId()+",")) { 
           
           // hack ... caller doesn't need split info ... 
           rpcContext.getOutput().setDataValue("1");
