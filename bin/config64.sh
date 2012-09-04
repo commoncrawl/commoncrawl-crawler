@@ -52,5 +52,6 @@ sudo mkswap $swapDrive/swapfile
 echo $swapDrive/swapfile none swap defaults 0 0 | sudo tee -a /etc/fstab
 sudo swapon -a
 sudo bash -c "echo -e '\nhadoop -       nofile          200000' >> /etc/security/limits.conf"
+sudo bash -c "echo -e '\nroot -       nofile          200000' >> /etc/security/limits.conf"
 sudo bash -c "echo -e '\nfs.file-max=200000' >> /etc/sysctl.conf"
 

@@ -95,7 +95,7 @@ public class EC2Launcher {
       System.out.println("Done Sleeping");
       
       ProcessBuilder pb = new ProcessBuilder(
-          "./bin/ccAppRun.sh",
+          "sudo bash -c \"sudo -u hadoop ./bin/ccAppRun.sh",
           "--consoleMode",
           "--heapSize",
           "4096",
@@ -107,6 +107,7 @@ public class EC2Launcher {
       for (String arg : args) { 
         pb.command().add(arg);
       }
+      pb.command().add("\"");
       
       pb.directory(new File("/home/hadoop/ccprod"));
   
