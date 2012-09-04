@@ -51,4 +51,6 @@ sudo chmod 600 $swapDrive/swapfile
 sudo mkswap $swapDrive/swapfile
 echo $swapDrive/swapfile none swap defaults 0 0 | sudo tee -a /etc/fstab
 sudo swapon -a
+sudo echo "hadoop -       nofile          200000" >> /etc/security/limits.conf
+sudo echo "fs.file-max=200000" >> /etc/sysctl.cnf
 
