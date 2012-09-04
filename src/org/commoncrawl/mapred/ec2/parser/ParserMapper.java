@@ -1153,7 +1153,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     
     _splitInfo = job.get("map.input.file");
     _splitInfo += ":" +job.getLong("map.input.start",-1);
-    _splitInfo += ":" +job.getLong("map.input.length",-1);
+    _splitInfo += "+" +job.getLong("map.input.length",-1);
   }
 
   @Override

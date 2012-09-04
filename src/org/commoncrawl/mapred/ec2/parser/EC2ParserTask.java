@@ -443,7 +443,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     
     jobConf.setOutputCommitter(OutputCommitter.class);
     // allow lots of failures per tracker per job 
-    jobConf.setMaxTaskFailuresPerTracker(1000);
+    jobConf.setMaxTaskFailuresPerTracker(Integer.MAX_VALUE);
     
     // initialize task data client info 
     TaskDataUtils.initializeTaskDataJobConfig(jobConf, segmentId, new InetSocketAddress(_serverAddress, TASK_DATA_PORT));
