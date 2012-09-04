@@ -25,6 +25,7 @@ import java.nio.channels.spi.AbstractSelectableChannel;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.commoncrawl.util.CCStringUtils;
 
 /**
  * 
@@ -69,12 +70,13 @@ public class NIOServerTCPSocket implements NIOServerSocket {
         NIOClientTCPSocket newSocketObj = new NIOClientTCPSocket(newClientChannel);
         // inform the listener of the event
         _listener.Accepted(newSocketObj);
-      } catch (IOException e) {
+      } catch (Exception e) {
+        LOG.error("ERROR: ACCEPTING CONNECTION On Server Socket:" + _channel.toString() + " Exception:" +  CCStringUtils.stringifyException(e));
         if (newClientChannel != null) {
           try {
             newClientChannel.close();
           } catch (IOException e2) {
-            throw new RuntimeException(e2);
+            LOG.error(CCStringUtils.stringifyException(e));
           }
         }
         throw new RuntimeException(e);

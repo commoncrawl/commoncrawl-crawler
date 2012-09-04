@@ -166,38 +166,37 @@ public final class EventLoop implements Runnable {
 
   public void run() {
 
-    try {
-      while (!_shutdown) {
+    while (!_shutdown) {
 
-        long waitTime = 0;
-        long nextFireTime = _timerRegistry.fireTimers();
+      long waitTime = 0;
+      long nextFireTime = _timerRegistry.fireTimers();
 
-        if (nextFireTime != 0) {
-          waitTime = Math.max(1, nextFireTime - System.currentTimeMillis());
-        }
-
-        try {
-          // long timeStart = System.currentTimeMillis();
-          _resolver.poll();
-          // long timeEnd = System.currentTimeMillis();
-
-          // timeStart = System.currentTimeMillis();
-          _selector.poll(waitTime, _selectorTimeUsage);
-          // timeEnd = System.currentTimeMillis();
-
-          /**
-           * if (++_loopCount % 100 == 0) JVMStats.dumpMemoryStats();
-           **/
-        } catch (IOException e) {
-          LOG.error(StringUtils.stringifyException(e));
-          e.printStackTrace();
-        }
+      if (nextFireTime != 0) {
+        waitTime = Math.max(1, nextFireTime - System.currentTimeMillis());
       }
-    } catch (Exception e) {
-      LOG.fatal("Unhandled Exception in Event Loop:"
-          + StringUtils.stringifyException(e));
-      System.out.println("Unhandled Exception in Event Loop:"
-          + StringUtils.stringifyException(e));
+
+      try {
+        // long timeStart = System.currentTimeMillis();
+        _resolver.poll();
+        // long timeEnd = System.currentTimeMillis();
+
+        // timeStart = System.currentTimeMillis();
+        _selector.poll(waitTime, _selectorTimeUsage);
+        // timeEnd = System.currentTimeMillis();
+
+        /**
+         * if (++_loopCount % 100 == 0) JVMStats.dumpMemoryStats();
+         **/
+      } catch (IOException e) {
+        LOG.error(StringUtils.stringifyException(e));
+        e.printStackTrace();
+      }
+      catch (Exception e) { 
+        LOG.fatal("Unhandled Exception in Event Loop:"
+            + StringUtils.stringifyException(e));
+        System.out.println("Unhandled Exception in Event Loop:"
+            + StringUtils.stringifyException(e));
+      }
     }
     LOG.info("Event Loop Existing Run Loop");
   }
