@@ -454,6 +454,14 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     writeSegmentManifestFile(fs,conf,segmentId,paths);
     writeSplitsManifest(fs,conf,jobConf,segmentId);
     writeTrailingSplitsFile(fs,conf,jobConf,segmentId);
+    
+    // purge maps 
+    synchronized (_badTaskIdMap) {
+      _badTaskIdMap.removeAll(Long.toString(segmentId));
+    }
+    synchronized (_goodTaskIdMap) {
+      _goodTaskIdMap.removeAll(Long.toString(segmentId));
+    }
   }
   
   private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 
