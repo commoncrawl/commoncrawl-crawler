@@ -31,6 +31,11 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TaskAttemptContext;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.util.StringUtils;
+import org.commoncrawl.util.CCStringUtils;
+import org.commoncrawl.util.TaskDataUtils;
+import org.commoncrawl.util.TaskDataUtils.TaskDataClient;
+
+
 
 /**
  * A clone of portions of the FileOutputCommitter in Hadoop used to help 
@@ -42,13 +47,33 @@ import org.apache.hadoop.util.StringUtils;
  */
 public class OutputCommitter extends FileOutputCommitter {
 
+  static String _taskDataCommitKey = null;
+  static String _taskDataCommitValue = null;
+  
+  // hack... 
+  static void setTaskDataCommitInfo(String key,String value) { 
+    _taskDataCommitKey = key;
+    _taskDataCommitValue = value;
+  }
+  
+  
+  TaskDataClient _taskDataClient;
 
   @Override
   public void setupJob(org.apache.hadoop.mapred.JobContext context) throws IOException {
     LOG.info("Setup Job Called on Custom Committer");
     super.setupJob(context);
   }
+
   
+  @Override
+  public void setupTask(TaskAttemptContext context) throws IOException {
+    
+    super.setupTask(context);
+    
+    _taskDataClient = TaskDataUtils.getTaskDataClientForTask(context.getJobConf());
+  };
+   
   Path getTempTaskOutputPath(TaskAttemptContext taskContext) {
     JobConf conf = taskContext.getJobConf();
     Path outputPath = FileOutputFormat.getOutputPath(conf);
@@ -66,6 +91,23 @@ public class OutputCommitter extends FileOutputCommitter {
     }
     return null;
   }
+  
+  @Override
+  public void abortTask(TaskAttemptContext context) throws IOException {
+    super.abortTask(context);
+
+    if (_taskDataClient != null) { 
+      try { 
+        _taskDataClient.shutdown();
+      }
+      finally { 
+        _taskDataClient = null;
+        _taskDataCommitKey = null;
+        _taskDataCommitValue = null;
+        
+      }
+    }
+  }    
 
   @Override
   public void commitTask(TaskAttemptContext context) 
@@ -88,6 +130,19 @@ public class OutputCommitter extends FileOutputCommitter {
               " directory of task: " + attemptId + " - " + taskOutputPath);
         }
         LOG.info("Saved output of task '" + attemptId + "' to " +  jobOutputPath);
+      }
+    }
+    if (_taskDataClient != null) { 
+      try { 
+        if (_taskDataCommitKey != null && _taskDataCommitValue != null) { 
+          _taskDataClient.updateTaskData(_taskDataCommitKey,_taskDataCommitValue);
+        }
+        _taskDataClient.shutdown();
+      }
+      finally { 
+        _taskDataClient = null;
+        _taskDataCommitKey = null;
+        _taskDataCommitValue = null;
       }
     }
   }

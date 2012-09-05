@@ -425,8 +425,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       // after that, we will pick it up in post processing step 
       .maxMapAttempts(2)
       .maxMapTaskFailures(1000)
-      // turn off speculative execution ... too wasteful
-      .speculativeExecution(false)
+      .speculativeExecution(true)
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)

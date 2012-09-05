@@ -956,7 +956,6 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     // ok we are still good to go ... 
     else {
       // OK, disable this whole code path since we turned off speculative execution for now ... 
-      /* 
       // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
       if (++mapCalls % 10 == 0) { 
         String badTaskDataValue = _taskDataClient.queryTaskData(BAD_TASK_TASKDATA_KEY);
@@ -964,7 +963,6 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           throw new IOException("Fast Failing Blacklisted (by TDC) Mapper");
         }
       }
-      */
     }
     
     if (sourceURL.getLength() == 0) { 
@@ -1122,12 +1120,14 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
    * @throws IOException
    */
   public void commitTask(Reporter reporter) throws IOException {
-    if (_terminatedEarly) { 
-      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, getRemainingSplitInfo());
+    if (_terminatedEarly) {
+      OutputCommitter.setTaskDataCommitInfo(BAD_TASK_TASKDATA_KEY, getRemainingSplitInfo());
+      // _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, getRemainingSplitInfo());
       reporter.incrCounter(Counters.PARTIALLY_PROCESSED_SPLIT, 1);
     }
     else { 
-      _taskDataClient.updateTaskData(GOOD_TASK_TASKDATA_KEY, getOriginalSplitInfo());
+      OutputCommitter.setTaskDataCommitInfo(GOOD_TASK_TASKDATA_KEY, getOriginalSplitInfo());
+      // _taskDataClient.updateTaskData(GOOD_TASK_TASKDATA_KEY, getOriginalSplitInfo());
       reporter.incrCounter(Counters.FULLY_PROCESSED_SPLIT, 1);
     }
   }
