@@ -39,10 +39,12 @@ public class ParserMapRunner extends MapRunner<Text,CrawlURL,Text,ParseOutput>{
           break;
         }
       }
+      
       // ok .. if we reach here without any exceptions ...
       // inform the TDC that this was a successful (potentially partially completed)
       // mapper task
       ((ParserMapper)getMapper()).commitTask(reporter);
+
       
     } finally {
       getMapper().close();

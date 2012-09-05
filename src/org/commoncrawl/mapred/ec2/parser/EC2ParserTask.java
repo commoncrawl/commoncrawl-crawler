@@ -421,9 +421,12 @@ public class EC2ParserTask extends Server implements CrawlDBService{
       .keyValue(Text.class, ParseOutput.class)
       .mapRunner(ParserMapRunner.class)
       .mapper(ParserMapper.class)
-      .maxMapAttempts(3)
+      // allow two attempts to process the split 
+      // after that, we will pick it up in post processing step 
+      .maxMapAttempts(2)
       .maxMapTaskFailures(1000)
-      .speculativeExecution(true)
+      // turn off speculative execution ... too wasteful
+      .speculativeExecution(false)
       .numReducers(0)
       .outputFormat(ParserOutputFormat.class)
       .output(outputPath)

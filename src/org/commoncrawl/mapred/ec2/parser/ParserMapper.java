@@ -126,7 +126,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     GOT_ATOM_FEED, TRYING_RSS_FEED_PARSER, EXCEPTION_DURING_FEED_PARSE,
     FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT, ERROR_CANONICALIZING_LINK_URL,
     PARTIALLY_PROCESSED_SPLIT,
-    FULLY_PROCESSED_SPLIT
+    FULLY_PROCESSED_SPLIT, GOT_OUT_OF_MEMORY_ERROR
     
     
   }
@@ -954,7 +954,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       return;
     }
     // ok we are still good to go ... 
-    else { 
+    else {
+      // OK, disable this whole code path since we turned off speculative execution for now ... 
+      /* 
       // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
       if (++mapCalls % 10 == 0) { 
         String badTaskDataValue = _taskDataClient.queryTaskData(BAD_TASK_TASKDATA_KEY);
@@ -962,6 +964,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
           throw new IOException("Fast Failing Blacklisted (by TDC) Mapper");
         }
       }
+      */
     }
     
     if (sourceURL.getLength() == 0) { 
@@ -1099,17 +1102,18 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       
       output.collect(new Text(finalURL.toString()), parseOutput);
     }
-    catch (IOException e) { 
+    catch (Exception e) { 
       LOG.error("Exception Processing URL:" + sourceURL.toString() + "\n" + CCStringUtils.stringifyException(e));
-      reporter.incrCounter(Counters.GOT_UNHANDLED_IO_EXCEPTION, 1);
-      //TODO:HACK
-      //throw e;
+      if (e instanceof IOException) 
+        reporter.incrCounter(Counters.GOT_UNHANDLED_IO_EXCEPTION, 1);
+      else 
+        reporter.incrCounter(Counters.GOT_UNHANDLED_RUNTIME_EXCEPTION, 1);
     }
-    catch (Exception e) {
-      LOG.error("Exception Processing URL:" + sourceURL.toString() + "\n" + CCStringUtils.stringifyException(e));
-      reporter.incrCounter(Counters.GOT_UNHANDLED_RUNTIME_EXCEPTION, 1);
-      //TODO: HACK 
-      //throw new IOException(e);
+    catch (OutOfMemoryError e) { 
+      LOG.fatal("Got Out of Memory Error Processing URL:" + sourceURL.toString() + "\n" + CCStringUtils.stringifyException(e));
+      reporter.incrCounter(Counters.GOT_OUT_OF_MEMORY_ERROR, 1);
+      // bail from the remainder of the map task 
+      _terminatedEarly = true;
     }
   }
 
