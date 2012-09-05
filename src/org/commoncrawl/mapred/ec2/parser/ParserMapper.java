@@ -124,7 +124,11 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     WROTE_RAW_CONTENT, GOT_UNHANDLED_IO_EXCEPTION,
     GOT_UNHANDLED_RUNTIME_EXCEPTION, MALFORMED_FINAL_URL, GOT_RSS_FEED,
     GOT_ATOM_FEED, TRYING_RSS_FEED_PARSER, EXCEPTION_DURING_FEED_PARSE,
-    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT, ERROR_CANONICALIZING_LINK_URL
+    FAILED_TO_ID_FEED, FAILED_TO_PARSE_XML_AS_FEED, EXCEPTION_PARSING_LINK_JSON, SKIPPING_ROBOTS_TXT, ERROR_CANONICALIZING_LINK_URL,
+    PARTIALLY_PROCESSED_SPLIT,
+    FULLY_PROCESSED_SPLIT
+    
+    
   }
   
   public static final String MAX_MAPPER_RUNTIME_PROPERTY = "cc.max.mapper.runtime";
@@ -936,22 +940,20 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   @Override
   public void map(Text sourceURL, CrawlURL value, OutputCollector<Text, ParseOutput> output,Reporter reporter) throws IOException {
     
+    
+    // if not marked for early termination .. check if we reached that condition ... 
     if (System.currentTimeMillis() > _killTime) {
-      
-      if (_runtimeAlreadyExtended || _lastProgressValue < .70) { 
-        LOG.error("Expended Max Allowed Time for Mapper! Progress was at:" + _lastProgressValue);
-        // send message to the task data master ... 
-        _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, _splitInfo);
-        // and bail from the task ... 
-        throw new IOException("Max Map Task Runtime Exceeded! Progress was at:" + _lastProgressValue);
-      }
-      else { 
-        // extend runtime ... 
-        LOG.info("Extending runtime by 1/2 of original max time ... ");
-        _killTime = System.currentTimeMillis() + (_maxRunTime / 2);
-        _runtimeAlreadyExtended = true;
-      }
+      LOG.error("Expended Max Allowed Time for Mapper! Progress was at:" + _lastProgressValue);
+      // bail from the task ... 
+      _terminatedEarly = true;
     }
+    
+    // if terminated early, just skip processing  
+    if (_terminatedEarly) { 
+      LOG.error("Mapper Already Terminated Early!");
+      return;
+    }
+    // ok we are still good to go ... 
     else { 
       // every 10 map calls ... check with tdc to see if we should fast fail this mapper ... 
       if (++mapCalls % 10 == 0) { 
@@ -1115,24 +1117,63 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
    * inform tdc of successful task completion ... 
    * @throws IOException
    */
-  public void commitTask() throws IOException { 
-    _taskDataClient.updateTaskData(GOOD_TASK_TASKDATA_KEY, _splitInfo);
+  public void commitTask(Reporter reporter) throws IOException {
+    if (_terminatedEarly) { 
+      _taskDataClient.updateTaskData(BAD_TASK_TASKDATA_KEY, getRemainingSplitInfo());
+      reporter.incrCounter(Counters.PARTIALLY_PROCESSED_SPLIT, 1);
+    }
+    else { 
+      _taskDataClient.updateTaskData(GOOD_TASK_TASKDATA_KEY, getOriginalSplitInfo());
+      reporter.incrCounter(Counters.FULLY_PROCESSED_SPLIT, 1);
+    }
   }
   
   
-  public void updateProgress(double progress) { 
+  public void updateProgressAndPosition(double progress,long position) { 
     _lastProgressValue = progress;
+    _lastPosition = position;
   }
   
   double _lastProgressValue;
+  long   _lastPosition = 0L;
   long _segmentId;
   long _startTime;
   long _killTime;
   long _maxRunTime;
-  boolean  _runtimeAlreadyExtended = false;
+  boolean  _terminatedEarly = true;
   
   TaskDataClient _taskDataClient;
-  String         _splitInfo;
+  String _splitFile;
+  long   _splitStartPos;
+  long   _splitLength;
+  
+  /**
+   * 
+   * @return true if this mapper exited early due to a timeout ... 
+   */
+  boolean wasTerminatedEarly() { 
+    return _terminatedEarly;
+  }
+
+  /** 
+   * 
+   * @return the orignal split information 
+   */
+  String getOriginalSplitInfo() { 
+    return _splitFile + ":" +_splitStartPos + "+" + _splitLength;
+  }
+  
+  /** 
+   * 
+   * @return the unprocessed portion of the split (after early termination) 
+   */
+  String getRemainingSplitInfo() { 
+    // calculate remaining split length ... 
+    long splitRemaining = _splitLength - (_lastPosition - _splitStartPos);
+    // and return a split for the remaining (unprocessed) portion of the split ... 
+    return _splitFile + ":" + _lastPosition + "+" + splitRemaining + "," + getOriginalSplitInfo();
+  }
+  
   @Override
   public void configure(JobConf job) {
     LOG.info("LIBRARY PATH:" + System.getenv().get("LD_LIBRARY_PATH"));
@@ -1151,9 +1192,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
       throw new RuntimeException("Unable to Initialize Task Data Client with Error:" + CCStringUtils.stringifyException(e));
     }
     
-    _splitInfo = job.get("map.input.file");
-    _splitInfo += ":" +job.getLong("map.input.start",-1);
-    _splitInfo += "+" +job.getLong("map.input.length",-1);
+    _splitFile = job.get("map.input.file");
+    _splitStartPos =  job.getLong("map.input.start",-1);
+    _splitLength =  job.getLong("map.input.length",-1);
   }
 
   @Override

@@ -30,14 +30,20 @@ public class ParserMapRunner extends MapRunner<Text,CrawlURL,Text,ParseOutput>{
       
       while (input.next(key, value)) {
         // update progress first ... 
-        ((ParserMapper)getMapper()).updateProgress(input.getProgress());
+        ((ParserMapper)getMapper()).updateProgressAndPosition(input.getProgress(),input.getPos());
         // next map pair to output
         getMapper().map(key, value, output, reporter);
-        
+        // ok see if mapper terminated early ... 
+        if (((ParserMapper)getMapper()).wasTerminatedEarly()) { 
+          // skip processing remaining stream ... 
+          break;
+        }
       }
-      // ok .. if we reach here without any exceptions ... 
-      // inform the TDC that this was a successful mapper task 
-      ((ParserMapper)getMapper()).commitTask();
+      // ok .. if we reach here without any exceptions ...
+      // inform the TDC that this was a successful (potentially partially completed)
+      // mapper task
+      ((ParserMapper)getMapper()).commitTask(reporter);
+      
     } finally {
       getMapper().close();
     }
