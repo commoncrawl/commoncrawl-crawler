@@ -438,8 +438,8 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     jobConf.setLong("cc.segmet.id", segmentId);
     // set task timeout to 20 minutes 
     jobConf.setInt("mapred.task.timeout", 20 * 60 * 1000);
-    // set mapper runtime to max 20 minutes ...  
-    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 40 * 60  * 1000);
+    // set mapper runtime to max one hour ...  
+    jobConf.setLong(ParserMapper.MAX_MAPPER_RUNTIME_PROPERTY, 60 * 60  * 1000);
     
     jobConf.setOutputCommitter(OutputCommitter.class);
     // allow lots of failures per tracker per job 
