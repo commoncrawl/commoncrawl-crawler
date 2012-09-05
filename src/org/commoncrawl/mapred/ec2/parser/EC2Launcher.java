@@ -94,22 +94,36 @@ public class EC2Launcher {
       }
       System.out.println("Done Sleeping");
       
-      ProcessBuilder pb = new ProcessBuilder(
-          "sudo bash -c \"sudo -u hadoop ./bin/ccAppRun.sh",
-          "--consoleMode",
-          "--heapSize",
-          "4096",
-          "--logdir",
-          "/mnt/var/EC2TaskLogs",
-          "org.commoncrawl.mapred.ec2.parser.EC2ParserTask",
-      "start");
+      StringBuilder sb = new StringBuilder();
+      
+      sb.append("sudo -u hadoop bash -c \'export HADOOP_HOME=/home/hadoop;export JAVA_HOME=/usr/lib/jvm/java-6-sun;cd /home/hadoop/ccprod;./bin/ccAppRun.sh" +   
+      " --consoleMode" +
+      " --heapSize" + 
+      " 4096" + 
+      " --logdir" + 
+      " /mnt/var/EC2TaskLogs" + 
+      " org.commoncrawl.mapred.ec2.parser.EC2ParserTask" + 
+      " start");
       
       for (String arg : args) { 
-        pb.command().add(arg);
+        sb.append(" " + arg);
       }
-      pb.command().add("\"");
+      
+      sb.append("\'");
+      
+      
+      ProcessBuilder pb = new ProcessBuilder(
+          "sudo", 
+          "/bin/bash",
+          "-c",
+          sb.toString()
+          );
+      
+      
       
       pb.directory(new File("/home/hadoop/ccprod"));
+      
+      System.out.println("Command Line:" + pb.command());
   
       try {
         System.out.println("Starting Job");
