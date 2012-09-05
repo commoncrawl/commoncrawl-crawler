@@ -1140,7 +1140,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
   long _startTime;
   long _killTime;
   long _maxRunTime;
-  boolean  _terminatedEarly = true;
+  boolean  _terminatedEarly = false;
   
   TaskDataClient _taskDataClient;
   String _splitFile;
