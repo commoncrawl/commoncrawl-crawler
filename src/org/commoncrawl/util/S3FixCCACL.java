@@ -9,6 +9,7 @@ import org.apache.commons.cli.Options;
 
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AccessControlList;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -37,6 +38,8 @@ public class S3FixCCACL {
     options.addOption(
         OptionBuilder.withArgName("path").hasArg().withDescription("S3 path prefix").isRequired().create("path"));
 
+    options.addOption(
+        OptionBuilder.withArgName("print").withDescription("Print ACLS").create("print"));
   }
   
   static void printUsage() { 
@@ -54,17 +57,17 @@ public class S3FixCCACL {
 
     try {
       // parse the command line arguments
-      CommandLine line = parser.parse( options, args );
+      CommandLine cmdLine = parser.parse( options, args );
       
       try { 
         BasicAWSCredentials credentials 
           = new BasicAWSCredentials(
-              line.getOptionValue("awsKey"),
-              line.getOptionValue("awsSecret"));
+              cmdLine.getOptionValue("awsKey"),
+              cmdLine.getOptionValue("awsSecret"));
         
         AmazonS3Client s3Client = new AmazonS3Client(credentials);
         
-        ObjectListing listing = s3Client.listObjects(line.getOptionValue("bucket"), line.getOptionValue("path"));
+        ObjectListing listing = s3Client.listObjects(cmdLine.getOptionValue("bucket"), cmdLine.getOptionValue("path"));
         
         boolean done = false;
         do { 
@@ -73,7 +76,14 @@ public class S3FixCCACL {
             boolean success = false;
             while (!success) {
               try { 
-                s3Client.setObjectAcl(line.getOptionValue("bucket"),summary.getKey(),CannedAccessControlList.PublicRead);
+                if (cmdLine.hasOption("print")) { 
+                  AccessControlList acl = s3Client.getObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey());
+                  System.out.println("path: s3://" + cmdLine.getOptionValue("bucket")+"/"+summary.getKey());
+                  System.out.println("acl: " + acl.toString()); 
+                }
+                else { 
+                  s3Client.setObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey(),CannedAccessControlList.PublicRead);
+                }
                 success = true;
               }
               catch (Exception e) { 
