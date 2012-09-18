@@ -85,7 +85,7 @@ public class ArcFileWriter {
   private static SimpleDateFormat       FILENAME_TIMESTAMP       = new SimpleDateFormat(
                                                                      "yyyy/MM/dd/");
 
-  private static final int              MAX_SIZE_DEFAULT         = 100000000;
+  public  static final int              MAX_SIZE_DEFAULT         = 100000000;
   private static final int              MAX_WRITERS_DEFAULT      = 10;
   private static final String           DEFAULT_ENCODING         = "ISO-8859-1";
   private static final String           ARC_MAGIC_NUMBER         = "filedesc://";

@@ -33,9 +33,7 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeSet;
-import java.util.Vector;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
@@ -69,7 +67,6 @@ import org.commoncrawl.rpc.base.internal.AsyncContext;
 import org.commoncrawl.rpc.base.internal.AsyncRequest.Status;
 import org.commoncrawl.rpc.base.internal.AsyncServerChannel;
 import org.commoncrawl.rpc.base.internal.NullMessage;
-import org.commoncrawl.rpc.base.internal.RPCTestService;
 import org.commoncrawl.rpc.base.internal.Server;
 import org.commoncrawl.rpc.base.shared.RPCException;
 import org.commoncrawl.util.CCStringUtils;
@@ -97,30 +94,11 @@ import com.google.common.collect.TreeMultimap;
  *
  */
 @SuppressWarnings("static-access")
-public class EC2ParserTask extends Server implements CrawlDBService{
+public class EC2ParserTask extends Server implements CrawlDBService, Constants {
   
   public static final Log LOG = LogFactory.getLog(EC2ParserTask.class);
   
-  static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
-  static final String CRAWL_LOG_INTERMEDIATE_PATH = "/common-crawl/crawl-intermediate/";
-  
-  static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments2/";
-  static final String TEST_VALID_SEGMENTS_PATH = "/common-crawl/parse-output-test/valid_segments/";
-  static final String VALID_SEGMENTS_PATH_PROPERTY = "cc.valid.segments.path";
-  
-  static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
-  static final String TEST_SEGMENTS_PATH = "/common-crawl/parse-output-test/segment/";
-  static final String SEGMENT_PATH_PROPERTY = "cc.segment.path";
-  
-  static final String JOB_LOGS_PATH = "/common-crawl/job-logs/";
-  static final String TEST_JOB_LOGS_PATH = "/common-crawl/test-job-logs/";
-  static final String JOB_LOGS_PATH_PROPERTY = "cc.job.log.path";
 
-  
-  static final String SEGMENT_MANIFEST_FILE = "manfiest.txt";
-  static final String SPLITS_MANIFEST_FILE = "splits.txt";
-  static final String TRAILING_SPLITS_MANIFEST_FILE = "trailing_splits.txt";
-  static final String FAILED_SPLITS_MANIFEST_FILE = "failed_splits.txt";
   static final int    LOGS_PER_ITERATION = 1000;
   static final Pattern CRAWL_LOG_REG_EXP = Pattern.compile("CrawlLog_ccc[0-9]{2}-[0-9]{2}_([0-9]*)");
   static final int MAX_SIMULTANEOUS_JOBS = 100;
@@ -139,6 +117,9 @@ public class EC2ParserTask extends Server implements CrawlDBService{
     
     options.addOption(
         OptionBuilder.withArgName("testMode").hasArg(false).withDescription("Test Mode").create("testMode"));
+
+    options.addOption(
+        OptionBuilder.withArgName("checkpoint").hasArg(false).withDescription("Create Checkpoint").create("checkpoint"));
     
   }
   
@@ -174,6 +155,8 @@ public class EC2ParserTask extends Server implements CrawlDBService{
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,SEGMENTS_PATH);
      conf.set(JOB_LOGS_PATH_PROPERTY, JOB_LOGS_PATH);
+     conf.set(CHECKPOIINTS_PATH_PROPERTY,CHECKPOINTS_PATH);
+     
      jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
      
     }
@@ -181,6 +164,7 @@ public class EC2ParserTask extends Server implements CrawlDBService{
      conf.set(VALID_SEGMENTS_PATH_PROPERTY,TEST_VALID_SEGMENTS_PATH);
      conf.set(SEGMENT_PATH_PROPERTY,TEST_SEGMENTS_PATH);
      conf.set(JOB_LOGS_PATH_PROPERTY, TEST_JOB_LOGS_PATH);
+     
      jobThreadSemaphore = new Semaphore(0);
      maxSimultaneousJobs = 1;
     }

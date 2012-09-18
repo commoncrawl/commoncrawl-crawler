@@ -11,6 +11,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.AccessControlList;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.Grant;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 
@@ -39,7 +40,7 @@ public class S3FixCCACL {
         OptionBuilder.withArgName("path").hasArg().withDescription("S3 path prefix").isRequired().create("path"));
 
     options.addOption(
-        OptionBuilder.withArgName("print").withDescription("Print ACLS").create("print"));
+        OptionBuilder.withArgName("debug").withDescription("Print ACLS").create("debug"));
   }
   
   static void printUsage() { 
@@ -76,10 +77,13 @@ public class S3FixCCACL {
             boolean success = false;
             while (!success) {
               try { 
-                if (cmdLine.hasOption("print")) { 
+                if (cmdLine.hasOption("debug")) { 
                   AccessControlList acl = s3Client.getObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey());
                   System.out.println("path: s3://" + cmdLine.getOptionValue("bucket")+"/"+summary.getKey());
-                  System.out.println("acl: " + acl.toString()); 
+                  System.out.println("grants:");
+                  for (Grant grant : acl.getGrants()) { 
+                    System.out.println("grantee:" + grant.getGrantee() + " permissions:"+ grant.getPermission());
+                  }
                 }
                 else { 
                   s3Client.setObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey(),CannedAccessControlList.PublicRead);
