@@ -3,16 +3,12 @@ package org.commoncrawl.mapred.ec2.parser;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -29,30 +25,20 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
-import org.commoncrawl.mapred.ec2.parser.EC2ParserTask.QueueItem;
-import org.commoncrawl.mapred.ec2.parser.EC2ParserTask.QueueTask;
 import org.commoncrawl.protocol.ParseOutput;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
-import org.commoncrawl.util.TaskDataUtils;
 import org.commoncrawl.util.Tuples.Pair;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.TreeMultimap;
-import com.google.common.collect.TreeMultiset;
 /** 
  * 
  * The CC EC2 workflow involves running the EC2ParserTask, which ingests RAW crawl logs (data) and produces  
