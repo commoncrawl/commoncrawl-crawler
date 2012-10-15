@@ -37,7 +37,7 @@ public interface Constants {
   
   static final int DEFAULT_PARSER_JOB_SPLIT_SIZE = 134217728 * 4;
   static final int DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE = 134217728 / 2;
-  static final int DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB = 1000;
+  static final int DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB = 100;
   
   static final String CHECKPOINT_JOB_OUTPUT_PATH = "output";
   static final String CHECKPOINT_JOB_LOG_PATH = "logs";

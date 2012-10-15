@@ -76,15 +76,15 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     } catch (URISyntaxException e) {
       throw new IOException(e.toString());
     }
-    System.out.println("FileSystem is:" + fs.getUri() +" Scanning for valid checkpoint id");
+    LOG.info("FileSystem is:" + fs.getUri() +" Scanning for valid checkpoint id");
     long latestCheckpointId = findLastValidCheckpointId(fs,conf);
-    System.out.println("Latest Checkpoint Id is:"+ latestCheckpointId);
+    LOG.info("Latest Checkpoint Id is:"+ latestCheckpointId);
     
     EC2CheckpointTask task = new EC2CheckpointTask(conf);
     
-    System.out.println("Performing checkpoint");
+    LOG.info("Performing checkpoint");
     task.doCheckpoint(fs, conf);
-    System.out.println("checkpoint complete");
+    LOG.info("checkpoint complete");
     task.shutdown();
     
     System.exit(0);
@@ -154,6 +154,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @throws IOException
    */
   static void buildSplitsForCheckpoint(FileSystem fs,Path segmentOutputPath,List<SegmentSplitDetail> splitDetails,long baseSegmentId, int defaultSplitSize, int idealSplitsPerSegment) throws IOException {
+    LOG.info("Attempting to split:" + splitDetails.size() + " splits using split size:" + defaultSplitSize + " desired splits per seg:" + idealSplitsPerSegment);
     ArrayList<FileSplit> splits = new ArrayList<FileSplit>();
     
     for (SegmentSplitDetail splitDetail : splitDetails) { 
@@ -194,6 +195,8 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     // ok, now collect segments .. doing basic partitioning ... 
     List<List<FileSplit>> segments = Lists.partition(splits, idealSplitsPerSegment);
     
+    LOG.info("Partitioned splits into:" + segments.size() + " segements");
+
     long segmentId = baseSegmentId;
     
     // now emit the segments ...
@@ -202,6 +205,8 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       Path splitManifestPath = new Path(segmentOutputPath + Long.toString(segmentId) +"/" + SPLITS_MANIFEST_FILE);
       // write manifest ... 
       listToTextFile(segmentSplits,fs,splitManifestPath);
+      LOG.info("Wrote "+ segmentSplits.size() +" splits for segment:" + segmentId + " to:" + splitManifestPath);
+      segmentId ++;
     }
   }
   
@@ -217,22 +222,32 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
   static Pair<Long,Multimap<Long,SplitInfo>> findOrCreateCheckpoint(FileSystem fs,Configuration conf) throws IOException { 
     
     Multimap<Long,SplitInfo> segmentsAndSplits = null;
-    
+    LOG.info("Looking for Stagesd Checkpoint.");
     long stagedCheckpointId = findStagedCheckpointId(fs, conf);
     if (stagedCheckpointId == -1) {
       // create a base segment id ... 
       long baseSegmentId = System.currentTimeMillis();
       // and create a new checkpoint id ...
       stagedCheckpointId = baseSegmentId + 10000;
+      LOG.info("No Staged Checkpoint Found. Creating New Checkpoint:" + stagedCheckpointId);
+      
       // get last valid checkpoint id ... 
       long lastValidCheckpointId = findLastValidCheckpointId(fs, conf);
+      LOG.info("Last Valid Checkpoint Id is:" + lastValidCheckpointId);
+      
+      LOG.info("Iterating Available Segments and collecting Splits");
       // iterate available segments (past last checkpoint date), collecting a list of partial of failed splits ... 
       List<SegmentSplitDetail> splitDetails = iterateAvailableSegmentsCollectSplits(fs,lastValidCheckpointId);
       
       if (splitDetails.size() != 0) {
         try { 
+          Path checkpointSplitsPath = new Path(CHECKPOINT_STAGING_PATH +Long.toString(stagedCheckpointId)+"/"+SPLITS_MANIFEST_FILE);
+          
+          LOG.info("Writing Splits Manifest (for checkpoint) to:" + checkpointSplitsPath);
           // write source split details to disk ... 
-          listToTextFile(splitDetails,fs,new Path(CHECKPOINT_STAGING_PATH +Long.toString(stagedCheckpointId)+"/"+SPLITS_MANIFEST_FILE));
+          listToTextFile(splitDetails,fs,checkpointSplitsPath);
+          
+          LOG.info("Assigning Splits to Checkpoint Segments");
           // given the list of failed/partial splits, ditribute them to a set of segments ...  
           buildSplitsForCheckpoint(fs,new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"),splitDetails,baseSegmentId,DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE,DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB);
         }
@@ -248,12 +263,15 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     
     // ok read in the splits ... 
     segmentsAndSplits = TreeMultimap.create();
+    
+    LOG.info("Scanning checkpoint staging dir for segments");
     // load the segments and splits from disk ...
     for (FileStatus stagedSegment : fs.globStatus(new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"+ "[0-9]*"))) {
       long segmentId = Long.parseLong(stagedSegment.getPath().getName());
       for (SegmentSplitDetail splitDetail :   getSplitDetailsFromFile(fs,segmentId,new Path(stagedSegment.getPath(),"SPLITS_MANIFEST_FILE"),SPLITS_MANIFEST_FILE)) {
         segmentsAndSplits.put(segmentId, splitDetail.originalSplit);
       }
+      LOG.info("Found Segment:" + segmentId + " with: " + segmentsAndSplits.size() + " splits");
     }
     return new Pair<Long,Multimap<Long,SplitInfo>>(stagedCheckpointId,segmentsAndSplits);
   }
@@ -278,16 +296,18 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       // and output path 
       Path outputPath = new Path(segmentPath,CHECKPOINT_JOB_OUTPUT_PATH);
       
+      LOG.info("Checking for existence of Success File:" + successFile + " for segment:" + segmentId);
       // check to see if job already completed  
-      if (!fs.exists(successFile)) { 
+      if (!fs.exists(successFile)) {
+        LOG.info("Success File not found for segment:" + segmentId + ".Deleting partial outputs at:" + outputPath);
         // check to see if output folder exists... if so,delete it ... 
         if (fs.exists(outputPath)) { 
-          LOG.info("Existing output folder located for segment:"+ segmentId + ". Deleting folder");
           fs.delete(outputPath, true);
         }
         segmentListOut.add(new Pair<Long, Collection<SplitInfo>>(segmentId,checkpointDetail.e1.values()));
       }
     }
+    LOG.info("There are: " + segmentListOut.size() + " segments (post filtering)");
     return segmentListOut;
   }
   
@@ -334,7 +354,8 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
   public void doCheckpoint(final FileSystem fs,final Configuration conf)throws IOException { 
     LOG.info("Starting Checkpoint. Searching for existing or creating new staged checkpoint");
     final Pair<Long,Multimap<Long,SplitInfo>> checkpointInfo = findOrCreateCheckpoint(fs, conf);
-    LOG.info("Checkpoint Id is:"+ checkpointInfo.e0);
+    LOG.info("Checkpoint Id is:"+ checkpointInfo.e0 + " and it has:" + checkpointInfo.e1.keySet().size() + " segments."); 
+    LOG.info("Filtering for completed segments");
     List<Pair<Long,Collection<SplitInfo>>> validSegments = filterCompletedSegments(fs, conf, checkpointInfo);
     LOG.info("Queueing Segments. There are:" + validSegments.size() + " segments out of a total of:" + checkpointInfo.e1.keys().size());
     for (Pair<Long,Collection<SplitInfo>> segmentInfo : validSegments) { 
@@ -534,18 +555,20 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     ArrayList<SegmentSplitDetail> listOut = new ArrayList<SegmentSplitDetail>();
     
     for (long segmentId : buildValidSegmentListGivenCheckpointId(fs, lastCheckpointId)) {
-      System.out.println("Found Segment:" + segmentId);
+      LOG.info("Found Segment:" + segmentId);
       
       // get arc sizes by split upfront (because S3n wildcard operations are slow) 
       Multimap<Integer, Long> splitSizes= getArcFilesSizesSegment(fs,segmentId);
       
-      System.out.println("Found ArcFiles for:" + splitSizes.keySet().size() + " Splits");
+      LOG.info("Found ArcFiles for:" + splitSizes.keySet().size() + " Splits");
       
       // get failed and partial splits for segment 
       SortedSet<SegmentSplitDetail> allSplits = getAllSplits(fs, segmentId);
       SortedSet<SegmentSplitDetail> failedSplits = getFailedSplits(fs, segmentId);
       SortedSet<SegmentSplitDetail> partialSplits = getPartialSplits(fs, segmentId);
       
+      LOG.info("Found:" + partialSplits.size() + " PartialSplits for Segment:" + segmentId);
+      LOG.info(partialSplits.toString());
       // ok add all partial splits to list up front ... 
       listOut.addAll(partialSplits);
       
@@ -555,11 +578,13 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       // calculate std-dev
       double stdDev = stats.getStandardDeviation();
       
-      System.out.println("ArcToRaw Ratio:" + arcToRawRatio + " StdDev:" + stdDev);
-      System.out.println("There are " + partialSplits.size() + " Partial splits");
+      LOG.info("ArcToRaw Ratio:" + arcToRawRatio + " StdDev:" + stdDev);
+      LOG.info("There are " + partialSplits.size() + " Partial splits");
       // exclude partial from failed to see how many actually failed ... 
       Sets.SetView<SegmentSplitDetail> reallyFailedSet = Sets.difference(failedSplits,partialSplits);
-      System.out.println("There are " + reallyFailedSet.size() + " Failed splits");
+      LOG.info("There are " + reallyFailedSet.size() + " Failed splits");
+      
+      LOG.info("Found: " + reallyFailedSet.size() + " really failed splits for Segment:" + segmentId);
       // walk each validating actual failure condidition
       for (SegmentSplitDetail split : reallyFailedSet) {
         // explicitly add failed list to list out ... 
@@ -579,7 +604,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
             totalArcSize += arcSize; 
           double itemRatio = (double) totalArcSize / (double) split.originalSplit.length;
           
-          System.out.println("Failed Split: " 
+          LOG.info("Failed Split: " 
           + split.splitIndex 
           + " has arc data:" 
           + splitSizes.get(split.splitIndex) 
@@ -588,6 +613,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
         **/
       }
     }
+    
     return listOut;
   }
   
