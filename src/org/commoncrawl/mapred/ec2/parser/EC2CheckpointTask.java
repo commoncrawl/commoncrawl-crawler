@@ -17,6 +17,11 @@ import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
@@ -68,26 +73,59 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
 
   public static final Log LOG = LogFactory.getLog(EC2CheckpointTask.class);
   
+  static Options options = new Options();
+  static { 
+    
+    options.addOption(
+        OptionBuilder.withArgName("testMode").hasArg(false).withDescription("Test Mode").create("testMode"));
+  }
+
+  
   public static void main(String[] args)throws IOException {
+
     Configuration conf = new Configuration();
-    FileSystem fs;
-    try {
-      fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
-    } catch (URISyntaxException e) {
-      throw new IOException(e.toString());
+    
+    conf.addResource(new Path("/home/hadoop/conf/core-site.xml"));
+    conf.addResource(new Path("/home/hadoop/conf/mapred-site.xml"));
+    
+    CommandLineParser parser = new GnuParser();
+    
+    try { 
+      // parse the command line arguments
+      CommandLine line = parser.parse( options, args );    
+      
+      boolean testMode = line.hasOption("testMode"); 
+      if (testMode) { 
+        LOG.info("Running in Test Mode");
+        conf.setBoolean(Constants.CONF_PARAM_TEST_MODE,true);
+      }
+      else { 
+        LOG.info("Running in Prod Mode");
+      }
+      
+      FileSystem fs;
+      try {
+        fs = FileSystem.get(new URI("s3n://aws-publicdatasets"),conf);
+      } catch (URISyntaxException e) {
+        throw new IOException(e.toString());
+      }
+      LOG.info("FileSystem is:" + fs.getUri() +" Scanning for valid checkpoint id");
+      long latestCheckpointId = findLastValidCheckpointId(fs,conf);
+      LOG.info("Latest Checkpoint Id is:"+ latestCheckpointId);
+      
+      EC2CheckpointTask task = new EC2CheckpointTask(conf);
+      
+      LOG.info("Performing checkpoint");
+      task.doCheckpoint(fs, conf);
+      LOG.info("checkpoint complete");
+      task.shutdown();
+    
+      System.exit(0);
     }
-    LOG.info("FileSystem is:" + fs.getUri() +" Scanning for valid checkpoint id");
-    long latestCheckpointId = findLastValidCheckpointId(fs,conf);
-    LOG.info("Latest Checkpoint Id is:"+ latestCheckpointId);
-    
-    EC2CheckpointTask task = new EC2CheckpointTask(conf);
-    
-    LOG.info("Performing checkpoint");
-    task.doCheckpoint(fs, conf);
-    LOG.info("checkpoint complete");
-    task.shutdown();
-    
-    System.exit(0);
+    catch (Exception e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+      System.exit(1);
+    }
   }
   
   /**
@@ -153,7 +191,13 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @param idealSplitsPerSegment
    * @throws IOException
    */
-  static void buildSplitsForCheckpoint(FileSystem fs,Path segmentOutputPath,List<SegmentSplitDetail> splitDetails,long baseSegmentId, int defaultSplitSize, int idealSplitsPerSegment) throws IOException {
+  static void buildSplitsForCheckpoint(FileSystem fs,Configuration conf,Path segmentOutputPath,List<SegmentSplitDetail> splitDetails,long baseSegmentId, int defaultSplitSize, int idealSplitsPerSegment) throws IOException {
+    
+    if (conf.getBoolean(CONF_PARAM_TEST_MODE, false)) { 
+      idealSplitsPerSegment = 10;
+      LOG.info("In Test Mode. Setting idealSplitsPerSegment to:" + idealSplitsPerSegment);
+    }
+    
     LOG.info("Attempting to split:" + splitDetails.size() + " splits using split size:" + defaultSplitSize + " desired splits per seg:" + idealSplitsPerSegment);
     ArrayList<FileSplit> splits = new ArrayList<FileSplit>();
     
@@ -228,7 +272,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       // create a base segment id ... 
       long baseSegmentId = System.currentTimeMillis();
       // and create a new checkpoint id ...
-      stagedCheckpointId = baseSegmentId + 10000;
+      stagedCheckpointId = baseSegmentId + 100000;
       LOG.info("No Staged Checkpoint Found. Creating New Checkpoint:" + stagedCheckpointId);
       
       // get last valid checkpoint id ... 
@@ -237,7 +281,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       
       LOG.info("Iterating Available Segments and collecting Splits");
       // iterate available segments (past last checkpoint date), collecting a list of partial of failed splits ... 
-      List<SegmentSplitDetail> splitDetails = iterateAvailableSegmentsCollectSplits(fs,lastValidCheckpointId);
+      List<SegmentSplitDetail> splitDetails = iterateAvailableSegmentsCollectSplits(fs,conf,lastValidCheckpointId);
       
       if (splitDetails.size() != 0) {
         try { 
@@ -249,7 +293,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
           
           LOG.info("Assigning Splits to Checkpoint Segments");
           // given the list of failed/partial splits, ditribute them to a set of segments ...  
-          buildSplitsForCheckpoint(fs,new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"),splitDetails,baseSegmentId,DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE,DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB);
+          buildSplitsForCheckpoint(fs,conf,new Path(CHECKPOINT_STAGING_PATH + "/" + Long.toString(stagedCheckpointId)+"/"),splitDetails,baseSegmentId,DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE,DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB);
         }
         catch (Exception e) { 
           LOG.error("Failed to create checkpoint segment:" + stagedCheckpointId + " Exception:"+ CCStringUtils.stringifyException(e));
@@ -551,10 +595,10 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @throws IOException
    */
   
-  static ArrayList<SegmentSplitDetail> iterateAvailableSegmentsCollectSplits(FileSystem fs,long lastCheckpointId)throws IOException {
+  static ArrayList<SegmentSplitDetail> iterateAvailableSegmentsCollectSplits(FileSystem fs,Configuration conf,long lastCheckpointId)throws IOException {
     ArrayList<SegmentSplitDetail> listOut = new ArrayList<SegmentSplitDetail>();
     
-    for (long segmentId : buildValidSegmentListGivenCheckpointId(fs, lastCheckpointId)) {
+    for (long segmentId : buildValidSegmentListGivenCheckpointId(fs,conf, lastCheckpointId)) {
       LOG.info("Found Segment:" + segmentId);
       
       // get arc sizes by split upfront (because S3n wildcard operations are slow) 
@@ -568,7 +612,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       SortedSet<SegmentSplitDetail> partialSplits = getPartialSplits(fs, segmentId);
       
       LOG.info("Found:" + partialSplits.size() + " PartialSplits for Segment:" + segmentId);
-      LOG.info(partialSplits.toString());
+      //LOG.info(partialSplits.toString());
       // ok add all partial splits to list up front ... 
       listOut.addAll(partialSplits);
       
@@ -611,6 +655,11 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
           + " ItemRatio:"+ itemRatio + " Overall Ratio:" + arcToRawRatio);
         }
         **/
+      }
+      
+      if (conf.getBoolean(CONF_PARAM_TEST_MODE, false)) {
+        LOG.info("Breaking out early from segment iteration (test mode)");
+        break;
       }
     }
     
@@ -655,7 +704,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @return
    * @throws IOException
    */
-  static Set<Long> buildValidSegmentListGivenCheckpointId(FileSystem fs,long lastCheckpointId)throws IOException { 
+  static Set<Long> buildValidSegmentListGivenCheckpointId(FileSystem fs,Configuration conf,long lastCheckpointId)throws IOException { 
     return buildSegmentListGivenCheckpointId(fs, VALID_SEGMENTS_PATH, lastCheckpointId);
   }
   

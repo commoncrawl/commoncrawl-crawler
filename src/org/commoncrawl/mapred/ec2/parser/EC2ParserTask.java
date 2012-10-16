@@ -78,7 +78,7 @@ public class EC2ParserTask extends EC2TaskDataAwareTask {
   static final int MAX_SIMULTANEOUS_JOBS = 100;
   
   
-  public static final String CONF_PARAM_TEST_MODE = "EC2ParserTask.TestMode";
+  
   
   LinkedBlockingQueue<QueueItem> _queue = new LinkedBlockingQueue<QueueItem>();
   Semaphore jobThreadSemaphore = null;
