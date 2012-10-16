@@ -312,7 +312,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     // load the segments and splits from disk ...
     for (FileStatus stagedSegment : fs.globStatus(new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"+ "[0-9]*"))) {
       long segmentId = Long.parseLong(stagedSegment.getPath().getName());
-      for (SegmentSplitDetail splitDetail :   getSplitDetailsFromFile(fs,segmentId,new Path(stagedSegment.getPath(),"SPLITS_MANIFEST_FILE"),SPLITS_MANIFEST_FILE)) {
+      for (SegmentSplitDetail splitDetail :   getSplitDetailsFromFile(fs,segmentId,new Path(stagedSegment.getPath(),SPLITS_MANIFEST_FILE),SPLITS_MANIFEST_FILE)) {
         segmentsAndSplits.put(segmentId, splitDetail.originalSplit);
       }
       LOG.info("Found Segment:" + segmentId + " with: " + segmentsAndSplits.size() + " splits");
