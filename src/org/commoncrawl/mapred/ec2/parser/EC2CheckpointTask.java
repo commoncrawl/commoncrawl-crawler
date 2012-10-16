@@ -152,7 +152,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @throws IOException
    */
   static long findStagedCheckpointId(FileSystem fs,Configuration conf)throws IOException { 
-    FileStatus[] intermediateCheckpoints = fs.globStatus(new Path(CHECKPOINTS_PATH,"[0-9]*"));
+    FileStatus[] intermediateCheckpoints = fs.globStatus(new Path(CHECKPOINT_STAGING_PATH,"[0-9]*"));
     if (intermediateCheckpoints.length > 1) { 
       throw new IOException("More than one Staged Checkpoint Found!:" + intermediateCheckpoints);
     }
