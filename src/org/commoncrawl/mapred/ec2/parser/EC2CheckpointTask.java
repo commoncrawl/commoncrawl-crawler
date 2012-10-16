@@ -332,7 +332,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
   static private List<Pair<Long,Collection<SplitInfo>>> filterCompletedSegments(FileSystem fs,Configuration conf,Pair<Long,Multimap<Long,SplitInfo>> checkpointDetail)throws IOException { 
     ArrayList<Pair<Long,Collection<SplitInfo>>> segmentListOut= new ArrayList<Pair<Long,Collection<SplitInfo>>>();
     // iterate segments ...
-    for (long segmentId : checkpointDetail.e1.keys()) { 
+    for (long segmentId : checkpointDetail.e1.keySet()) { 
       // establish path ...
       Path segmentPath = new Path(CHECKPOINT_STAGING_PATH + checkpointDetail.e0 +"/" + segmentId+"/");
       // establish success file path 
@@ -401,7 +401,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     LOG.info("Checkpoint Id is:"+ checkpointInfo.e0 + " and it has:" + checkpointInfo.e1.keySet().size() + " segments."); 
     LOG.info("Filtering for completed segments");
     List<Pair<Long,Collection<SplitInfo>>> validSegments = filterCompletedSegments(fs, conf, checkpointInfo);
-    LOG.info("Queueing Segments. There are:" + validSegments.size() + " segments out of a total of:" + checkpointInfo.e1.keys().size());
+    LOG.info("Queueing Segments. There are:" + validSegments.size() + " segments out of a total of:" + checkpointInfo.e1.keySet().size());
     for (Pair<Long,Collection<SplitInfo>> segmentInfo : validSegments) { 
       try {
         _queue.put(new QueueItem(fs, conf, checkpointInfo.e0, segmentInfo));
