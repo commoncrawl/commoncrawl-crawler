@@ -106,9 +106,9 @@ public class EC2TaskDataAwareTask extends Server implements CrawlDBService, Cons
     TaskDataUtils.initializeTaskDataJobConfig(jobConf, segmentId, new InetSocketAddress(_serverAddress, TASK_DATA_PORT));
   }
   
-  protected static void finalizeJob(FileSystem fs,Configuration conf,JobConf jobConf,long segmentId)throws IOException { 
-    writeSplitsManifest(fs,conf,jobConf,segmentId);
-    writeTrailingSplitsFile(fs,conf,jobConf,segmentId);
+  protected static void finalizeJob(FileSystem fs,Configuration conf,JobConf jobConf,Path outputPath,long segmentId)throws IOException { 
+    writeSplitsManifest(fs,conf,jobConf,outputPath,segmentId);
+    writeTrailingSplitsFile(fs,conf,jobConf,outputPath,segmentId);
     
     // purge maps 
     synchronized (_badTaskIdMap) {
@@ -122,7 +122,7 @@ public class EC2TaskDataAwareTask extends Server implements CrawlDBService, Cons
   
   
   protected static void writeTrailingSplitsFile(FileSystem fs, Configuration conf,
-      JobConf jobConf, long segmentTimestamp) throws IOException {
+      JobConf jobConf,Path outputPath, long segmentTimestamp) throws IOException {
   
     ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
     // ok bad splits map ... 
@@ -131,13 +131,11 @@ public class EC2TaskDataAwareTask extends Server implements CrawlDBService, Cons
         listBuilder.add(badTaskEntry);
       }
     }
-    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
-
-    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+TRAILING_SPLITS_MANIFEST_FILE));
+    listToTextFile(listBuilder.build(), fs, new Path(outputPath,TRAILING_SPLITS_MANIFEST_FILE));
   }
   
   protected static void writeSplitsManifest(FileSystem fs, Configuration conf,
-      JobConf jobConf, long segmentTimestamp) throws IOException {
+      JobConf jobConf, Path outputPath,long segmentTimestamp) throws IOException {
     // calculate splits ...
     InputSplit[] splits = jobConf.getInputFormat().getSplits(jobConf,
         jobConf.getNumMapTasks());
@@ -186,13 +184,11 @@ public class EC2TaskDataAwareTask extends Server implements CrawlDBService, Cons
       }
       ++splitIndex;
     }
-    
-    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
-    
+        
     // emit ALL splits file 
-    listToTextFile(allListBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SPLITS_MANIFEST_FILE));
+    listToTextFile(allListBuilder.build(), fs, new Path(outputPath,SPLITS_MANIFEST_FILE));
     // emit FAILED splits file (subset of all)
-    listToTextFile(failedListBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+FAILED_SPLITS_MANIFEST_FILE));
+    listToTextFile(failedListBuilder.build(), fs, new Path(outputPath,FAILED_SPLITS_MANIFEST_FILE));
   }
     
   

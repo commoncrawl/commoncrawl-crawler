@@ -312,7 +312,13 @@ public class EC2ParserTask extends EC2TaskDataAwareTask {
     LOG.info("Job Finished. Writing Segments Manifest Files");
     writeSegmentManifestFile(fs,conf,segmentId,paths);
     
-    finalizeJob(fs,conf,jobConf,segmentId);
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+
+    Path manifestOutputPath = new Path(validSegmentPathPrefix+Long.toString(segmentId));
+    
+    fs.mkdirs(manifestOutputPath);
+        
+    finalizeJob(fs,conf,jobConf,manifestOutputPath,segmentId);
   }
   
   private static List<Path> scanForCompletedSegments(FileSystem fs,Configuration conf) throws IOException { 

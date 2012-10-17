@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
@@ -67,8 +68,15 @@ import com.google.common.collect.TreeMultimap;
 public class EC2CheckpointTask extends EC2TaskDataAwareTask { 
   
   public EC2CheckpointTask(Configuration conf) throws IOException {
+    
     super(conf);
-
+    
+    if (conf.getBoolean(CONF_PARAM_TEST_MODE, false))  {
+      maxSimultaneousJobs = 1;
+    }
+    
+    jobThreadSemaphore = new Semaphore(-(maxSimultaneousJobs-1));
+    
   }
 
   public static final Log LOG = LogFactory.getLog(EC2CheckpointTask.class);
@@ -138,7 +146,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    */
   static long findLastValidCheckpointId(FileSystem fs, Configuration conf)throws IOException {
     long lastCheckpointId = -1L;
-    for (FileStatus dirStats : fs.globStatus(new Path(CHECKPOINTS_PATH,"[0-9]*"))) {  
+    for (FileStatus dirStats : fs.globStatus(new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH,"[0-9]*"))) {  
       lastCheckpointId = Math.max(lastCheckpointId,Long.parseLong(dirStats.getPath().getName()));
     }
     return lastCheckpointId;
@@ -152,7 +160,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
    * @throws IOException
    */
   static long findStagedCheckpointId(FileSystem fs,Configuration conf)throws IOException { 
-    FileStatus[] intermediateCheckpoints = fs.globStatus(new Path(CHECKPOINT_STAGING_PATH,"[0-9]*"));
+    FileStatus[] intermediateCheckpoints = fs.globStatus(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH,"[0-9]*"));
     if (intermediateCheckpoints.length > 1) { 
       throw new IOException("More than one Staged Checkpoint Found!:" + intermediateCheckpoints);
     }
@@ -168,7 +176,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     
     Multimap<Integer,Long> splitToSizeMap = TreeMultimap.create();
     
-    for (FileStatus arcCandidate : fs.globStatus(new Path(SEGMENTS_PATH + segmentId,"*.arc.gz"))) { 
+    for (FileStatus arcCandidate : fs.globStatus(new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId,"*.arc.gz"))) { 
       Matcher m = arcFileNamePattern.matcher(arcCandidate.getPath().getName());
       if (m.matches() && m.groupCount() == 2) { 
         int splitId = Integer.parseInt(m.group(2));
@@ -285,7 +293,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       
       if (splitDetails.size() != 0) {
         try { 
-          Path checkpointSplitsPath = new Path(CHECKPOINT_STAGING_PATH +Long.toString(stagedCheckpointId)+"/"+SPLITS_MANIFEST_FILE);
+          Path checkpointSplitsPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH +Long.toString(stagedCheckpointId)+"/"+SPLITS_MANIFEST_FILE);
           
           LOG.info("Writing Splits Manifest (for checkpoint) to:" + checkpointSplitsPath);
           // write source split details to disk ... 
@@ -293,11 +301,11 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
           
           LOG.info("Assigning Splits to Checkpoint Segments");
           // given the list of failed/partial splits, ditribute them to a set of segments ...  
-          buildSplitsForCheckpoint(fs,conf,new Path(CHECKPOINT_STAGING_PATH + "/" + Long.toString(stagedCheckpointId)+"/"),splitDetails,baseSegmentId,DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE,DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB);
+          buildSplitsForCheckpoint(fs,conf,new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + "/" + Long.toString(stagedCheckpointId)+"/"),splitDetails,baseSegmentId,DEFAULT_PARSER_CHECKPOINT_JOB_SPLIT_SIZE,DEFAULT_PARSER_CHECKPOINT_SPLITS_PER_JOB);
         }
         catch (Exception e) { 
           LOG.error("Failed to create checkpoint segment:" + stagedCheckpointId + " Exception:"+ CCStringUtils.stringifyException(e));
-          fs.delete(new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"), true);
+          fs.delete(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"), true);
         }
       }
       else { 
@@ -310,7 +318,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     
     LOG.info("Scanning checkpoint staging dir for segments");
     // load the segments and splits from disk ...
-    for (FileStatus stagedSegment : fs.globStatus(new Path(CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"+ "[0-9]*"))) {
+    for (FileStatus stagedSegment : fs.globStatus(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + Long.toString(stagedCheckpointId)+"/"+ "[0-9]*"))) {
       long segmentId = Long.parseLong(stagedSegment.getPath().getName());
       for (SegmentSplitDetail splitDetail :   getSplitDetailsFromFile(fs,segmentId,new Path(stagedSegment.getPath(),SPLITS_MANIFEST_FILE),SPLITS_MANIFEST_FILE)) {
         segmentsAndSplits.put(segmentId, splitDetail.originalSplit);
@@ -334,7 +342,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     // iterate segments ...
     for (long segmentId : checkpointDetail.e1.keySet()) { 
       // establish path ...
-      Path segmentPath = new Path(CHECKPOINT_STAGING_PATH + checkpointDetail.e0 +"/" + segmentId+"/");
+      Path segmentPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointDetail.e0 +"/" + segmentId+"/");
       // establish success file path 
       Path successFile = new Path(segmentPath,JOB_SUCCESS_FILE);
       // and output path 
@@ -454,7 +462,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
             LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Starting Job");
             try {
               parse(item.fs,item.conf,item.checkpointId,item.segmentDetail);
-            } catch (IOException e) {
+            } catch (Exception e) {
               LOG.error("Queue Thread:" + Thread.currentThread().getId() + " threw exception:" + CCStringUtils.stringifyException(e));
             }
           }
@@ -486,9 +494,11 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     @Override
     public InputSplit[] getSplits(JobConf job, int numSplits)throws IOException {
       // get the checkpoint segment path ... 
-      String segmentPath = job.get(SEGMENT_PATH_PROPERTY);
+      //String segmentPath = job.get(SEGMENT_PATH_PROPERTY);
       // get the splits file ... 
+      Path segmentPath = FileInputFormat.getInputPaths(job)[0];
       Path splitsPath = new Path(segmentPath,SPLITS_MANIFEST_FILE);
+      LOG.info("Splits Path is:" + splitsPath);
       // get fs 
       FileSystem fs = FileSystem.get(splitsPath.toUri(),job);
       // and read in splits ... 
@@ -572,12 +582,15 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     jobConf.setOutputCommitter(OutputCommitter.class);
     // allow lots of failures per tracker per job 
     jobConf.setMaxTaskFailuresPerTracker(Integer.MAX_VALUE);
-        
+    
+    LOG.info("Initializing TDC for Thread:"+Thread.currentThread().getId() + " Segment:" + segmentDetail.e0);
     initializeTaskDataAwareJob(jobConf,segmentDetail.e0);
 
+    LOG.info("Submmitting Hadoop Job for Thread:"+Thread.currentThread().getId() + " Segment:" + segmentDetail.e0);
     JobClient.runJob(jobConf);
     
-    finalizeJob(fs,conf,jobConf,segmentDetail.e0);
+    LOG.info("Finalizing Job for Thread:"+Thread.currentThread().getId() + " Segment:" + segmentDetail.e0);
+    finalizeJob(fs,conf,jobConf,outputPath,segmentDetail.e0);
 
     
     // ok job execution was successful ... mark it so ... 
@@ -722,15 +735,15 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
   
 
   static SortedSet<SegmentSplitDetail> getAllSplits(FileSystem fs,long segmentId)throws IOException { 
-    return getSplitDetailsFromFile(fs,segmentId,new Path(VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+SPLITS_MANIFEST_FILE),SPLITS_MANIFEST_FILE); 
+    return getSplitDetailsFromFile(fs,segmentId,new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+SPLITS_MANIFEST_FILE),SPLITS_MANIFEST_FILE); 
   }
 
   static SortedSet<SegmentSplitDetail> getFailedSplits(FileSystem fs,long segmentId)throws IOException { 
-    return getSplitDetailsFromFile(fs,segmentId,new Path(VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+FAILED_SPLITS_MANIFEST_FILE),FAILED_SPLITS_MANIFEST_FILE); 
+    return getSplitDetailsFromFile(fs,segmentId,new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+FAILED_SPLITS_MANIFEST_FILE),FAILED_SPLITS_MANIFEST_FILE); 
   }
   
   static SortedSet<SegmentSplitDetail> getPartialSplits(FileSystem fs,long segmentId)throws IOException { 
-    return getSplitDetailsFromFile(fs,segmentId,new Path(VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+TRAILING_SPLITS_MANIFEST_FILE),TRAILING_SPLITS_MANIFEST_FILE);
+    return getSplitDetailsFromFile(fs,segmentId,new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId)+"/"+TRAILING_SPLITS_MANIFEST_FILE),TRAILING_SPLITS_MANIFEST_FILE);
   }
   
   /** 
