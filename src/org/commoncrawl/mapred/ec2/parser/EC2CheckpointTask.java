@@ -448,8 +448,10 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     // (1) walk completed segments ... 
     // 
     for (long segmentId : checkpointInfo.e1.keySet()) { 
-      // establish path ...
+      // establish paths ...
       Path segmentPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointInfo.e0 +"/" + segmentId+"/");
+      Path segmentOutputPath = new Path(segmentPath,"output");
+      
       // establish success file path 
       Path successFile = new Path(segmentPath,JOB_SUCCESS_FILE);
       // check to see if job already completed  
@@ -462,7 +464,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
         //    (a) mkdir parse-output/segment/[segmentId]
         fs.mkdirs(finalOutputPath);
         //    (b) move metadata-*,textData-*, and *_arc.gz files to parse-output/segment/[segmentId]
-        FileStatus moveCandidates[] = fs.globStatus(new Path(segmentPath,"*"), new PathFilter() {
+        FileStatus moveCandidates[] = fs.globStatus(new Path(segmentOutputPath,"*"), new PathFilter() {
           
           @Override
           public boolean accept(Path path) {
@@ -485,8 +487,8 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
         fs.mkdirs(validSegmentsBasePath);
         //    (d) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
         LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-        fs.rename(new Path(segmentPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
-        fs.rename(new Path(segmentPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
+        fs.rename(new Path(segmentOutputPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
+        fs.rename(new Path(segmentOutputPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
         fs.rename(new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE));
         //    (e) write parse-output/valid_segments2/[segmentId]/manifest.txt
         Collection<Path> inputs = Collections2.transform(checkpointInfo.e1.get(segmentId), new Function<SplitInfo,Path>() {
