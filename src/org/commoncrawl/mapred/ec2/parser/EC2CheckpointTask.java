@@ -28,10 +28,13 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
@@ -399,6 +402,45 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     public Pair<Long,Collection<SplitInfo>> segmentDetail;
   }
   
+  
+  static void copySrcFileToDest(FileSystem fs,Path src,Path dest,Configuration conf)throws IOException { 
+    FSDataInputStream inputStream = null;
+    FSDataOutputStream outputStream = null;
+    
+    try { 
+      inputStream = fs.open(src);
+      outputStream = fs.create(dest);
+      
+      IOUtils.copyBytes(inputStream, outputStream, conf);
+      
+      outputStream.flush();
+      
+    }
+    catch (IOException e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+      throw e;
+    }
+    finally {
+      IOException exceptionOut = null;
+      try { 
+        if (inputStream != null)
+          inputStream.close();
+      }
+      catch (IOException e) { 
+        exceptionOut = e;
+      }
+      try { 
+        if (outputStream != null)
+          outputStream.close();
+      }
+      catch (IOException e) { 
+        exceptionOut = e;
+      }
+      if (exceptionOut != null) 
+        throw exceptionOut;
+    }
+  }
+  
   /** 
    * Given a file system pointer (s3n) and a configuration, scan all previously processed segments that 
    * are NOT part of a previous checkpoint, and build a list of partially completed splits and fails splits.
@@ -459,48 +501,43 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
         LOG.info("Promoting Checkpoint Segment:" + segmentId);
         //   for each segment:
 
-        // create final output path 
-        Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
-        //    (a) mkdir parse-output/segment/[segmentId]
-        fs.mkdirs(finalOutputPath);
-        //    (b) move metadata-*,textData-*, and *_arc.gz files to parse-output/segment/[segmentId]
-        FileStatus moveCandidates[] = fs.globStatus(new Path(segmentOutputPath,"*"), new PathFilter() {
-          
-          @Override
-          public boolean accept(Path path) {
-            String fileName = path.getName();
-            if (fileName.startsWith(Constants.METADATA_FILE_PREFIX) || fileName.startsWith(Constants.TEXTDATA_FILE_PREFIX) || 
-                fileName.endsWith(ArcFileWriter.ARC_FILE_SUFFIX)) { 
-              return true;
-            }
-            return false;
-          }
-        });
-        
-        LOG.info("Moving:" + moveCandidates.length + " Files for Segment:" + segmentId + " to:" + finalOutputPath);
-        for (FileStatus moveCandidate : moveCandidates) { 
-          fs.rename(moveCandidate.getPath(), 
-              new Path(finalOutputPath,moveCandidate.getPath().getName()));
-        }
-        //    (c) mkdir parse-output/valid_segments2/[segmentId]
         Path validSegmentsBasePath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId));
-        fs.mkdirs(validSegmentsBasePath);
-        //    (d) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
-        LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-        fs.rename(new Path(segmentOutputPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
-        fs.rename(new Path(segmentOutputPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
-        fs.rename(new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE));
-        //    (e) write parse-output/valid_segments2/[segmentId]/manifest.txt
-        Collection<Path> inputs = Collections2.transform(checkpointInfo.e1.get(segmentId), new Function<SplitInfo,Path>() {
 
-          @Override
-          @Nullable
-          public Path apply(@Nullable SplitInfo arg0) {
-            return new Path(arg0.sourceFilePath);
+        if (fs.exists(segmentOutputPath)) { 
+          //    (a) mkdir parse-output/valid_segments2/[segmentId]
+          fs.mkdirs(validSegmentsBasePath);
+  
+          //    (b) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
+          LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+          fs.rename(new Path(segmentOutputPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
+          fs.rename(new Path(segmentOutputPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
+          if (fs.exists(new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE))) { 
+            copySrcFileToDest(fs,new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE),conf);
           }
-        } );
-        LOG.info("Writing split manifest file for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-        writeSegmentManifestFile(fs, conf, segmentId, inputs);
+          
+          // create final output path 
+          Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
+  
+          
+          //   (c) rename output to final output path ...
+          fs.rename(segmentOutputPath, finalOutputPath);
+        }
+        
+        //   (d) write parse-output/valid_segments2/[segmentId]/manifest.txt
+        Path segmentManifestPath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH + Long.toString(segmentId)+"/"+SEGMENT_MANIFEST_FILE);
+        
+        if (!fs.exists(segmentManifestPath)) { 
+          Collection<Path> inputs = Collections2.transform(checkpointInfo.e1.get(segmentId), new Function<SplitInfo,Path>() {
+  
+            @Override
+            @Nullable
+            public Path apply(@Nullable SplitInfo arg0) {
+              return new Path(arg0.sourceFilePath);
+            }
+          } );
+          LOG.info("Writing split manifest file for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+          writeSegmentManifestFile(fs, segmentManifestPath, segmentId, inputs);
+        }
         // (f) write is_checkpoint_segment marker
         LOG.info("Writing is_checkpoint_flag for Segment:" + segmentId + " to:" + validSegmentsBasePath);
         fs.createNewFile(new Path(validSegmentsBasePath,Constants.IS_CHECKPOINT_SEGMENT_FLAG));
@@ -522,16 +559,14 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
   }
     
     
-  private static void writeSegmentManifestFile(FileSystem fs,Configuration conf,long segmentTimestamp,Collection<Path> logsInSegment) throws IOException {
+  private static void writeSegmentManifestFile(FileSystem fs,Path manifestFilePath,long segmentTimestamp,Collection<Path> logsInSegment) throws IOException {
     LOG.info("Writing Segment Manifest for Segment: " + segmentTimestamp + " itemCount:" + logsInSegment.size());
     ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
     
-    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
-
     for (Path logPath : logsInSegment) { 
       listBuilder.add(logPath.toString().substring(S3N_BUCKET_PREFIX.length()));
     }
-    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SEGMENT_MANIFEST_FILE));
+    listToTextFile(listBuilder.build(), fs, manifestFilePath);
   }
   
   
