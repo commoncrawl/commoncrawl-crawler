@@ -17,6 +17,8 @@ import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.Nullable;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -29,6 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
@@ -37,10 +40,14 @@ import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.commoncrawl.protocol.ParseOutput;
+import org.commoncrawl.util.ArcFileWriter;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
 import org.commoncrawl.util.Tuples.Pair;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -437,8 +444,94 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     LOG.info("Waiting for Queue Threads to Die");
     jobThreadSemaphore.acquireUninterruptibly();
     
-    // TODO: WE NEED TO PROMOTE A COMPLETED CHECKPOINT HERE ... 
+    // now promote the checkpoint
+    // (1) walk completed segments ... 
+    // 
+    for (long segmentId : checkpointInfo.e1.keySet()) { 
+      // establish path ...
+      Path segmentPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointInfo.e0 +"/" + segmentId+"/");
+      // establish success file path 
+      Path successFile = new Path(segmentPath,JOB_SUCCESS_FILE);
+      // check to see if job already completed  
+      if (fs.exists(successFile)) {
+        LOG.info("Promoting Checkpoint Segment:" + segmentId);
+        //   for each segment:
+
+        // create final output path 
+        Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
+        //    (a) mkdir parse-output/segment/[segmentId]
+        fs.mkdirs(finalOutputPath);
+        //    (b) move metadata-*,textData-*, and *_arc.gz files to parse-output/segment/[segmentId]
+        FileStatus moveCandidates[] = fs.globStatus(new Path(segmentPath,"*"), new PathFilter() {
+          
+          @Override
+          public boolean accept(Path path) {
+            String fileName = path.getName();
+            if (fileName.startsWith(Constants.METADATA_FILE_PREFIX) || fileName.startsWith(Constants.TEXTDATA_FILE_PREFIX) || 
+                fileName.endsWith(ArcFileWriter.ARC_FILE_SUFFIX)) { 
+              return true;
+            }
+            return false;
+          }
+        });
+        
+        LOG.info("Moving:" + moveCandidates.length + " Files for Segment:" + segmentId + " to:" + finalOutputPath);
+        for (FileStatus moveCandidate : moveCandidates) { 
+          fs.rename(moveCandidate.getPath(), 
+              new Path(finalOutputPath,moveCandidate.getPath().getName()));
+        }
+        //    (c) mkdir parse-output/valid_segments2/[segmentId]
+        Path validSegmentsBasePath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId));
+        fs.mkdirs(validSegmentsBasePath);
+        //    (d) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
+        LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+        fs.rename(new Path(segmentPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
+        fs.rename(new Path(segmentPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
+        fs.rename(new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE));
+        //    (e) write parse-output/valid_segments2/[segmentId]/manifest.txt
+        Collection<Path> inputs = Collections2.transform(checkpointInfo.e1.get(segmentId), new Function<SplitInfo,Path>() {
+
+          @Override
+          @Nullable
+          public Path apply(@Nullable SplitInfo arg0) {
+            return new Path(arg0.sourceFilePath);
+          }
+        } );
+        LOG.info("Writing split manifest file for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+        writeSegmentManifestFile(fs, conf, segmentId, inputs);
+        // (f) write is_checkpoint_segment marker
+        LOG.info("Writing is_checkpoint_flag for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+        fs.createNewFile(new Path(validSegmentsBasePath,Constants.IS_CHECKPOINT_SEGMENT_FLAG));
+      }
+      else { 
+        LOG.error("Found Invalid Checkpoint Segment at path:"+ segmentPath);
+      }
+    }
+    // (2) mkdir parse-output/checkpoint/[staged_checkpoint_id] dir
+    Path checkpointDir = new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0);
+    LOG.info("All checkpoint segments transferred. Generating checkpoint directory:" + checkpointDir);
+    fs.mkdirs(checkpointDir);
+    // (3) copy parse-output/checkpoint_staging/[staged_checkpoint_id]/splits.txt to parse-output/checkpoint/[staged_checkpoint_id]
+    fs.rename(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH_PROPERTY + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE),
+        new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE));
+    // (4) rmr  parse-output/checkpoint_staging/[staged_checkpoint_id]
+    // DONE. 
+    LOG.info("Checkpoint:" + checkpointInfo.e0 + " Complete");
   }
+    
+    
+  private static void writeSegmentManifestFile(FileSystem fs,Configuration conf,long segmentTimestamp,Collection<Path> logsInSegment) throws IOException {
+    LOG.info("Writing Segment Manifest for Segment: " + segmentTimestamp + " itemCount:" + logsInSegment.size());
+    ImmutableList.Builder<String> listBuilder = new ImmutableList.Builder<String>();
+    
+    String validSegmentPathPrefix = conf.get(VALID_SEGMENTS_PATH_PROPERTY);
+
+    for (Path logPath : logsInSegment) { 
+      listBuilder.add(logPath.toString().substring(S3N_BUCKET_PREFIX.length()));
+    }
+    listToTextFile(listBuilder.build(), fs, new Path(validSegmentPathPrefix+Long.toString(segmentTimestamp)+"/"+SEGMENT_MANIFEST_FILE));
+  }
+  
   
   /** 
    * Worker Thread that actually submits jobs to the TT

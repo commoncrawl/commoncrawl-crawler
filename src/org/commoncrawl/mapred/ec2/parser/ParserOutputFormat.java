@@ -78,12 +78,10 @@ import com.google.gson.JsonParser;
  * @author rana
  *
  */
-public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> {
+public class ParserOutputFormat extends FileOutputFormat<Text,ParseOutput> implements Constants {
 
   public static final Log LOG = LogFactory.getLog(ParserOutputFormat.class);
   
-  public static final String METADATA_FILE_PREFIX   = "metadata-";
-  public static final String TEXTDATA_FILE_PREFIX   = "textData-";
   public static final String ARC_FILE_PREFIX        = "arcContent-";
   
   private  static NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();

@@ -115,6 +115,8 @@ public class ArcFileWriter {
   private int                           _lastItemCompressedSize  = -1;
   private TreeMultimap<String, Integer> _mimeTypeCounts          = TreeMultimap
                                                                      .create();
+  
+  public static final String ARC_FILE_SUFFIX = ".arc.gz";
 
   private OutputStream                  _out                     = null;
   private static BitSet                 dontNeedEncoding;
@@ -1005,7 +1007,7 @@ public class ArcFileWriter {
   }
 
   private String generateNewARCFilename(long timestamp) {
-    return timestamp + "_" + _id + ".arc.gz";
+    return timestamp + "_" + _id + ARC_FILE_SUFFIX;
     /*
      * Date date = new Date(timestamp); String arcFileName =
      * FILENAME_TIMESTAMP.format(date) + timestamp + "-" + _id + "arc.gz";

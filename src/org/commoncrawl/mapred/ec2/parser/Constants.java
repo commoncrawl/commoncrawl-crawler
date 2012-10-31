@@ -2,6 +2,10 @@ package org.commoncrawl.mapred.ec2.parser;
 
 public interface Constants {
 
+  
+  public static final String METADATA_FILE_PREFIX   = "metadata-";
+  public static final String TEXTDATA_FILE_PREFIX   = "textData-";
+
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String CRAWL_LOG_INTERMEDIATE_PATH = "/common-crawl/crawl-intermediate/";
   
@@ -42,6 +46,7 @@ public interface Constants {
   static final String CHECKPOINT_JOB_OUTPUT_PATH = "output";
   static final String CHECKPOINT_JOB_LOG_PATH = "logs";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
+  static final String IS_CHECKPOINT_SEGMENT_FILE = "_IS_CHECKPOINT_SEG";
   
   public static final String CONF_PARAM_TEST_MODE = "TestMode";
 }
