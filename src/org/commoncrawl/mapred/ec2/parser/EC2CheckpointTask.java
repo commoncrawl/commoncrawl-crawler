@@ -578,10 +578,28 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
               
               // create final output path 
               Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
-      
+
+              // mkdir it 
+              fs.mkdirs(finalOutputPath);
+              //    (b) move metadata-*,textData-*, and *_arc.gz files to parse-output/segment/[segmentId]
+              FileStatus moveCandidates[] = fs.globStatus(new Path(segmentOutputPath,"*"), new PathFilter() {
+                
+                @Override
+                public boolean accept(Path path) {
+                  String fileName = path.getName();
+                  if (fileName.startsWith(Constants.METADATA_FILE_PREFIX) || fileName.startsWith(Constants.TEXTDATA_FILE_PREFIX) || 
+                      fileName.endsWith(ArcFileWriter.ARC_FILE_SUFFIX)) { 
+                    return true;
+                  }
+                  return false;
+                }
+              });
               
-              //   (c) rename output to final output path ...
-              fs.rename(segmentOutputPath, finalOutputPath);
+              LOG.info("Moving:" + moveCandidates.length + " Files for Segment:" + segmentId + " to:" + finalOutputPath);
+              for (FileStatus moveCandidate : moveCandidates) { 
+                fs.rename(moveCandidate.getPath(), 
+                    new Path(finalOutputPath,moveCandidate.getPath().getName()));
+              }
             }
             
             //   (d) write parse-output/valid_segments2/[segmentId]/manifest.txt
