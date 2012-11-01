@@ -12,8 +12,16 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -481,83 +489,135 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       thread.start();
     }
     
-        
     // ok wait for them to die
     LOG.info("Waiting for Queue Threads to Die");
     jobThreadSemaphore.acquireUninterruptibly();
     
-    // now promote the checkpoint
-    // (1) walk completed segments ... 
-    // 
-    for (long segmentId : checkpointInfo.e1.keySet()) { 
-      // establish paths ...
-      Path segmentPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointInfo.e0 +"/" + segmentId+"/");
-      Path segmentOutputPath = new Path(segmentPath,"output");
-      
-      // establish success file path 
-      Path successFile = new Path(segmentPath,JOB_SUCCESS_FILE);
-      // check to see if job already completed  
-      if (fs.exists(successFile)) {
-        LOG.info("Promoting Checkpoint Segment:" + segmentId);
-        //   for each segment:
-
-        Path validSegmentsBasePath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId));
-
-        if (fs.exists(segmentOutputPath)) { 
-          //    (a) mkdir parse-output/valid_segments2/[segmentId]
-          fs.mkdirs(validSegmentsBasePath);
-  
-          //    (b) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
-          LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-          fs.rename(new Path(segmentOutputPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
-          fs.rename(new Path(segmentOutputPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
-          if (fs.exists(new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE))) { 
-            copySrcFileToDest(fs,new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE),conf);
-          }
-          
-          // create final output path 
-          Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
-  
-          
-          //   (c) rename output to final output path ...
-          fs.rename(segmentOutputPath, finalOutputPath);
-        }
-        
-        //   (d) write parse-output/valid_segments2/[segmentId]/manifest.txt
-        Path segmentManifestPath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH + Long.toString(segmentId)+"/"+SEGMENT_MANIFEST_FILE);
-        
-        if (!fs.exists(segmentManifestPath)) { 
-          Collection<Path> inputs = Collections2.transform(checkpointInfo.e1.get(segmentId), new Function<SplitInfo,Path>() {
-  
-            @Override
-            @Nullable
-            public Path apply(@Nullable SplitInfo arg0) {
-              return new Path(arg0.sourceFilePath);
-            }
-          } );
-          LOG.info("Writing split manifest file for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-          writeSegmentManifestFile(fs, segmentManifestPath, segmentId, inputs);
-        }
-        // (f) write is_checkpoint_segment marker
-        LOG.info("Writing is_checkpoint_flag for Segment:" + segmentId + " to:" + validSegmentsBasePath);
-        fs.createNewFile(new Path(validSegmentsBasePath,Constants.IS_CHECKPOINT_SEGMENT_FLAG));
-      }
-      else { 
-        LOG.error("Found Invalid Checkpoint Segment at path:"+ segmentPath);
+    LOG.info("Starting Checkpoint Finalizer Process");
+    Semaphore segmentFinalizerSempahore = new Semaphore(checkpointInfo.e1.keySet().size() - 1);
+    Exception exceptions[] = new Exception[checkpointInfo.e1.keySet().size()];
+    long      segmentIds[] = new long[checkpointInfo.e1.keySet().size()];
+    
+    ExecutorService executor = Executors.newFixedThreadPool(20);
+    
+    int itemIndex = 0;
+    for (long segmentId : checkpointInfo.e1.keySet()) {
+      LOG.info("Queueing Segment:" + segmentId + " for finalize");
+      segmentIds[itemIndex] = segmentId;
+      executor.submit(createRunnableForSegment(segmentFinalizerSempahore, itemIndex++, exceptions, checkpointInfo.e0, segmentId, fs, conf, checkpointInfo.e1.get(segmentId)));
+    }
+    LOG.info("Awaiting completion");
+    jobThreadSemaphore.acquireUninterruptibly();
+    LOG.info("All checkpoint tasks completed");
+    // shutdown thread pool 
+    executor.shutdown();
+    
+    // walk exception array counting exceptions 
+    int exceptionCount = 0;
+    for (int i=0;i<exceptions.length;++i) { 
+      if (exceptions[i] != null) { 
+        LOG.error("Segment:" + segmentIds[i] + " threw Exception:" + CCStringUtils.stringifyException(exceptions[i]));
+        exceptionCount++;
       }
     }
-    // (2) mkdir parse-output/checkpoint/[staged_checkpoint_id] dir
-    Path checkpointDir = new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0);
-    LOG.info("All checkpoint segments transferred. Generating checkpoint directory:" + checkpointDir);
-    fs.mkdirs(checkpointDir);
-    // (3) copy parse-output/checkpoint_staging/[staged_checkpoint_id]/splits.txt to parse-output/checkpoint/[staged_checkpoint_id]
-    fs.rename(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH_PROPERTY + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE),
-        new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE));
-    // (4) rmr  parse-output/checkpoint_staging/[staged_checkpoint_id]
-    // DONE. 
-    LOG.info("Checkpoint:" + checkpointInfo.e0 + " Complete");
+    if (exceptionCount != 0) { 
+      LOG.error("Exception count post finalize non-zero. Aborting checkpoint!");
+    }
+    else { 
+      // (2) mkdir parse-output/checkpoint/[staged_checkpoint_id] dir
+      Path checkpointDir = new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0);
+      LOG.info("All checkpoint segments transferred. Generating checkpoint directory:" + checkpointDir);
+      fs.mkdirs(checkpointDir);
+      // (3) copy parse-output/checkpoint_staging/[staged_checkpoint_id]/splits.txt to parse-output/checkpoint/[staged_checkpoint_id]
+      fs.rename(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH_PROPERTY + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE),
+          new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE));
+      // (4) rmr  parse-output/checkpoint_staging/[staged_checkpoint_id]
+      // DONE. 
+      LOG.info("Checkpoint:" + checkpointInfo.e0 + " Complete");
+    }
   }
     
+  
+  private static Runnable createRunnableForSegment(final Semaphore completionSemaphore,final int checkpointItemIdx,final Exception[] exceptionArray, final long checkpointId,final long segmentId, final FileSystem fs,final Configuration conf,final Collection<SplitInfo> splits)throws IOException { 
+    
+    // we need to run this code in parallel because the s3n rename (copyObject) operation is VERY SLOW
+    // on a relatively large data directory :-( 
+    // TODO: Have the checkpoint task output directly to the final output location 
+    // (/parse-output/segment/[segmentid]) because mv/rename is just not a practical 
+    // option on S3 (when dealing with large directories).
+    
+    return new Runnable() {
+      
+      @Override
+      public void run() {
+        try { 
+          // establish paths ...
+          Path segmentPath = new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointId +"/" + segmentId+"/");
+          Path segmentOutputPath = new Path(segmentPath,"output");
+          
+          // establish success file path 
+          Path successFile = new Path(segmentPath,JOB_SUCCESS_FILE);
+          // check to see if job already completed  
+          if (fs.exists(successFile)) {
+            LOG.info("Promoting Checkpoint Segment:" + segmentId);
+            //   for each segment:
+  
+            Path validSegmentsBasePath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+Long.toString(segmentId));
+  
+            if (fs.exists(segmentOutputPath)) { 
+              //    (a) mkdir parse-output/valid_segments2/[segmentId]
+              fs.mkdirs(validSegmentsBasePath);
+      
+              //    (b) copy failed_splits.txt,splits.txt,trailing_splits.txt to parse-output/valid_segments2/[segmentId]
+              LOG.info("Writing manifests for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+              fs.rename(new Path(segmentOutputPath,TRAILING_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,TRAILING_SPLITS_MANIFEST_FILE));
+              fs.rename(new Path(segmentOutputPath,FAILED_SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,FAILED_SPLITS_MANIFEST_FILE));
+              if (fs.exists(new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE))) { 
+                copySrcFileToDest(fs,new Path(segmentPath,SPLITS_MANIFEST_FILE),new Path(validSegmentsBasePath,SPLITS_MANIFEST_FILE),conf);
+              }
+              
+              // create final output path 
+              Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + SEGMENTS_PATH + segmentId);
+      
+              
+              //   (c) rename output to final output path ...
+              fs.rename(segmentOutputPath, finalOutputPath);
+            }
+            
+            //   (d) write parse-output/valid_segments2/[segmentId]/manifest.txt
+            Path segmentManifestPath = new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH + Long.toString(segmentId)+"/"+SEGMENT_MANIFEST_FILE);
+            
+            if (!fs.exists(segmentManifestPath)) { 
+              Collection<Path> inputs = Collections2.transform(splits, new Function<SplitInfo,Path>() {
+      
+                @Override
+                @Nullable
+                public Path apply(@Nullable SplitInfo arg0) {
+                  return new Path(arg0.sourceFilePath);
+                }
+              } );
+              LOG.info("Writing split manifest file for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+              writeSegmentManifestFile(fs, segmentManifestPath, segmentId, inputs);
+            }
+            // (f) write is_checkpoint_segment marker
+            LOG.info("Writing is_checkpoint_flag for Segment:" + segmentId + " to:" + validSegmentsBasePath);
+            fs.createNewFile(new Path(validSegmentsBasePath,Constants.IS_CHECKPOINT_SEGMENT_FLAG));
+          }
+          else { 
+            LOG.error("Found Invalid Checkpoint Segment at path:"+ segmentPath);
+          }
+        }
+        catch (Exception e) { 
+          LOG.error("Thread:" + Thread.currentThread().getId() + " threw Exception while checkpointing segment " + segmentId + ": " + CCStringUtils.stringifyException(e));
+          exceptionArray[checkpointItemIdx] = e;
+        }
+        finally { 
+          LOG.info("Thread:" + Thread.currentThread().getId() +" finished processing segment:" + segmentId);
+          completionSemaphore.release();
+        }
+      }
+    };
+  }
     
   private static void writeSegmentManifestFile(FileSystem fs,Path manifestFilePath,long segmentTimestamp,Collection<Path> logsInSegment) throws IOException {
     LOG.info("Writing Segment Manifest for Segment: " + segmentTimestamp + " itemCount:" + logsInSegment.size());
