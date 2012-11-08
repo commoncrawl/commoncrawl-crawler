@@ -596,9 +596,24 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
               });
               
               LOG.info("Moving:" + moveCandidates.length + " Files for Segment:" + segmentId + " to:" + finalOutputPath);
-              for (FileStatus moveCandidate : moveCandidates) { 
-                fs.rename(moveCandidate.getPath(), 
-                    new Path(finalOutputPath,moveCandidate.getPath().getName()));
+              for (FileStatus moveCandidate : moveCandidates) {
+                Path finalCandidatePath = new Path(finalOutputPath,moveCandidate.getPath().getName());
+                if (fs.exists(finalCandidatePath)) { 
+                  LOG.warn("Found existing file for move candidate:" + moveCandidate + " Segment:" + segmentId);
+                  FileStatus existingFileStatus = fs.getFileStatus(finalCandidatePath);
+                  if (existingFileStatus.getLen() == moveCandidate.getLen()) { 
+                    LOG.info("Existing file:" + finalCandidatePath + " has same length:" + existingFileStatus.getLen() + " as "
+                        + " candidate - Deleting candidate");
+                    fs.delete(moveCandidate.getPath(),false);
+                    continue;
+                  }
+                  else { 
+                    LOG.info("Existing file:" + finalCandidatePath + " has same different length:" + existingFileStatus.getLen() + " than "
+                        + " candidate len:"+ moveCandidate.getLen() + " Deleting existing.");
+                    fs.delete(finalCandidatePath,false);
+                  }
+                }
+                fs.rename(moveCandidate.getPath(),finalCandidatePath);
               }
             }
             
