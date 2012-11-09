@@ -6,6 +6,8 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -14,6 +16,11 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.Grant;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 /**
  * Fix the ACL in the public data set bucket 
@@ -24,6 +31,8 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 @SuppressWarnings("static-access")
 public class S3FixCCACL {
 
+  public static final Log LOG = LogFactory.getLog(S3FixCCACL.class); 
+  
   static Options options = new Options();
   static { 
     
@@ -68,42 +77,66 @@ public class S3FixCCACL {
         
         AmazonS3Client s3Client = new AmazonS3Client(credentials);
         
-        ObjectListing listing = s3Client.listObjects(cmdLine.getOptionValue("bucket"), cmdLine.getOptionValue("path"));
+        // check to see if the path is an array of paths ... 
+        String path = cmdLine.getOptionValue("path");
+        JsonArray paths = new JsonArray();
         
-        boolean done = false;
-        do { 
-          for (S3ObjectSummary summary : listing.getObjectSummaries()) {
-            System.out.println("Updating ACL For:" + summary.getKey());
-            boolean success = false;
-            while (!success) {
-              try { 
-                if (cmdLine.hasOption("debug")) { 
-                  AccessControlList acl = s3Client.getObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey());
-                  System.out.println("path: s3://" + cmdLine.getOptionValue("bucket")+"/"+summary.getKey());
-                  System.out.println("grants:");
-                  for (Grant grant : acl.getGrants()) { 
-                    System.out.println("grantee:" + grant.getGrantee() + " permissions:"+ grant.getPermission());
-                  }
-                }
-                else { 
-                  s3Client.setObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey(),CannedAccessControlList.PublicRead);
-                }
-                success = true;
-              }
-              catch (Exception e) { 
-                System.out.println("Error Applying ACL:" + e.getMessage());
-                Thread.sleep(1000);
-              }
-            }
+        if (path.startsWith("[")) { 
+          JsonParser jsonParser = new JsonParser();
+          try { 
+            paths = jsonParser.parse(path).getAsJsonArray();
           }
-          if (listing.isTruncated()) { 
-            listing = s3Client.listNextBatchOfObjects(listing);
-          }
-          else { 
-            done = true;
+          catch (Exception e) {
+            LOG.error(CCStringUtils.stringifyException(e));
+            System.exit(1);
           }
         }
-        while (!done);
+        else { 
+          paths.add(new JsonPrimitive(path));
+        }
+        
+        for (JsonElement pathElement : paths) {
+          
+          String strPath = pathElement.getAsString();
+          
+          ObjectListing listing = s3Client.listObjects(cmdLine.getOptionValue("bucket"),strPath);
+          
+          boolean done = false;
+
+          do { 
+            for (S3ObjectSummary summary : listing.getObjectSummaries()) {
+              System.out.println("Updating ACL For:" + summary.getKey());
+              boolean success = false;
+              while (!success) {
+                try { 
+                  if (cmdLine.hasOption("debug")) { 
+                    AccessControlList acl = s3Client.getObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey());
+                    System.out.println("path: s3://" + cmdLine.getOptionValue("bucket")+"/"+summary.getKey());
+                    System.out.println("grants:");
+                    for (Grant grant : acl.getGrants()) { 
+                      System.out.println("grantee:" + grant.getGrantee() + " permissions:"+ grant.getPermission());
+                    }
+                  }
+                  else { 
+                    s3Client.setObjectAcl(cmdLine.getOptionValue("bucket"),summary.getKey(),CannedAccessControlList.PublicRead);
+                  }
+                  success = true;
+                }
+                catch (Exception e) { 
+                  System.out.println("Error Applying ACL:" + e.getMessage());
+                  Thread.sleep(1000);
+                }
+              }
+            }
+            if (listing.isTruncated()) { 
+              listing = s3Client.listNextBatchOfObjects(listing);
+            }
+            else { 
+              done = true;
+            }
+          }
+          while (!done);
+        }
       }
       finally { 
       }
