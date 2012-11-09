@@ -529,7 +529,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       LOG.info("All checkpoint segments transferred. Generating checkpoint directory:" + checkpointDir);
       fs.mkdirs(checkpointDir);
       // (3) copy parse-output/checkpoint_staging/[staged_checkpoint_id]/splits.txt to parse-output/checkpoint/[staged_checkpoint_id]
-      fs.rename(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH_PROPERTY + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE),
+      fs.rename(new Path(S3N_BUCKET_PREFIX + CHECKPOINT_STAGING_PATH + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE),
           new Path(S3N_BUCKET_PREFIX + CHECKPOINTS_PATH + checkpointInfo.e0,Constants.SPLITS_MANIFEST_FILE));
       // (4) rmr  parse-output/checkpoint_staging/[staged_checkpoint_id]
       // DONE. 
