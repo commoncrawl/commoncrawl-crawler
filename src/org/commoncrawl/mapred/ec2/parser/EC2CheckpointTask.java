@@ -494,7 +494,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
     jobThreadSemaphore.acquireUninterruptibly();
     
     LOG.info("Starting Checkpoint Finalizer Process");
-    Semaphore segmentFinalizerSempahore = new Semaphore(checkpointInfo.e1.keySet().size() - 1);
+    Semaphore segmentFinalizerSempahore = new Semaphore(-(checkpointInfo.e1.keySet().size() - 1));
     Exception exceptions[] = new Exception[checkpointInfo.e1.keySet().size()];
     long      segmentIds[] = new long[checkpointInfo.e1.keySet().size()];
     
@@ -507,7 +507,7 @@ public class EC2CheckpointTask extends EC2TaskDataAwareTask {
       executor.submit(createRunnableForSegment(segmentFinalizerSempahore, itemIndex++, exceptions, checkpointInfo.e0, segmentId, fs, conf, checkpointInfo.e1.get(segmentId)));
     }
     LOG.info("Awaiting completion");
-    jobThreadSemaphore.acquireUninterruptibly();
+    segmentFinalizerSempahore.acquireUninterruptibly();
     LOG.info("All checkpoint tasks completed");
     // shutdown thread pool 
     executor.shutdown();
