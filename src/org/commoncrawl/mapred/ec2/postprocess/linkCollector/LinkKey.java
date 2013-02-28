@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.io.RawComparator;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Partitioner;
 import org.commoncrawl.protocol.URLFPV2;
@@ -96,7 +97,7 @@ public class LinkKey {
     return null;
   }
   
-  public static TextBytes generateCrawlStatusKey(TextBytes url,long timestamp) throws IOException { 
+  public static TextBytes generateCrawlStatusKey(Text url,long timestamp) throws IOException { 
     URLFPV2 fp = URLUtils.getURLFPV2FromURL(url.toString());
     if (fp != null) { 
       String key = 
@@ -382,7 +383,7 @@ public class LinkKey {
         Assert.assertTrue(new FlexBuffer("FOOBAR".getBytes()).compareTo(getByteArrayComponentFromKey(key, LinkKey.ComponentId.EXTRA_DATA_COMPONENT_ID)) == 0);
         Assert.assertTrue(new FlexBuffer("FOOBAR".getBytes()).compareTo(getByteArrayFromComponentArray(scanArray, LinkKey.ComponentId.EXTRA_DATA_COMPONENT_ID)) == 0);
         
-        TextBytes statusKey1 = generateCrawlStatusKey(new TextBytes("http://www.google.com/"),12345L);
+        TextBytes statusKey1 = generateCrawlStatusKey(new Text("http://www.google.com/"),12345L);
         TextBytes statusKey2 = generateCrawlStatusKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),12345L);
         TextBytes statusKey3 = generateCrawlStatusKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),12346L);
         TextBytes linkKey1   = generateLinkKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),LinkKey.Type.KEY_TYPE_HTML_LINK,MD5Hash.digest("123").toString());

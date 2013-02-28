@@ -23,6 +23,7 @@ import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -46,7 +47,7 @@ import com.google.gson.JsonParser;
  * @author rana
  *
  */
-public class LinkGraphDataEmitter implements Mapper<TextBytes,TextBytes,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
+public class LinkGraphDataEmitter implements Mapper<Text,Text,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
 
   static final Log LOG = LogFactory.getLog(LinkGraphDataEmitter.class);
   
@@ -102,7 +103,7 @@ public class LinkGraphDataEmitter implements Mapper<TextBytes,TextBytes,TextByte
   
   
   @Override
-  public void map(TextBytes key, TextBytes value,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
+  public void map(Text key, Text value,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
     try { 
       JsonObject o = parser.parse(value.toString()).getAsJsonObject();
       if (o.get("disposition").getAsString().equals("SUCCESS")) {
@@ -111,11 +112,11 @@ public class LinkGraphDataEmitter implements Mapper<TextBytes,TextBytes,TextByte
           reporter.incrCounter(Counters.GOT_PARSED_AS_ATTRIBUTE, 1);
           if (o.get("parsed_as").getAsString().equals("html")) {
             reporter.incrCounter(Counters.GOT_HTML_METADATA, 1);
-            emitLinksFromHTMLContent(key,"html",dateHeaders,o,output,reporter);
+            emitLinksFromHTMLContent(new TextBytes(key),"html",dateHeaders,o,output,reporter);
           }
           else if (o.get("parsed_as").getAsString().equals("feed")) {
             reporter.incrCounter(Counters.GOT_FEED_METADATA, 1);
-            emitLinksFromFeedContent(key,"feed",dateHeaders,o,output,reporter);
+            emitLinksFromFeedContent(new TextBytes(key),"feed",dateHeaders,o,output,reporter);
           }
         }
       }

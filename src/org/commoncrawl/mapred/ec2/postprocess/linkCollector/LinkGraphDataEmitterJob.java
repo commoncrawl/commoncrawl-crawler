@@ -63,7 +63,7 @@ public class LinkGraphDataEmitterJob {
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
   static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/graph-output/intermediate/";
-  static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments/";
+  static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments2/";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
   
   static final int MAX_SIMULTANEOUS_JOBS = 3;

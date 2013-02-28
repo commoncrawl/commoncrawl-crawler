@@ -85,7 +85,7 @@ public class EC2Launcher {
         "4096",
         "--logdir",
         "/mnt/var/EC2TaskLogs",
-        "org.commoncrawl.crawl.database.crawlpipeline.ec2.postprocess.linkCollector.LinkGraphDataEmitterJob",
+        "org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkGraphDataEmitterJob",
     "start");
     pb.directory(new File("/home/hadoop/ccprod"));
 

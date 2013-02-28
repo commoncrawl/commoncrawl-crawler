@@ -25,6 +25,7 @@ import java.util.Iterator;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.MD5Hash;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -46,7 +47,7 @@ import com.google.gson.JsonParser;
  * @author rana
  *
  */
-public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
+public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
 
   static final Log LOG = LogFactory.getLog(LinkDataResharder.class);
   
@@ -96,7 +97,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
   }
   
   @Override
-  public void map(TextBytes key, TextBytes value,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
+  public void map(Text key, Text value,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
     try { 
       JsonObject o = parser.parse(value.toString()).getAsJsonObject();
       long attemptTime = o.get("attempt_time").getAsLong();
@@ -129,7 +130,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
     }
   }
   
-  void emitLinksFromFeedContent(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
+  void emitLinksFromFeedContent(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
     JsonObject contentObject = object.get("content").getAsJsonObject();
     if (contentObject != null) { 
       String type = contentObject.get("type").getAsString();
@@ -144,7 +145,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
     }
   }
   
-  static String safeEmitLinkTypeInLink(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonElement linkProperty,String linkType,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output,Reporter reporter) throws IOException { 
+  static String safeEmitLinkTypeInLink(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonElement linkProperty,String linkType,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output,Reporter reporter) throws IOException { 
     if (linkProperty != null) {
       JsonArray array = null;
       if (linkProperty.isJsonArray()) {
@@ -197,7 +198,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
   }
   
   
-  void emitLinksFromAtomContent(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,JsonObject contentObject,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
+  void emitLinksFromAtomContent(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,JsonObject contentObject,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
     String topLevelLink = safeEmitLinkTypeInLink(sourceURL,sourceType,dateHeaders,contentObject.get("link"),"alternate",hashSet,output,reporter);
     if (topLevelLink != null) { 
       reporter.incrCounter(Counters.GOT_TOP_LEVEL_LINK_FROM_ATOM_ITEM, 1);
@@ -216,7 +217,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
           reporter.incrCounter(Counters.GOT_CONTENT_FOR_ATOM_ITEM, 1);
 
           emitLinksFromHTMLContent(
-              (itemURL != null)? new TextBytes(itemURL) : sourceURL,
+              (itemURL != null)? new Text(itemURL) : sourceURL,
               "html",dateHeaders,
               item,
               hashSet,
@@ -226,7 +227,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
     }
   }
 
-  static String safeEmitRSSLinkTypeInLink(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonElement linkProperty,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output,Reporter reporter) throws IOException { 
+  static String safeEmitRSSLinkTypeInLink(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonElement linkProperty,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output,Reporter reporter) throws IOException { 
     if (linkProperty != null) {
       JsonArray array = null;
       if (linkProperty.isJsonArray()) {
@@ -269,7 +270,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
     }
     return null;
   }  
-  void emitLinksFromRSSContent(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,JsonObject contentObject,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
+  void emitLinksFromRSSContent(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,JsonObject contentObject,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
     String topLevelLink = safeEmitRSSLinkTypeInLink(sourceURL,sourceType,dateHeaders,contentObject.get("link"),hashSet,output,reporter);
     if (topLevelLink != null) { 
       reporter.incrCounter(Counters.GOT_TOP_LEVEL_LINK_FROM_RSS_ITEM, 1);
@@ -286,7 +287,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
         JsonObject itemContent = item.getAsJsonObject("content");
         if (itemContent != null) { 
           emitLinksFromHTMLContent(
-              (itemURL != null)? new TextBytes(itemURL) : sourceURL,
+              (itemURL != null)? new Text(itemURL) : sourceURL,
               "html",
               dateHeaders,
               item,
@@ -298,7 +299,7 @@ public class LinkDataResharder implements Mapper<TextBytes,TextBytes,TextBytes,T
   }
 
   
-  void emitLinksFromHTMLContent(TextBytes sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException { 
+  void emitLinksFromHTMLContent(Text sourceURL,String sourceType,JsonObject dateHeaders,JsonObject object,HashSet<Long> hashSet,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException { 
     try {
       JsonObject contentObject = object.getAsJsonObject("content");
       if (contentObject == null) { 
