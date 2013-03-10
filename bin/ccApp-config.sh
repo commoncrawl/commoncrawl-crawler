@@ -74,6 +74,7 @@ CCAPP_HEAPSIZE=""
 CCAPP_PID_DIR="/tmp/ccAppPIDS/"
 CCAPP_NODEFAULTARGS=""
 CCAPP_NOHUP=1
+CCAPP_TESTMODE=0
 CCAPP_GDB=""
 CCAPP_JAR_IN_CLASSPATH=0
 CCAPP_IS_CC_SERVER=0
@@ -155,6 +156,9 @@ while [ $# -gt 2 ]; do
     elif [ "--consoleMode" = "$1" ]; then
         shift
 	      CCAPP_NOHUP=""
+    elif [ "--runTest" == "$1" ]; then
+        shift
+        CCAPP_TESTMODE=1
     elif [ "--p_arg0" = "$1" ]; then
         shift
         if [ -z "$CCAPP_ARGS" ]; then

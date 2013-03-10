@@ -389,6 +389,7 @@
 		  <exclude name="servlet-api-2.5-6.1.14.jar"/>
 		  <exclude name="servlet-api-2.5.jar"/>
 		  <exclude name="slf4j-jdk14-1.6.4.jar"/>
+		  <exclude name="protobuf-java-2.2.0.jar"/>
         </zipfileset>
         <zipfileset dir="${lib.dir}" prefix="lib" >
           <include name="native/**/*.dylib" />

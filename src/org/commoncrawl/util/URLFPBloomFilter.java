@@ -61,8 +61,6 @@ public class URLFPBloomFilter {
     this.bucketsPerElement = bucketsPerElement;
     this.hashCount = hashCount; 
     this.nbits = (long)numElements * (long)bucketsPerElement + 20;
-    System.out.println("Number of Bits is:" + nbits);
-    System.out.println("Number of Bytes is:" + nbits / 8);
     this.bits  = new OpenBitSet(nbits,true);
     this.hashResults = new long[hashCount];
   }

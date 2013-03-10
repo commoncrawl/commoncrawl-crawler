@@ -86,7 +86,7 @@ public class SequenceFileUtils {
           else { 
             System.out.print("\n");
             JsonElement e = parser.parse(value.toString());
-            JSONUtils.prettyPrintJSON(e);
+            System.out.println(JSONUtils.prettyPrintJSON(e));
           }
         }
       }

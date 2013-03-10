@@ -228,9 +228,11 @@ case $CCAPP_ACTION in
     # rotate run log ... 
     rotate_run_log $log
     echo starting $CCAPP_NAME, logging to $log
+                if [ $CCAPP_TESTMODE = 1 ]; then
+                        CCAPP_CMD_LINE="$JAVA $JAVA_HEAP_MAX $CCAPP_VMARGS org.junit.runner.JUnitCore $CCAPP_CLASS $CCAPP_ARGS $CCAPP_ARGS2"
+                        CCAPP_NOHUP=0
 
-
-		if [ $CCAPP_IS_CC_SERVER = 1 ]; then
+		elif [ $CCAPP_IS_CC_SERVER = 1 ]; then
 			#echo "runing commoncrawl server"
 				# run command
 				CCAPP_CMD_LINE="$JAVA $JAVA_HEAP_MAX $CCAPP_VMARGS org.commoncrawl.server.CommonCrawlServer --server $CCAPP_CLASS $CCAPP_ARGS $CCAPP_ARGS2"  

@@ -173,7 +173,7 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
     // collect all incoming paths first
     Vector<Path> incomingPaths = new Vector<Path>();
 
-    FlexBuffer scanArray[] = LinkKey.allocateScanArray();
+    FlexBuffer scanArray[] = CrawlDBKey.allocateScanArray();
 
     while (values.hasNext()) {
       String path = values.next().toString();
@@ -184,7 +184,7 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
     // set up merge attributes
     Configuration localMergeConfig = new Configuration(_jobConf);
 
-    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, LinkKeyGroupingComparator.class,
+    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, CrawlDBKeyGroupingComparator.class,
         RawComparator.class);
     localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS, TextBytes.class, WritableComparable.class);
 
@@ -213,15 +213,15 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
       discoveredLinks.clear();
 
       // scan key components
-      LinkKey.scanForComponents(nextItem.e0._keyObject, ':', scanArray);
+      CrawlDBKey.scanForComponents(nextItem.e0._keyObject, ':', scanArray);
 
       // setup fingerprint ...
-      fpSource.setRootDomainHash(LinkKey.getLongComponentFromComponentArray(scanArray,
-          LinkKey.ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID));
-      fpSource.setDomainHash(LinkKey.getLongComponentFromComponentArray(scanArray,
-          LinkKey.ComponentId.DOMAIN_HASH_COMPONENT_ID));
-      fpSource.setUrlHash(LinkKey.getLongComponentFromComponentArray(scanArray,
-          LinkKey.ComponentId.URL_HASH_COMPONENT_ID));
+      fpSource.setRootDomainHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
+          CrawlDBKey.ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID));
+      fpSource.setDomainHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
+          CrawlDBKey.ComponentId.DOMAIN_HASH_COMPONENT_ID));
+      fpSource.setUrlHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
+          CrawlDBKey.ComponentId.URL_HASH_COMPONENT_ID));
 
       for (RawRecordValue rawValue : nextItem.e1) {
 
@@ -232,9 +232,9 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
         length = WritableUtils.readVInt(inputBuffer);
         valueBytes.set(rawValue.data.getData(), inputBuffer.getPosition(), length);
 
-        long linkType = LinkKey.getLongComponentFromKey(keyBytes, LinkKey.ComponentId.TYPE_COMPONENT_ID);
+        long linkType = CrawlDBKey.getLongComponentFromKey(keyBytes, CrawlDBKey.ComponentId.TYPE_COMPONENT_ID);
 
-        if (linkType == LinkKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) {
+        if (linkType == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) {
           try {
             JsonObject object = parser.parse(valueBytes.toString()).getAsJsonObject();
             if (object != null) {

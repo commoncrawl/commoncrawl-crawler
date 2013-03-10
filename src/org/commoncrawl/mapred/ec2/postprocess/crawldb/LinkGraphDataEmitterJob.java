@@ -16,7 +16,7 @@
  *
  **/
 
-package org.commoncrawl.mapred.ec2.postprocess.linkCollector;
+package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
 import java.io.IOException;
 import java.net.URI;
@@ -39,8 +39,8 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey.LinkKeyComparator;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey.LinkKeyPartitioner;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.LinkKeyComparator;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyPartitioner;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
 import org.commoncrawl.util.TextBytes;
@@ -62,11 +62,11 @@ public class LinkGraphDataEmitterJob {
   
   static final String S3N_BUCKET_PREFIX = "s3n://aws-publicdatasets";
   static final String SEGMENTS_PATH = "/common-crawl/parse-output/segment/";
-  static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/graph-output/intermediate/";
+  static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/crawl-db/intermediate/";
   static final String VALID_SEGMENTS_PATH = "/common-crawl/parse-output/valid_segments2/";
   static final String JOB_SUCCESS_FILE = "_SUCCESS";
   
-  static final int MAX_SIMULTANEOUS_JOBS = 3;
+  static final int MAX_SIMULTANEOUS_JOBS = 10;
   
   LinkedBlockingQueue<QueueItem> _queue = new LinkedBlockingQueue<QueueItem>();
   Semaphore jobThreadSemaphore = new Semaphore(-(MAX_SIMULTANEOUS_JOBS-1));
@@ -99,7 +99,9 @@ public class LinkGraphDataEmitterJob {
       .maxMapTaskFailures(1000)
       .reuseJVM(1000)
       .reducer(LinkGraphDataEmitter.class, false)
-      .numReducers(500)
+      .partition(CrawlDBKeyPartitioner.class)
+      .sort(LinkKeyComparator.class)
+      .numReducers(1000)
       .speculativeExecution(true)
       .output(outputPath)
       .outputFormat(SequenceFileOutputFormat.class)
@@ -123,10 +125,10 @@ public class LinkGraphDataEmitterJob {
       .input(inputPath)
       .inputFormat(SequenceFileInputFormat.class)
       .keyValue(TextBytes.class, TextBytes.class)
-      .mapper(LinkDataResharder.class)
+      .mapper(LinkGraphDataEmitter.class)
       .maxMapTaskFailures(100)
-      .reducer(LinkDataResharder.class, true)
-      .partition(LinkKeyPartitioner.class)
+      .reducer(LinkGraphDataEmitter.class, true)
+      .partition(CrawlDBKeyPartitioner.class)
       .sort(LinkKeyComparator.class)
       .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
       .setAffinity(affinityPath,ImmutableSet.of("ccd001.commoncrawl.org"))
@@ -150,7 +152,7 @@ public class LinkGraphDataEmitterJob {
   private static SortedSet<Long> scanForValidSegments(FileSystem fs) throws IOException { 
     SortedSet<Long> completeSegmentIds = Sets.newTreeSet(); 
     
-    for (FileStatus fileStatus : fs.globStatus(new Path(VALID_SEGMENTS_PATH+"[0-9]*"))) { 
+    for (FileStatus fileStatus : fs.globStatus(new Path(S3N_BUCKET_PREFIX + VALID_SEGMENTS_PATH+"[0-9]*"))) { 
       completeSegmentIds.add(Long.parseLong(fileStatus.getPath().getName()));
     }
     return completeSegmentIds;
@@ -159,7 +161,7 @@ public class LinkGraphDataEmitterJob {
   private static SortedSet<Long> scanForMergedSegments(FileSystem fs) throws IOException { 
     SortedSet<Long> completeSegmentIds = Sets.newTreeSet(); 
 
-    for (FileStatus fileStatus : fs.globStatus(new Path(MERGE_INTERMEDIATE_OUTPUT_PATH+"[0-9]*"))) { 
+    for (FileStatus fileStatus : fs.globStatus(new Path(S3N_BUCKET_PREFIX + MERGE_INTERMEDIATE_OUTPUT_PATH+"[0-9]*"))) { 
       // ok look for the SUCCESS file
       Path successPath = new Path(fileStatus.getPath(),JOB_SUCCESS_FILE);
       if (fs.exists(successPath)) { 

@@ -16,7 +16,7 @@
  *
  **/
 
-package org.commoncrawl.mapred.ec2.postprocess.linkCollector;
+package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -47,9 +47,9 @@ import com.google.gson.JsonParser;
  * @author rana
  *
  */
-public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
+public class LinkGraphDataEmitter implements Mapper<Text,Text,TextBytes,TextBytes> , Reducer<TextBytes,TextBytes,TextBytes,TextBytes> {
 
-  static final Log LOG = LogFactory.getLog(LinkDataResharder.class);
+  static final Log LOG = LogFactory.getLog(LinkGraphDataEmitter.class);
   
   enum Counters { 
     FAILED_TO_GET_LINKS_FROM_HTML, NO_HREF_FOR_HTML_LINK, EXCEPTION_IN_MAP, GOT_HTML_METADATA, GOT_FEED_METADATA, EMITTED_ATOM_LINK, EMITTED_HTML_LINK, EMITTED_RSS_LINK, GOT_PARSED_AS_ATTRIBUTE, GOT_LINK_OBJECT, NULL_CONTENT_OBJECT, NULL_LINKS_ARRAY, FP_NULL_IN_EMBEDDED_LINK, SKIPPED_ALREADY_EMITTED_LINK, FOUND_HTTP_DATE_HEADER, FOUND_HTTP_AGE_HEADER, FOUND_HTTP_LAST_MODIFIED_HEADER, FOUND_HTTP_EXPIRES_HEADER, FOUND_HTTP_CACHE_CONTROL_HEADER, FOUND_HTTP_PRAGMA_HEADER, REDUCER_GOT_LINK, REDUCER_GOT_STATUS, ONE_REDUNDANT_LINK_IN_REDUCER, TWO_REDUNDANT_LINKS_IN_REDUCER, THREE_REDUNDANT_LINKS_IN_REDUCER, GT_THREE_REDUNDANT_LINKS_IN_REDUCER, ONE_REDUNDANT_STATUS_IN_REDUCER, TWO_REDUNDANT_STATUS_IN_REDUCER, THREE_REDUNDANT_STATUS_IN_REDUCER, GT_THREE_REDUNDANT_STATUS_IN_REDUCER, GOT_RSS_FEED, GOT_ATOM_FEED, GOT_ALTERNATE_LINK_FOR_ATOM_ITEM, GOT_CONTENT_FOR_ATOM_ITEM, GOT_ITEM_LINK_FROM_RSS_ITEM, GOT_TOP_LEVEL_LINK_FROM_RSS_ITEM, GOT_TOP_LEVEL_LINK_FROM_ATOM_ITEM, EMITTED_REDIRECT_RECORD, DISCOVERED_NEW_LINK, GOT_LINK_FOR_ITEM_WITH_STATUS, FAILED_TO_GET_SOURCE_HREF, GOT_CRAWL_STATUS_NO_LINK, GOT_CRAWL_STATUS_WITH_LINK, GOT_EXTERNAL_DOMAIN_SOURCE, NO_SOURCE_URL_FOR_CRAWL_STATUS, OUTPUT_KEY_FROM_INTERNAL_LINK, OUTPUT_KEY_FROM_EXTERNAL_LINK
@@ -101,7 +101,7 @@ public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> 
     try { 
       JsonObject o = parser.parse(value.toString()).getAsJsonObject();
       long attemptTime = o.get("attempt_time").getAsLong();
-      TextBytes crawlStatusKey = LinkKey.generateCrawlStatusKey(key, attemptTime);
+      TextBytes crawlStatusKey = CrawlDBKey.generateCrawlStatusKey(key, attemptTime);
       
       if (crawlStatusKey != null) {
         o.addProperty("source_url", key.toString());
@@ -181,7 +181,7 @@ public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> 
                   embeddedLinkObject.addProperty("source_type",sourceType);
                   embeddedLinkObject.add("source_headers",dateHeaders);
     
-                  TextBytes key = LinkKey.generateLinkKey(fp,LinkKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
+                  TextBytes key = CrawlDBKey.generateLinkKey(fp,CrawlDBKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
                   output.collect(key,new TextBytes(embeddedLinkObject.toString()));
                   
                   hashSet.add(fp.getUrlHash());
@@ -257,7 +257,7 @@ public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> 
             embeddedLinkObject.addProperty("source_type",sourceType);
             embeddedLinkObject.add("source_headers",dateHeaders);
   
-            TextBytes key = LinkKey.generateLinkKey(fp,LinkKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
+            TextBytes key = CrawlDBKey.generateLinkKey(fp,CrawlDBKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
             
             reporter.incrCounter(Counters.EMITTED_RSS_LINK, 1);
             output.collect(key,new TextBytes(embeddedLinkObject.toString()));
@@ -332,7 +332,7 @@ public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> 
                   
                   reporter.incrCounter(Counters.EMITTED_HTML_LINK, 1);
                   // generate new key ...
-                  TextBytes key = LinkKey.generateLinkKey(fp,LinkKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
+                  TextBytes key = CrawlDBKey.generateLinkKey(fp,CrawlDBKey.Type.KEY_TYPE_HTML_LINK,md5Hash);
                   output.collect(key,new TextBytes(linkObject.toString()));
                   
                   hashSet.add(fp.getUrlHash());
@@ -368,9 +368,9 @@ public class LinkDataResharder implements Mapper<Text,Text,TextBytes,TextBytes> 
   @Override
   public void reduce(TextBytes key, Iterator<TextBytes> values,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
     
-    long linkType = LinkKey.getLongComponentFromKey(key,LinkKey.ComponentId.TYPE_COMPONENT_ID);
+    long linkType = CrawlDBKey.getLongComponentFromKey(key,CrawlDBKey.ComponentId.TYPE_COMPONENT_ID);
     
-    if (linkType != LinkKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) {
+    if (linkType != CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) {
       reporter.incrCounter(Counters.REDUCER_GOT_LINK, 1);
       output.collect(key, values.next());
       int redundantLinkCount = 0;

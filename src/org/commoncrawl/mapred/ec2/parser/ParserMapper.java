@@ -1266,7 +1266,7 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
               System.out.println("Key:" + key.toString() + " Text-Size" + value.getTextContentAsTextBytes().getLength());
               System.out.println("Key:" + key.toString() + " RAW-Size" + value.getRawContent().getCount());
               System.out.println("Key:" + key.toString() + " Metadata:");
-              JSONUtils.prettyPrintJSON(metadata);
+              System.out.println(JSONUtils.prettyPrintJSON(metadata));
               System.out.println("Key:" + key.toString() + " Text:");
               System.out.println(value.getTextContent());
             }
