@@ -268,61 +268,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   // cached collector pointer ... 
   OutputCollector<TextBytes, TextBytes> _outputCollector;
   Reporter _reporter;
-  
-  /** 
-   * The CrawlDBWriter job can be spawned via the command line 
-   * 
-   * @param args
-   * @throws Exception
-   */
-  public static void main(String[] args)throws Exception {
-    Configuration conf = new Configuration();
-    FileSystem fs = FileSystem.get(new URI(S3N_BUCKET_PREFIX),conf);
     
-    // establish merge timestamp 
-    long mergeTimesmap = System.currentTimeMillis();
-    // write into final output path  
-    Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + MERGE_DB_PATH,Long.toString(mergeTimesmap));
-
-    
-    // find latest merge timestamp ... 
-    long latestMergeDBTimestamp = findLatestMergeDBTimestamp(fs, conf);
-    LOG.info("Latest MergeDB Timestmap is:" + latestMergeDBTimestamp);
-    // find list of merge candidates ... 
-    List<Path> candidateList = filterMergeCandidtes(fs, conf, latestMergeDBTimestamp);
-    LOG.info("Merge Candidate List is:" + candidateList);
-    if (candidateList.size() != 0) { 
-      ArrayList<Path> inputPaths = new ArrayList<Path>();
-      
-      // add all input paths to list 
-      inputPaths.addAll(candidateList);
-      // add merge db path if it exists 
-      if (latestMergeDBTimestamp != -1L) {
-        inputPaths.add(new Path(S3N_BUCKET_PREFIX + MERGE_DB_PATH,Long.toString(latestMergeDBTimestamp)));
-      }
-            
-      JobConf jobConf = new JobBuilder("Final Merge Job", conf)
-      .inputs(inputPaths)
-      .inputFormat(SequenceFileInputFormat.class)
-      .mapperKeyValue(TextBytes.class, TextBytes.class)
-      .outputKeyValue(TextBytes.class, TextBytes.class)
-      .outputFormat(SequenceFileOutputFormat.class)
-      .reducer(CrawlDBWriter.class,false)
-      .partition(CrawlDBKeyPartitioner.class)
-      .sort(LinkKeyComparator.class)
-      .group(CrawlDBKeyGroupingComparator.class)
-      .numReducers(10000)
-      .speculativeExecution(true)
-      .output(finalOutputPath)
-      .compressMapOutput(true)
-      .compressor(CompressionType.BLOCK, SnappyCodec.class)
-      .build();
-            
-      LOG.info("Starting JOB");
-      JobClient.runJob(jobConf);      
-    }
-  }
-  
   @Override
   public void reduce(TextBytes keyBytes, Iterator<TextBytes> values,OutputCollector<TextBytes, TextBytes> output, Reporter reporter)throws IOException {
     
