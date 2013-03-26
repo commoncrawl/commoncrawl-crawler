@@ -102,6 +102,9 @@ public class CrawlDBWriterTests extends CrawlDBWriter {
     }
 
     @Override
+    public float getProgress() { return 0; }
+
+    @Override
     public void setStatus(String status) {
     }
 
@@ -221,7 +224,7 @@ public class CrawlDBWriterTests extends CrawlDBWriter {
     /** 
      * build a model from a set of output tuples 
      * (captured by the mock collector)
-     * @param tupleList
+     * @param tuples
      */
     void buildModelFromOutputTuples(List<Pair<TextBytes,TextBytes>> tuples) throws IOException { 
       for (Pair<TextBytes,TextBytes> tuple : tuples) { 
