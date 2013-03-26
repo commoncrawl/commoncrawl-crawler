@@ -135,4 +135,50 @@ public class BloomCalculations {
 
     return new BloomSpecification(K, bucketsPerElement);
   }
+
+    /**
+     * Max elements you can put in a Bloom filter of a particular size with a specified error rate
+     * @param nbits total bitsize of the bloom filter
+     * @param hashCount how many hashes we're using
+     * @param errorRate the false positive rate we're looking for
+     */
+    public static long calcMaxElements(long nbits, double errorRate, int hashCount) {
+        return (long) (-nbits * 1.0 / hashCount * Math.log(1 - Math.exp(Math.log(errorRate) / hashCount)));
+    }
+
+    /**
+     * Get error rate for a given bloom filter based on size and hash count
+     * @param numElements how many elements we're storing in the bloom filter
+     * @param nbits total bitsize of the bloom filter
+     * @param hashCount how many hashes we're using
+     */
+    public static double calcErrorRate(long numElements, long nbits, int hashCount) {
+        return Math.exp(Math.log(1 - Math.exp(-hashCount * numElements * 1.0 / nbits)) * hashCount);
+    }
+
+    public static void usage(int exitCode) {
+        String error = "Usage: \n" +
+                "calcErrorRate numElements nbits hashCount\n" +
+                "calcMaxElements nbits errorRate hashCount";
+        System.err.println(error);
+        System.exit(exitCode);
+    }
+    public static void main(String[] args) {
+        if (args.length < 4) {
+            usage(1);
+        }
+
+        if (args[0].equals("calcErrorRate")) {
+            long numElements = Long.parseLong(args[1]);
+            long nbits = Long.parseLong(args[2]);
+            int hashCount = Integer.parseInt(args[3]);
+            System.out.println(calcErrorRate(numElements, nbits, hashCount));
+        } else if (args[0].equals("calcMaxElements")) {
+            long nbits = Long.parseLong(args[1]);
+            double errorRate = Double.parseDouble(args[2]);
+            int hashCount = Integer.parseInt(args[3]);
+            System.out.println(calcMaxElements(nbits, errorRate, hashCount));
+        }
+    }
+
 }
