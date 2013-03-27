@@ -1658,7 +1658,7 @@ public final class CrawlerEngine  {
       if (hostName.length() != 0) {
         CrawlSegmentHost host = lastHost;
 
-        if (host != null && !host.equals(hostName)) { 
+        if (host != null && !host.getHostName().equals(hostName)) {
           host = mapOfHostsByName.get(hostName);
         }
         if (host == null) { 
