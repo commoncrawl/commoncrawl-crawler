@@ -35,12 +35,11 @@ import org.junit.Test;
  *
  */
 public class URLNormalizer {
-
-  static char slash[] = new String("/").toCharArray();
-  static char dotSlash[] = new String("./").toCharArray();
-  static char dotDotSlash[] = new String("../").toCharArray();
-  static char slashDotSlash[] = new String("/./").toCharArray();
-  static char slashDotDotSlash[] = new String("/../").toCharArray();
+  static char slash[] = {'/'};
+  static char dotSlash[] = {'.', '/'};
+  static char dotDotSlash[] = {'.', '.', '/'};
+  static char slashDotSlash[] = {'/', '.', '/'};
+  static char slashDotDotSlash[] = {'/', '.', '.', '/'};
 
   static void removeCharsAt(CharBuffer buffer,int start,int count) { 
     buffer.position(start + count);
