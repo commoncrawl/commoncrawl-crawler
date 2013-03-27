@@ -418,14 +418,13 @@ public class PageRankUtils {
       
         StringBuffer buf = new StringBuffer(amount << 1) ;
         int k = 0 ;
-        int flen = amount;
         char hexBuffer[] = new char[HEX_CHARS_PER_LINE*2 + (HEX_CHARS_PER_LINE - 1)+ 2];
         char asciiBuffer[] = new char[HEX_CHARS_PER_LINE + 1];
         
         hexBuffer[hexBuffer.length-1]=0;
         asciiBuffer[asciiBuffer.length - 1]=0;
 
-        for (int i = 0; i < flen ; i++) {
+        for (int i = 0; i < amount ; i++) {
             int j = data.get() & 0xFF ;
             
             hexBuffer[k*3] = Character.forDigit((j >>> 4) , 16);

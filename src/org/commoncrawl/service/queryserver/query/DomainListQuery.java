@@ -200,7 +200,7 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
     
     if (!localFileSystem.exists(queryResultsPath)) {
     
-      LOG.info("Exectue Local for Query:" + getQueryId() +" Results File:" + queryResultsPath + " does not exist. Running sort and merge process");
+      LOG.info("Execute Local for Query:" + getQueryId() +" Results File:" + queryResultsPath + " does not exist. Running sort and merge process");
 
       LOG.info("Execute Local for Query:" + getQueryId() +" Allocating SpillWriter with output to:" + queryResultsPath);
       // allocate a spill writer ...  
@@ -439,20 +439,13 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
   			cumulativeRecordCount += recordCount;
       return cumulativeRecordCount;
   }
-  
+
   @Override
-  public boolean cachedResultsAvailable(FileSystem fileSystem,Configuration conf, QueryRequest theClientRequest) throws IOException {
-    
+  public boolean cachedResultsAvailable(FileSystem fileSystem, Configuration conf, QueryRequest theClientRequest) throws IOException {
     FileSystem localFileSystem = FileSystem.getLocal(conf);
-    
-    Path outputFileName = new Path(getLocalQueryResultsPathPrefix(theClientRequest)+getOutputFileNameBasedOnSortByField(theClientRequest.getClientQueryInfo().getSortByField()));
-    
-    //LOG.info("Cached Results Available called for Query:" + theClientRequest.getSourceQuery().getQueryId() + ". Checking Path:" + outputFileName);
-    //Path indexFileName  = new Path(outputFileName.toString() + ".IDX");
-    boolean result = localFileSystem.exists(outputFileName);
-    //LOG.info("Cached Results Available called for Query:" + theClientRequest.getSourceQuery().getQueryId() + ". returning:" + result);
-   
-    return result;
+    Path outputFileName = new Path(getLocalQueryResultsPathPrefix(theClientRequest) + getOutputFileNameBasedOnSortByField(theClientRequest.getClientQueryInfo().getSortByField()));
+
+    return localFileSystem.exists(outputFileName);
   }
 
   @Override

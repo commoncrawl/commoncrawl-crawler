@@ -348,8 +348,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   
   private Path getCheckpointMutexPath() {
     Hour hour = new Hour(new Date());
-    Path checkpointPath = new Path(CrawlEnvironment.HDFS_HistoryServerBase+CrawlEnvironment.HDFS_HistoryServerCheckpointMutex+"."+hour.getFirstMillisecond());
-    return checkpointPath;
+    return new Path(CrawlEnvironment.HDFS_HistoryServerBase+CrawlEnvironment.HDFS_HistoryServerCheckpointMutex+"."+hour.getFirstMillisecond());
   }
   
   private List<Path> reloadActiveHistory()throws IOException {

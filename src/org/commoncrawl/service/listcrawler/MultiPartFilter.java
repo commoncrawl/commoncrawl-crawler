@@ -423,8 +423,7 @@ public class MultiPartFilter implements Filter
          {
              try
              {
-                 String s=new String((byte[])o,encoding);
-                 return s;
+                 return new String((byte[])o, encoding);
              }
              catch(Exception e)
              {

@@ -2049,10 +2049,8 @@ public final class CrawlList implements ItemUpdater {
         int processedCount = 0;
         while (fixedDataReader.getFilePointer() != fixedDataReader.length()) {
 
-          long position = fixedDataReader.getFilePointer();
-
           // store offset in item 
-          item._fileOffset = position;
+          item._fileOffset = fixedDataReader.getFilePointer();
           // load from disk 
           item.deserialize(fixedDataReader);
           try { 

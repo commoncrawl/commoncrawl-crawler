@@ -1428,9 +1428,7 @@ public class CacheManager {
     
     
     try {
-
-      long lastValidPos = LocalLogFileHeader.SIZE; 
-      long currentPos   = lastValidPos; 
+      long currentPos   = LocalLogFileHeader.SIZE;
       long endPos     = file.length();
       
       

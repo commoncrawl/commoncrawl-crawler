@@ -1469,10 +1469,7 @@ public final class CrawlerEngine  {
       CrawlSegmentURL url = host.getUrlTargets().get(0);
       if (url != null) { 
         String urlString = url.getUrl();
-        //LOG.info("Extracting HostName from url:" + urlString);
-        String extractedHostName = URLUtils.fastGetHostFromURL(urlString);
-        //LOG.info("Extracted HostName:" + extractedHostName);
-        return extractedHostName;
+        return URLUtils.fastGetHostFromURL(urlString);
       }
     }
     else { 

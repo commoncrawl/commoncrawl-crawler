@@ -212,9 +212,7 @@ public class CrawlerServer extends CommonCrawlServer
     _server = this;
     
     CrawlList.setServerSingleton(this);
-    
-    String dataPath = _server.getDataDirectory().getAbsolutePath() + "/";
-    String dbPath = dataPath;
+    String dbPath = _server.getDataDirectory().getAbsolutePath() + "/";
     
     if (CrawlEnvironment.inUnitTestMode()) {
       dbPath += "UnitTest_" + CrawlEnvironment.CRAWLER_DB;
@@ -232,7 +230,7 @@ public class CrawlerServer extends CommonCrawlServer
     
     // if in unit test mode ... delete existing db file 
     if (CrawlEnvironment.inUnitTestMode()) {
-      // delete existing datapase path if any ...   
+      // delete existing database path if any ...
       if (databasePath.exists()) 
         databasePath.delete();
     }    
