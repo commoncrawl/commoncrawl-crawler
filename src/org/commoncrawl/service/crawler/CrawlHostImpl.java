@@ -248,7 +248,7 @@ public final class CrawlHostImpl implements CrawlListHost, CrawlQueueHost {
     }
   }
   
-  /** reset IOError Counter ... whenever we succesfully retrieve a document from this host **/
+  /** reset IOError Counter ... whenever we successfully retrieve a document from this host **/
   public void resetIOErrorCount() { 
     _consecutiveIOErrors = 0;
   }
@@ -461,7 +461,7 @@ public final class CrawlHostImpl implements CrawlListHost, CrawlQueueHost {
         feedQueue(); 
       }
     }
-    // otherwise if state change occured on a non-active domain ... 
+    // otherwise if state change occurred on a non-active domain ...
     else {
       throw new RuntimeException("List Disposition Change Happened in non Active List:" + list.getListName() + " CurrentList:" + getHead());
     }

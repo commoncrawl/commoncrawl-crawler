@@ -559,7 +559,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
       for (URLFP targetFP : criteria) {
         // if fingerprint is present in filter ...
         if (filter.isPresent(targetFP)) {
-          // check to see if reader is initialzied ...
+          // check to see if reader is initialized ...
           if (reader == null) {
             LOG.info("LIST:" + listId
                 + " BloomFilter First Hit. Initializing Reader for file at:"
@@ -647,7 +647,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
           LOG
               .warn("LIST:"
                   + listId
-                  + " ### Reached End Of File Searching for item in MapFile while BloomFilter returned positivie result (DomainHash:"
+                  + " ### Reached End Of File Searching for item in MapFile while BloomFilter returned positive result (DomainHash:"
                   + targetFP.getDomainHash() + "FP:" + targetFP.getUrlHash()
                   + ")");
           // break out of outer loop
@@ -764,7 +764,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
   }
 
   /**
-   * initiailizeActiveLog - init local cache log
+   * initializeActiveLog - init local cache log
    * 
    * 
    * **/
@@ -997,7 +997,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
       LOG.info("Writing HDFS Log File");
 
       // write local file contents to hdfs
-      // we don't need to lock the map here becuase only the local log thread
+      // we don't need to lock the map here because only the local log thread
       // (current thread) modified the map ...
       long checkpointTimestamp = writeMapFileToHDFS(_localLogItems);
 
@@ -1158,8 +1158,8 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
             list.updateItemState(fingerprint, item);
           } catch (Exception e) {
             // ok, IF an error occurs updating the list metadata.. we need to
-            // coninue along.
-            // it is critical for this thread to not die in such a circumstane
+            // continue along.
+            // it is critical for this thread to not die in such a circumstance
             LOG.fatal("Error Updating List(" + list.getListId() + "):"
                 + CCStringUtils.stringifyException(e));
             System.out.println("Exception in List Update(" + list.getListId()
@@ -1234,7 +1234,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
               // see if can start a checkpoint ..
               if (_checkpointSemaphore.tryAcquire(100, TimeUnit.MILLISECONDS)) {
                 try {
-                  // ok we can exclusivey touch the local log file
+                  // ok we can exclusively touch the local log file
                   doCheckpoint();
                 } finally {
                   _checkpointSemaphore.release();
@@ -1391,7 +1391,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
 
       @Override
       public void run() {
-        LOG.info("Starting Qeueue Loader Thread");
+        LOG.info("Starting Queue Loader Thread");
         try { 
           while (true) {
             try {
@@ -1455,7 +1455,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
     }
 
     if (item.isFieldDirty(ProxyCrawlHistoryItem.Field_REDIRECTURL)) {
-      // move original result code over to appropiate location in CrawlURL
+      // move original result code over to appropriate location in CrawlURL
       url.setOriginalResultCode(url.getResultCode());
       url.setFieldClean(CrawlURL.Field_RESULTCODE);
       url.setFlags(CrawlURL.Flags.IsRedirected);
@@ -1606,7 +1606,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
       // ok now validate one last time
       syncAndValidateItems(items, logManager);
 
-      // shutown
+      // shutdown
       logManager.shutdown();
 
       logManager = null;
@@ -1856,7 +1856,7 @@ public class CrawlHistoryManager implements CrawlHistoryStorage {
 
                 if (completedURLS.equals(combined)) {
                   System.out
-                      .println("Hit Trigger URL. Releasing InitialListComplete Sempahore");
+                      .println("Hit Trigger URL. Releasing InitialListComplete Semaphore");
                   initialListComplete.release(1);
                 }
               }

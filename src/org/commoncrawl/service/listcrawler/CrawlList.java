@@ -62,8 +62,6 @@ import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.URLFP;
 import org.commoncrawl.rpc.base.shared.BinaryProtocol;
 import org.commoncrawl.service.crawler.util.URLFPBloomFilter;
-import org.commoncrawl.service.listcrawler.CrawlListDomainItem;
-import org.commoncrawl.service.listcrawler.CrawlListMetadata;
 import org.commoncrawl.service.listcrawler.CrawlHistoryManager.ItemUpdater;
 import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.URLFingerprint;
@@ -245,7 +243,7 @@ public final class CrawlList implements ItemUpdater {
   }
 
   /**
-   * Initialize a CrawlList in an laoding state ..
+   * Initialize a CrawlList in an loading state ..
    */
   public static CrawlList createListLoadingInLoadingState(CrawlHistoryStorage manager,long listId,File dataFile,int refreshInterval) {
     CrawlList listOut = new CrawlList(manager,listId,LoadState.QUEUED_FOR_LOADING);
@@ -269,7 +267,7 @@ public final class CrawlList implements ItemUpdater {
     //establish file names 
     initializeListFileNames();
 
-    LOG.info("Initilaizing pre-existing List with Id:" + listId);
+    LOG.info("Initializing pre-existing List with Id:" + listId);
 
     LOG.info("Loading BloomFilterData for List:" + listId);
     FileInputStream bloomFilterData = new FileInputStream(_bloomFilterData);
@@ -367,8 +365,8 @@ public final class CrawlList implements ItemUpdater {
                 _key1Buffer.reset(key1Data,key1Offset,key1Length);
                 _key2Buffer.reset(key2Data,key2Offset,key2Length);
 
-                _key1Buffer.skip(2); // skip verison, and 1 byte id 
-                _key2Buffer.skip(2); // skip verison, and 1 byte id 
+                _key1Buffer.skip(2); // skip version, and 1 byte id
+                _key2Buffer.skip(2); // skip version, and 1 byte id
 
                 int domainHash1 = WritableUtils.readVInt(_key1Buffer);
                 int domainHash2 = WritableUtils.readVInt(_key2Buffer);
@@ -423,7 +421,7 @@ public final class CrawlList implements ItemUpdater {
                 }
               }
               else { 
-                LOG.error("*** LIST:" + getListId() + " Invalid URL Encounered at Line:" + lineNumber + " URL" + line);
+                LOG.error("*** LIST:" + getListId() + " Invalid URL Encountered at Line:" + lineNumber + " URL" + line);
               }
             }
           }
@@ -492,7 +490,7 @@ public final class CrawlList implements ItemUpdater {
       }
       LOG.info("*** LIST:" + getListId() + " Finished Writing Initial Values to Disk");
 
-      LOG.info("*** LIST:" + getListId() + " FIXED DATA BUFFER OF SIZE:" + valueStream.getLength() + " EXCEPECTED SIZE:" + (urlSet.size() * OnDiskCrawlHistoryItem.ON_DISK_SIZE));
+      LOG.info("*** LIST:" + getListId() + " FIXED DATA BUFFER OF SIZE:" + valueStream.getLength() + " EXPECTED SIZE:" + (urlSet.size() * OnDiskCrawlHistoryItem.ON_DISK_SIZE));
       if (valueStream.getLength() != (urlSet.size() * OnDiskCrawlHistoryItem.ON_DISK_SIZE)) { 
         throw new IOException("Final FixedItemData Buffer Size:" + valueStream.getLength() + " != URLSetSize:" + (urlSet.size() * OnDiskCrawlHistoryItem.ON_DISK_SIZE));
       }
@@ -520,7 +518,7 @@ public final class CrawlList implements ItemUpdater {
       _manager.syncList(this.getListId(),urlSet,this);
       LOG.info("*** LIST:" + getListId() + " SYNC COMPLETE");
 
-      // write metdata to disk again 
+      // write metadata to disk again
       writeMetadataToDisk();
 
       LOG.info("*** LIST:" + getListId() + " FLUSHING FIXED DATA");
@@ -603,7 +601,7 @@ public final class CrawlList implements ItemUpdater {
           // build an on disk item data structure for any potential changes ... 
           OnDiskCrawlHistoryItem newItem = onDiskItemFromHistoryItem(fingerprint,newData);
 
-          // set inital offset information 
+          // set initial offset information
           newItem._fileOffset = originalItem._fileOffset;
           newItem._stringsOffset = originalItem._stringsOffset;
 
@@ -635,14 +633,14 @@ public final class CrawlList implements ItemUpdater {
             }
             //LOG.info("Opening Data File for OnDiskItem load for Fingerprint:" + newItem._urlFingerprint);
 
-            // ok, different paths depending on wether this is an in memory update or not ... 
+            // ok, different paths depending on whether this is an in memory update or not ...
             boolean wroteToMemory = false;
             synchronized (this) {
               if (_tempFixedDataBuffer != null) {
                 wroteToMemory = true;
                 // reset output buffer 
                 _tempOutputBuffer.reset();
-                // serizlie to output buffer 
+                // serialize to output buffer
                 newItem.serialize(_tempOutputBuffer);
                 // copy to appropriate location 
                 System.arraycopy(_tempOutputBuffer.getData(), 0, _tempFixedDataBuffer,(int) originalItem._fileOffset, OnDiskCrawlHistoryItem.ON_DISK_SIZE);
@@ -729,7 +727,7 @@ public final class CrawlList implements ItemUpdater {
     }
   }
 
-  private static final int processOrignalStatus 		 = 1 << 0;
+  private static final int processOriginalStatus = 1 << 0;
   private static final int processOriginalResult 		 = 1 << 1;
   private static final int processRedirectStatus 		 = 1 << 2;
   private static final int processRedirectResult 		 = 1 << 3;
@@ -740,7 +738,7 @@ public final class CrawlList implements ItemUpdater {
     int updateFlags = 0;
 
     if (newItem.isFlagSet(OnDiskCrawlHistoryItem.FLAG_HAS_CRAWL_STATUS) && !originalItem.isFlagSet(OnDiskCrawlHistoryItem.FLAG_HAS_CRAWL_STATUS)) {
-      updateFlags |= processOrignalStatus;
+      updateFlags |= processOriginalStatus;
     }
 
     if (newItem.isFlagSet(OnDiskCrawlHistoryItem.FLAG_HAS_ORIGINAL_RESULT_CODE) && !originalItem.isFlagSet(OnDiskCrawlHistoryItem.FLAG_HAS_ORIGINAL_RESULT_CODE)) {
@@ -765,7 +763,7 @@ public final class CrawlList implements ItemUpdater {
 
     int metadataDirtyFlags = 0;
     if (!newItem.isFlagSet(OnDiskCrawlHistoryItem.FLAG_HAS_REDIRECT_STATUS)) { 
-      //if ((updateFlags & processOrignalStatus) != 0) {
+      //if ((updateFlags & processOriginalStatus) != 0) {
         // LOG.info("### Updating OriginalCrawlStatus for Item:" + newData.getOriginalURL());
         // status changed ... 
         if (newItem._crawlStatus != 0) { 
@@ -1463,7 +1461,7 @@ public final class CrawlList implements ItemUpdater {
       itemOut.setRedirectHttpResult(item._redirectHttpResult);
     if ((item._flags & OnDiskCrawlHistoryItem.FLAG_HAS_LASTMODIFIED_TIME) != 0)
       itemOut.setLastModifiedTime(item._updateTimestamp);
-    // now attept to get the string offset 
+    // now attempt to get the string offset
     RandomAccessFile stringDataReader = new RandomAccessFile(_variableDataFile, "rw");
     try { 
       // seek to string data 
@@ -1940,7 +1938,7 @@ public final class CrawlList implements ItemUpdater {
 
         for (int i=0;i<itemCount;++i) {
 
-          long orignalPos = file.getFilePointer();
+          long originalPos = file.getFilePointer();
           file.readFully(outputBuffer.getData(), 0, CrawlListMetadata.Constants.FixedDataSize);
           inputBuffer.reset(outputBuffer.getData(),CrawlListMetadata.Constants.FixedDataSize);
           try { 
@@ -1969,7 +1967,7 @@ public final class CrawlList implements ItemUpdater {
           outputBuffer.reset();
           newMetadata.serialize(outputBuffer, new BinaryProtocol());
           // write it back to disk 
-          file.seek(orignalPos);
+          file.seek(originalPos);
           // and rewrite it ... 
           file.write(outputBuffer.getData(),0,CrawlListMetadata.Constants.FixedDataSize);
         }
@@ -2104,7 +2102,7 @@ public final class CrawlList implements ItemUpdater {
       }
       LOG.info("*** LIST:" + getListId() + " SUBDOMAIN METADATA REBUILT FROM LIST DATA . WRITING TO DISK");
 
-      // write metadat to disk 
+      // write metadata to disk
       writeInitialSubDomainMetadataToDisk();
 
 
@@ -2149,7 +2147,7 @@ public final class CrawlList implements ItemUpdater {
 
               for (;i<end;++i) {
 
-                long orignalPos = file.getFilePointer();
+                long originalPos = file.getFilePointer();
                 file.readFully(fixedDataBlock, 0, fixedDataBlock.length);
                 inputBuffer.reset(fixedDataBlock,fixedDataBlock.length);
                 newMetadata.deserialize(inputBuffer, new BinaryProtocol());

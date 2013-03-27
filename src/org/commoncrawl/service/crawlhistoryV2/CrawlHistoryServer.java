@@ -199,7 +199,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       try { 
         
         if (_bloomFilters == null) { 
-          throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+          throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
         }
         
         DataInputStream inputStream = new DataInputStream(
@@ -244,7 +244,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   public void singleItemQuery(AsyncContext<URLFPV2, SingleItemHistoryQueryResponse> rpcContext)throws RPCException {
     try { 
       if (_bloomFilters == null) { 
-        throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+        throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
       }
       int partition = URLFPUtils.getPartitionGivenFP(rpcContext.getInput());
       if (_bloomFilters[partition] == null) { 
@@ -264,7 +264,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   public void updateHistory(AsyncContext<URLFPV2, NullMessage> rpcContext)throws RPCException {
     try { 
       if (_bloomFilters == null) { 
-        throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+        throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
       }
       int partition = URLFPUtils.getPartitionGivenFP(rpcContext.getInput());
       if (_bloomFilters[partition] == null) { 
@@ -333,11 +333,11 @@ public class CrawlHistoryServer extends CommonCrawlServer
         }
       }
     }
-    // ok no, they dont. initialize empty bloom filters 
+    // ok no, they don't. initialize empty bloom filters
     else { 
       LOG.info("No Existing Filters Found. Allocating New Filters");
       for (int i=0;i<CrawlEnvironment.NUM_DB_SHARDS;++i){
-        LOG.info("Allocting Part:" + i);
+        LOG.info("Allocating Part:" + i);
         _bloomFilters[i] = new URLFPBloomFilter(NUM_ELEMENTS, NUM_HASH_FUNCTIONS, NUM_BITS);
       }
     }
@@ -398,7 +398,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       try { 
         
         if (_bloomFilters == null) { 
-          throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+          throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
         }
         
         DataInputStream inputStream = new DataInputStream(
@@ -447,7 +447,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
             bestCandidateId = candidateId;
           }
           else { 
-            LOG.error("Skipping Canidate:" + candidateName);
+            LOG.error("Skipping Candidate:" + candidateName);
           }
         }
       }

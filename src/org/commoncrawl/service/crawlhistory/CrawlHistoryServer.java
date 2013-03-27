@@ -264,7 +264,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       try { 
         
         if (_bloomFilter == null) { 
-          throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+          throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
         }
         
         DataInputStream inputStream = new DataInputStream(
@@ -305,7 +305,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   public void singleItemQuery(AsyncContext<URLFPV2, SingleItemHistoryQueryResponse> rpcContext)throws RPCException {
     try { 
       if (_bloomFilter == null) { 
-        throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+        throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
       }
       rpcContext.getOutput().setWasCrawled(_bloomFilter.isPresent(rpcContext.getInput()));
     }
@@ -321,7 +321,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
   public void updateHistory(AsyncContext<URLFPV2, NullMessage> rpcContext)throws RPCException {
     try { 
       if (_bloomFilter == null) { 
-        throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+        throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
       }
       _bloomFilter.add(rpcContext.getInput());
     }
@@ -366,7 +366,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     // scan hdfs for log files
     FileStatus candidates[];
     
-    LOG.info("Scanning For Cadnidates in:" + hdfsScanPath);
+    LOG.info("Scanning For Candidates in:" + hdfsScanPath);
     candidates = fs.globStatus(hdfsScanPath);
 
     // iterate candidates 
@@ -407,7 +407,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     // scan hdfs for log files
     FileStatus candidates[];
     
-    LOG.info("Scanning For Cadnidates in:" + hdfsScanPath);
+    LOG.info("Scanning For Candidates in:" + hdfsScanPath);
     candidates = fs.globStatus(hdfsScanPath);
 
     // iterate candidates 
@@ -546,7 +546,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
                   fs.delete(getDataFileCheckpointPath(),false);
                   fs.delete(getDataFileFinalPath(),false);
                   
-                  LOG.info("Reseting BloomFilter");
+                  LOG.info("Resetting BloomFilter");
                   // safely reset bloom filter 
                   _bloomFilter = null;
                   _bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
@@ -683,7 +683,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     Path dataFilePath = getDataFileFinalPath();
     LOG.info("Potentially Loading BloomFilter From Disk at Path:" + dataFilePath);
     if (!validateOnDiskVersion()) { 
-      LOG.info("On Disk Verison Not Valid. Allocating New BloomFilter at Path:" + dataFilePath);
+      LOG.info("On Disk Version Not Valid. Allocating New BloomFilter at Path:" + dataFilePath);
       LOG.info("Allocating NEW BloomFilter");
       _bloomFilter = new URLFPBloomFilter(_numElements,_numHashFunctions,_bitsPerElement);
     }
@@ -728,7 +728,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       public void run() {
         
         
-        // ok check point thread run in perpetuty
+        // ok check point thread run in perpetuity
         while (!_shutdownFlag) {
           
           if (_lastCheckpointScanTime == -1 
@@ -753,7 +753,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
               // scan hdfs for log files
               FileStatus candidates[];
               try {
-                LOG.info("Checkpoint Thread Scanning For Cadnidates in:" + hdfsScanPath);
+                LOG.info("Checkpoint Thread Scanning For Candidates in:" + hdfsScanPath);
                 candidates = fs.globStatus(hdfsScanPath);
     
                 // iterate candidates 
@@ -773,7 +773,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
                         placeHolderFP.setUrlHash(urlFingerprint);
                         // add item for bloom filter 
                         _bloomFilter.add(placeHolderFP);
-                        // inrement urls processed count ...
+                        // increment urls processed count ...
                         _urlsProcessedSinceCheckpoint.addAndGet(1);
                       }
                     });
@@ -936,7 +936,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       try { 
         
         if (_bloomFilter == null) { 
-          throw new IOException("BloomFilter Not Initilized. Invalid Server State!");
+          throw new IOException("BloomFilter Not Initialized. Invalid Server State!");
         }
         
         DataInputStream inputStream = new DataInputStream(

@@ -33,7 +33,7 @@ public interface CrawlListHost extends CrawlHost {
 		RobotsExcludedCount, SuccessfullGetCount, Http200Count, Http403Count, FailedDomainCount, FailedGetCount, ConsecutiveIOErrorCount
 	}
 
-	/** associated the given content crc with the givn robotruleset object**/
+	/** associated the given content crc with the given robotruleset object**/
 	public void cacheRobotsFile(RobotRuleSet ruleSet, long robotsCRC);
 
 	/** get cached robots entry given crc */
@@ -57,7 +57,7 @@ public interface CrawlListHost extends CrawlHost {
 	/** is this a failed host */
 	public boolean isFailedServer();
 
-	/** called whenever the Active CrawlList's diposition (state) changes */
+	/** called whenever the Active CrawlList's disposition (state) changes */
 	public void listDispositionChanged(CrawlList list,CrawlList.Disposition oldDisposition, CrawlList.Disposition newDisposition);
 
 	/** reset given counter variable **/

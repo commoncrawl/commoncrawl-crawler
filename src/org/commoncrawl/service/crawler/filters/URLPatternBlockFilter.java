@@ -87,7 +87,7 @@ public class URLPatternBlockFilter extends Filter {
     	}
     }
     else { 
-      throw new IOException("Invalid Boost Fileter Line:" + filterItemLine);
+      throw new IOException("Invalid Boost Filter Line:" + filterItemLine);
     }
   }
   

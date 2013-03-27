@@ -443,7 +443,7 @@ public final class CrawlerEngine  {
         // this callback is executed when the last segment has been successfully loaded
         public void execute() {
 
-          LOG.info("loadCrawlSegment Completion Callback Excecuted - Checking to see if Checkpoint Possilbe");
+          LOG.info("loadCrawlSegment Completion Callback Excecuted - Checking to see if Checkpoint Possible");
 
           long currentTime = System.currentTimeMillis();
 
@@ -489,7 +489,7 @@ public final class CrawlerEngine  {
 
 
   public void shutdown() {
-    LOG.info("Shuting down crawl engine");
+    LOG.info("Shutting down crawl engine");
     _shutdownFlag = true;
     if (_crawlActive) { 
       stopCrawl(null);
@@ -1741,7 +1741,7 @@ public final class CrawlerEngine  {
     // increment processed url count ... 
     _totalProcessedURLCount += originalURLCount;
 
-    // ok, sort targets by positon first 
+    // ok, sort targets by position first
     Collections.sort(host.getUrlTargets(),new Comparator<CrawlSegmentURL>() {
 
       @Override
@@ -1792,7 +1792,7 @@ public final class CrawlerEngine  {
           else if (badSessionIDURL)
             CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.MalformedURL,"URL Rejected - Bad SessionID URL");
           else 
-            CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.MalformedURL,"URL Rejected - Malforned URL");
+            CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.MalformedURL,"URL Rejected - Malformed URL");
         }
       }
       else { 
@@ -1807,8 +1807,8 @@ public final class CrawlerEngine  {
           // remove the item from the list ... 
           host.getUrlTargets().remove(i);
           --i;
-          // immedialtely fail this url ... 
-          CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.UnknownProtocol,"Uknown Protocol encountered during URL Distribution.");
+          // immediately fail this url ...
+          CrawlTarget.failURL(CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),null, CrawlURL.FailureReason.UnknownProtocol,"Unknown Protocol encountered during URL Distribution.");
         }
       }
     }
@@ -2021,7 +2021,7 @@ public final class CrawlerEngine  {
           segmentLog.completeItem(url);
         }
         else { 
-          LOG.error("Segement Log for List:" + url.getListId() + " Segment:"+ url.getCrawlSegmentId() + "  is NULL (during CrawlComplete) for URL:" + url.getUrl());
+          LOG.error("Segment Log for List:" + url.getListId() + " Segment:"+ url.getCrawlSegmentId() + "  is NULL (during CrawlComplete) for URL:" + url.getUrl());
         }
 
         // IFF target has no valid segment id ... then this is a high priority request ... delegate to outer controller 
@@ -2251,13 +2251,13 @@ public final class CrawlerEngine  {
 
         @Override
         public void AddressResolutionFailure(NIODNSResolver source,String hostName, Status status, String errorDesc) {
-          // LOG.info("DNS Failed for High Priority Request:" + hostName + " Errror:" + errorDesc);
+          // LOG.info("DNS Failed for High Priority Request:" + hostName + " Error:" + errorDesc);
           if (callback != null) { 
             callback.crawlComplete(null,CrawlTarget.allocateCrawlURLForFailure(url,fingerprint,CrawlURL.FailureReason.DNSFailure,errorDesc),null,false);
           }
           else { 
             if (Environment.detailLogEnabled())
-              LOG.error("queueExternalURL for URL:" + url + " Failed with:DNS Failed for High Priority Request:" + hostName + " Errror:" + errorDesc);
+              LOG.error("queueExternalURL for URL:" + url + " Failed with:DNS Failed for High Priority Request:" + hostName + " Error:" + errorDesc);
           }
         }
         @Override

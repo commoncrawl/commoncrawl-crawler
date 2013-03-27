@@ -426,7 +426,7 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
   		// ok block until all queries are complete
   		LOG.info("Query:" + getQueryId() + " Waiting on Worker Threads");
   		semaphore.acquireUninterruptibly();
-  		LOG.info("Query:" + getQueryId() + " All Threads Compelted");
+  		LOG.info("Query:" + getQueryId() + " All Threads Completed");
   		
   		for (IOException e : exceptions) { 
   			if (e != null) { 

@@ -438,7 +438,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
           }
           _active[index] = null;
           if (Environment.detailLogEnabled())
-            LOG.error("Maformed URL Exception Processing URL:" + crawlTarget.getActiveURL());
+            LOG.error("Malformed URL Exception Processing URL:" + crawlTarget.getActiveURL());
           crawlTarget.fetchFailed(CrawlURL.FailureReason.MalformedURL,e.toString());
 
           failureCount++;
@@ -452,7 +452,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
           }
           _active[index] = null;
           if (Environment.detailLogEnabled())
-            LOG.error("Maformed URL Exception Processing URL:" + crawlTarget.getActiveURL());
+            LOG.error("Malformed URL Exception Processing URL:" + crawlTarget.getActiveURL());
           crawlTarget.fetchFailed(CrawlURL.FailureReason.MalformedURL,e.toString());
 
           failureCount++;
@@ -693,7 +693,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
                               if (CrawlerServer.getEngine().getLocalBloomFilter().isPresent(redirectFingerprint)) { 
                                 // yes we have ... fail the url ... 
                                 LOG.info("!!!!Rejecting redirect. from:" + originalURL + " to:" + redirectURL +". Already Visited Target URL");
-                                context.getURL().fetchFailed(CrawlURL.FailureReason.RedirectFailed, "Alread Visited Redirect Location:" + theConnection.getRedirectLocation());
+                                context.getURL().fetchFailed(CrawlURL.FailureReason.RedirectFailed, "Already Visited Redirect Location:" + theConnection.getRedirectLocation());
                                 processRedirect = false;
                               }
                             }
@@ -706,7 +706,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
                         if (processRedirect) { 
                           if (Environment.detailLogEnabled())
                             LOG.info("Redirecting request:" + originalURL + " to:" + redirectURL);
-                          // set up redirect metdata ... 
+                          // set up redirect metadata ...
                           context.getURL().setFlags(context.getURL().getFlags() | CrawlURL.Flags.IsRedirected);
                           context.getURL().setRedirectURL(redirectURLStr);
                           // refill slot ... 

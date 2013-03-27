@@ -163,10 +163,10 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
   public void remoteDispatchComplete(FileSystem fileSystem,Configuration conf,QueryRequest<DomainURLListQueryInfo,URLFPV2,CrawlDatumAndMetadata> request, long resultCount) throws IOException {
     
   	if (getShardIdToHostMapping().size() != 1) { 
-  		throw new IOException("Excepected One ShardIdToHostMapping. Got:" + getShardIdToHostMapping().size());
+  		throw new IOException("Expectd One ShardIdToHostMapping. Got:" + getShardIdToHostMapping().size());
   	}
   	
-  	LOG.info("remoteDispathc Complete Called");
+  	LOG.info("remoteDispatch Complete Called");
   	Path remoteURLListPath = getRemoteOutputFilePath(getClientQueryInfo(),getShardIdToHostMapping().get(0).getShardId());
     
     if (fileSystem.exists(remoteURLListPath)) {

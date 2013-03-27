@@ -395,7 +395,7 @@ public final class CrawlQueue {
                   CrawlTarget.allocateCrawlURLFromSegmentURL(host.getSegmentId(),host,segmentURL,false),
                   null,
                   FailureReason.UNKNOWN, 
-                  "Aready Crawled URL");
+                  "Already Crawled URL");
             }
             else { 
               

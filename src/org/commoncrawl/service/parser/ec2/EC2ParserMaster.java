@@ -169,9 +169,9 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
         if (m.matches() && m.groupCount() == 1) { 
           ParseCandidate candidate = new ParseCandidate();
           candidate._crawlLogName = m.group(1);
-          Matcher timesampMatcher = timestampExtractorPattern.matcher(candidate._crawlLogName);
-          if (timesampMatcher.matches()) { 
-            candidate._timestamp = Long.parseLong(timesampMatcher.group(1));
+          Matcher timestampMatcher = timestampExtractorPattern.matcher(candidate._crawlLogName);
+          if (timestampMatcher.matches()) {
+            candidate._timestamp = Long.parseLong(timestampMatcher.group(1));
           }
           else {
             throw new IOException("Invalid CrawlLog");
@@ -189,9 +189,9 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
 //      try { 
 //        ParseCandidate candidate = new ParseCandidate();
 //        candidate._crawlLogName = m.group(1);
-//        Matcher timesampMatcher = timestampExtractorPattern.matcher(candidate._crawlLogName);
-//        if (timesampMatcher.matches()) { 
-//          candidate._timestamp = Long.parseLong(timesampMatcher.group(1));
+//        Matcher timestampMatcher = timestampExtractorPattern.matcher(candidate._crawlLogName);
+//        if (timestampMatcher.matches()) {
+//          candidate._timestamp = Long.parseLong(timestampMatcher.group(1));
 //        }
 //        else {
 //          throw new IOException("Invalid CrawlLog");

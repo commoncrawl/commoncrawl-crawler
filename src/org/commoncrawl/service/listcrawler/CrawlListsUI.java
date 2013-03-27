@@ -270,7 +270,7 @@ public class CrawlListsUI  extends HttpServlet {
 	              if (item.getRobotsExcludedCount() != 0)
 	                jsonWriter.beginArray().value("robotsExcluded").value(item.getRobotsExcludedCount()).endArray();
 
-	              // caculate errors 
+	              // calculate errors
 	              int timeoutErrorCount = metadata.getTimeoutErrorCount() + metadata.getRedirectTimeoutErrorCount();
 	              int ioexceptionErrorCount = metadata.getIOExceptionCount() + metadata.getRedirectIOExceptionCount();
 	              int otherErrorCount  = metadata.getOtherErrorCount();

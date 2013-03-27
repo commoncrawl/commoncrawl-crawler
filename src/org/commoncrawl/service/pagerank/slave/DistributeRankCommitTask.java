@@ -26,7 +26,7 @@ import org.commoncrawl.service.pagerank.CheckpointInfo;
 
 
 /** 
- * Executed when all nodes in the cluster have succeffully distributed their rank for the current iteration ... 
+ * Executed when all nodes in the cluster have successfully distributed their rank for the current iteration ...
  * 
  * @author rana
  *

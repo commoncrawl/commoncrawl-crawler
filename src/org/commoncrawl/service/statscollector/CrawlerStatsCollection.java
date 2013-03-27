@@ -172,7 +172,7 @@ public class CrawlerStatsCollection extends StatsCollection<CrawlerStats> {
       valueOut.setRobotsFileExplicitlyExcludesAll(valueOut.getRobotsFileExplicitlyExcludesAll() + item.getRobotsFileExplicitlyExcludesAll());
     }
     
-    // next average non-cumilative stats
+    // next average non-cumulative stats
     valueOut.setAverageDownloadSize(valueOut.getAverageDownloadSize() / collection.size());
     valueOut.setUrlsPerSecond(valueOut.getUrlsPerSecond() / collection.size());
     valueOut.setMbytesDownPerSecond(valueOut.getMbytesDownPerSecond() / collection.size());
@@ -259,7 +259,7 @@ public class CrawlerStatsCollection extends StatsCollection<CrawlerStats> {
       dailyValueOut.setRobotsFileExplicitlyExcludesAll(dailyValueOut.getRobotsFileExplicitlyExcludesAll() + hourlyValue.getRobotsFileExplicitlyExcludesAll());
     }
     
-    // next average non-cumilative stats
+    // next average non-cumulative stats
     dailyValueOut.setAverageDownloadSize(dailyValueOut.getAverageDownloadSize() / hourlyValueSet.size());
     dailyValueOut.setUrlsPerSecond(dailyValueOut.getUrlsPerSecond() / hourlyValueSet.size());
     dailyValueOut.setMbytesDownPerSecond(dailyValueOut.getMbytesDownPerSecond() / hourlyValueSet.size());

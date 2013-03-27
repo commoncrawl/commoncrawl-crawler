@@ -1075,7 +1075,7 @@ implements DNSService,
         
         @Override
         public void requestComplete(AsyncRequest<DirectoryServiceRegistrationInfo, NullMessage> request) {
-          LOG.info("Received Registration Compelte Callback from Directory Server with Status:" + request.getStatus());
+          LOG.info("Received Registration Complete Callback from Directory Server with Status:" + request.getStatus());
         } 
         
       });

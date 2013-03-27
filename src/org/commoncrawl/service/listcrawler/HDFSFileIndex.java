@@ -423,7 +423,7 @@ public class HDFSFileIndex {
             break;
       
           
-          // calculdate fingerprint delta ... 
+          // calculate fingerprint delta ...
           long fingerprintDelta = offsetInfo.get(nonIndexItem)._fingerprint - lastFingerprint;
           LOG.info("IndexWriter FP:" + offsetInfo.get(nonIndexItem)._fingerprint + " Delta:" + fingerprintDelta);
           // offset delta
@@ -442,7 +442,7 @@ public class HDFSFileIndex {
           // add to collection vector 
           subHints.add(new IndexItem(fingerprintDelta,(int)offsetInfo.get(nonIndexItem)._offset));
           
-          // remember the last fingerpint ... 
+          // remember the last fingerprint ...
           lastFingerprint = offsetInfo.get(nonIndexItem)._fingerprint;
           
           // add item to bloom filter
@@ -454,7 +454,7 @@ public class HDFSFileIndex {
         // calculate m for fingerprint deltas 
         int mForFingerprints =  (int) Math.floor(lg(averageDeltaValue));
         LOG.info("Average Delta Value is:" + averageDeltaValue + " m is:" + mForFingerprints);
-        // cacluldate average offset value 
+        // calculate average offset value
         double averageOffsetValue = (double)cumulativeOffset/ (double)subIndexItemCount;
         // calculate m for offsets 
         int mForOffsets =  (int) Math.floor(lg(averageOffsetValue));
@@ -467,7 +467,7 @@ public class HDFSFileIndex {
         // populate bits 
         for (HDFSFileIndex.IndexItem subItemHint : subHints) {
           if (subItemHint.fingerprint == 0) { 
-            LOG.warn("Zero Delta for Fingerprint Detected.There are two duplicate entires in log!");
+            LOG.warn("Zero Delta for Fingerprint Detected.There are two duplicate entries in log!");
           }
           riceCodeFP.addItem(subItemHint.fingerprint + 1);
           riceCodeOffsets.addItem(subItemHint.dataOffset+1);

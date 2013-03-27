@@ -48,7 +48,6 @@ import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.protocol.CrawlURL;
 import org.commoncrawl.protocol.CrawlURLMetadata;
-import org.commoncrawl.service.crawler.PersistentCrawlTarget;
 import org.commoncrawl.service.crawler.RobotRulesParser.RobotRuleSet;
 import org.commoncrawl.service.crawler.filters.FilterResults;
 import org.commoncrawl.service.statscollector.CrawlerStats;
@@ -63,7 +62,6 @@ import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.IntrusiveList.IntrusiveListElement;
 import org.junit.Test;
 
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 /**
@@ -128,7 +126,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   private static final Log LOG = LogFactory.getLog(CrawlList.class);
   
   
-  /** server repsonsible for servicing this domain **/
+  /** server responsible for servicing this domain **/
   private CrawlListHost  _host;
   /** host name **/
   private String _listName;
@@ -222,7 +220,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   private static final int MIN_CRAWL_DELAY = 1;
   private static final int MAX_CRAWL_DELAY = 3500;
   
-  private static int   STATS_CHECK_CODE_SAMPLE_THRESHOLD = 50; // don't do anything util we have retireved at least 50 urls
+  private static int   STATS_CHECK_CODE_SAMPLE_THRESHOLD = 50; // don't do anything util we have retrieved at least 50 urls
   
   private static float BAD_URL_TO_TOTAL_URL_FAILURE_THRESHOLD = .80f; // if 85% of urls are bad, fail the domain 
   
@@ -232,7 +230,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   
   
   private static final int MAX_DNS_CACHE_ITEMS = 100;
-  private static int MAX_DOMAIN_CACHE_ENTIRES = 1000;
+  private static int MAX_DOMAIN_CACHE_ENTRIES = 1000;
 
   /** the reference to the singleton server object **/
   private static CrawlerServer _server = null;
@@ -246,7 +244,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
     QueueEmpty
   }
   
-  /** domain's dipsition(state) **/
+  /** domain's disposition(state) **/
   private Disposition _disposition;
   
   
@@ -511,7 +509,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
       
       // if cached crc found ...   
       if (cachedRobotsCRC != -1) { 
-        // if cached robots file matches the actvie robots file's crc ... 
+        // if cached robots file matches the active robots file's crc ...
         if (_robotsRetrieved && cachedRobotsCRC == _robotsCRC) {
           //LOG.info("### Skipping Robots Fetch. Cached CRC == robotsCRC");
           // no need to refetch 
@@ -588,7 +586,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
     }
     
     if (found == null) { 
-      if (_domainInfo.size() == MAX_DOMAIN_CACHE_ENTIRES) { 
+      if (_domainInfo.size() == MAX_DOMAIN_CACHE_ENTRIES) {
         _domainInfo.removeElement(oldestItem);
       }
       found = new DomainInfo();
@@ -1314,7 +1312,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                   } 
                 }));
           }
-          // explitly return here ( inorder to wait for the async completion event)
+          // explicitly return here ( in order to wait for the async completion event)
           return;
         }
         //otherwise ... 
@@ -1448,7 +1446,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   private static final int failureCodeStrategyTable[] = { 
     
     FAIL_STRATEGY_RETRY_ITEM, // UNKNOWN            - result: Inc Fail Count on Item, potentially reschedule 
-    FAIL_STRATEGY_FAIL_ITEM,// UknownProtocol  - result: Immediately Fail Item  
+    FAIL_STRATEGY_FAIL_ITEM,// UnknownProtocol  - result: Immediately Fail Item
     FAIL_STRATEGY_FAIL_ITEM,// MalformedURL     - result: Immediately Fail Item  
     FAIL_STRATEGY_RETRY_ITEM,// Timeout                - result: Inc Fail Count on Host, potentially reschedule
     FAIL_STRATEGY_FAIL_ITEM,// DNSFailure            -result: reschedule, set waitstate for Host
@@ -1493,7 +1491,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
       _pending.removeAll();
       // reset offline count... 
       _offlineTargetCount = 0;
-      // reset disk operation pending indiciator ... 
+      // reset disk operation pending indicator ...
       _diskRequestPending = false;
       */
       getHost().incrementCounter(CrawlListHost.CounterId.FailedDomainCount,1);
@@ -1680,7 +1678,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
       
      // LOG.debug("clearWaitState called on Host:"+getHostName()+ " after initial robots fetch");
       
-      // explicitly transition to availabel (to retry robots fetch... )
+      // explicitly transition to available (to retry robots fetch... )
       _disposition = Disposition.ItemAvailable;
     }
     // otherwise if pending queue size is zero or host has failed ... 
@@ -1691,7 +1689,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
     }
     else {
 
-      // if active request size < max simulatenous requests ... 
+      // if active request size < max simultaneous requests ...
       if (_scheduled == null) {
         // if there are items to be read from the in memory list ... 
         if (_pending.size() != 0) { 
@@ -1931,7 +1929,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
                   try {
                     if (Environment.detailLogEnabled())
                       LOG.info("### DiskThread: Got List:" + domain.getListName());
-                    // build a hierarchichal path for the given domain id ... 
+                    // build a hierarchical path for the given domain id ...
                     File logFilePath = null;
                     String listName = null;
                     synchronized(domain) { 
@@ -2173,7 +2171,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
         
         // if timestamps don't match ... 
         if (timestamp != _diskHeaderActiveVersionTimestamp) {
-          // then reset cursors .. eveything in the file is invalid ... 
+          // then reset cursors .. everything in the file is invalid ...
           _writePos = 0;
           _readPos = 0;
           _itemCount =0;
@@ -2208,7 +2206,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
             file.seek(headerOffset);
           }
           else {
-            // seelk to appropriate write position 
+            // seek to appropriate write position
             file.seek(header._writePos);
           }
         }
@@ -2270,7 +2268,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
           
           long headerOffset = readLogFileHeader(file, header);
             
-          // seelk to appropriate write position 
+          // seek to appropriate write position
           if (header._readPos != 0)
             file.seek(header._readPos);
           

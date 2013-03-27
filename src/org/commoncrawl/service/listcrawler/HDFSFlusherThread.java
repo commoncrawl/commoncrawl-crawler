@@ -316,7 +316,7 @@ final class HDFSFlusherThread implements Runnable {
 	                _manager.getRemoteFileSystem().delete(tempIndexFile, false);
 	              }
 	              catch (IOException e){ 
-	                LOG.error("Delete Failed During Failure! Potenital Orphan Files! : " + CCStringUtils.stringifyException(e));
+	                LOG.error("Delete Failed During Failure! Potential Orphan Files! : " + CCStringUtils.stringifyException(e));
 	              }
 	              break;
 	            }
@@ -378,7 +378,7 @@ final class HDFSFlusherThread implements Runnable {
                   indexDataPair._localIndexFilePath = null;
                   break;
                 }
-                // inrement item index 
+                // increment item index
                 itemIndex++;
             	}
             	// ok callback to manager if request succeeded 
@@ -398,7 +398,7 @@ final class HDFSFlusherThread implements Runnable {
             }
             
             if (requestFailed) {
-            	LOG.info("Cache Manager Log Flush Failed. Deleteing files");
+            	LOG.info("Cache Manager Log Flush Failed. Deleting files");
             	try { 
             		// delete temp file directory recursively 
             		_manager.getRemoteFileSystem().delete(tempDir, true);
@@ -409,12 +409,12 @@ final class HDFSFlusherThread implements Runnable {
             	// iterate temp file list 
             	for (IndexDataFileTriple triple : tempFiles) { 
             		try { 
-	            		LOG.info("Deleteing:" + triple._dataFilePath);
+	            		LOG.info("Deleting:" + triple._dataFilePath);
 	            		_manager.getRemoteFileSystem().delete(triple._dataFilePath,false);
-	            		LOG.info("Deleteing:" + triple._indexFilePath);
+	            		LOG.info("Deleting:" + triple._indexFilePath);
 	            		_manager.getRemoteFileSystem().delete(triple._indexFilePath,false);
 	            		if (triple._localIndexFilePath != null) { 
-	            			LOG.info("Deleteing LOCAL:" + triple._localIndexFilePath);
+	            			LOG.info("Deleting LOCAL:" + triple._localIndexFilePath);
 	            			triple._localIndexFilePath.delete();
 	            		}
             		}

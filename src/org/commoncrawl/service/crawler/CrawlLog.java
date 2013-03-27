@@ -1246,7 +1246,7 @@ public final class CrawlLog {
               CrawlSegmentLog.writeHeader(activeSegmentLogPath, recordCountsByPackedId.get(packedSegmentId));
             }
           } catch (IOException e) {
-            LOG.error("Criticial Exception during Crawl Log Fluhs:" + CCStringUtils.stringifyException(e));
+            LOG.error("Critical Exception during Crawl Log Flush:" + CCStringUtils.stringifyException(e));
             throw e;
           } finally {
 
@@ -1330,7 +1330,7 @@ public final class CrawlLog {
 
         long currentTime = System.currentTimeMillis();
 
-        LOG.info("LOG_FLUSH Flush Complete... Checking to see if Checkpoint Possilbe");
+        LOG.info("LOG_FLUSH Flush Complete... Checking to see if Checkpoint Possible");
         if (isForcedCheckpointPossible()) {
           // yes .. go ahead and checkpoint log
           LOG.info("Checkpointing Logs to HDFS");
@@ -1397,13 +1397,13 @@ public final class CrawlLog {
               // checkpoint ...
               long currentTime = System.currentTimeMillis();
 
-              LOG.info("LOG_FLUSH Flush Complete... Checking to see if Checkpoint Possilbe");
+              LOG.info("LOG_FLUSH Flush Complete... Checking to see if Checkpoint Possible");
               if (isCheckpointPossible(currentTime)) {
 
                 LOG.info("Checkpointing Logs to HDFS");
 
                 // pause fetcher to prevent race condition where log flush takes
-                // a long time and causes the fetcher to consume all avaliable
+                // a long time and causes the fetcher to consume all available
                 // memory with content buffers
                 _engine.pauseFetch();
 
