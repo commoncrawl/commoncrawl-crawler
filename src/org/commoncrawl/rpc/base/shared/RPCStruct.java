@@ -29,7 +29,7 @@ import java.io.IOException;
  */
 public abstract class RPCStruct implements Cloneable {
 
-  static protected final String emptyString = new String();
+  static protected final String emptyString = "";
 
   /** clone support **/
   @Override

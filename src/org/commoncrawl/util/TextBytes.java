@@ -99,8 +99,8 @@ public final class TextBytes extends BinaryComparableWithOffset implements
                                                                }
                                                              };
 
-  private static final byte[]                EMPTY_BYTES     = new byte[0];
-  private static final String                EMPTY_STRING    = new String("");
+  private static final byte[]                EMPTY_BYTES     = {};
+  private static final String                EMPTY_STRING    = "";
 
   private FlexBuffer                         bytes           = new FlexBuffer();
   private String                             cachedUTF8      = null;

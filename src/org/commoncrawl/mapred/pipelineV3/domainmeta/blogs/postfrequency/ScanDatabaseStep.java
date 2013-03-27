@@ -143,7 +143,7 @@ public class ScanDatabaseStep extends CrawlPipelineStep implements Mapper<TextBy
     } else if (tumblrPostMatcher.matches() && tumblrPostMatcher.groupCount() >= 2) {
       reporter.incrCounter(Counters.MATCHED_TUMBLR_BLOG_POST_PATTERN, 1);
 
-      String uniqueURL = new String("http://" + tumblrPostMatcher.group(1) + "/");
+      String uniqueURL = "http://" + tumblrPostMatcher.group(1) + "/";
 
       try {
         // HACK
@@ -167,7 +167,7 @@ public class ScanDatabaseStep extends CrawlPipelineStep implements Mapper<TextBy
 
       reporter.incrCounter(Counters.MATCHED_TOP_LEVEL_POST_PATTERN, 1);
 
-      String uniqueURL = new String("http://" + topLevelMatcher.group(1) + "/");
+      String uniqueURL = "http://" + topLevelMatcher.group(1) + "/";
       int year = Integer.parseInt(topLevelMatcher.group(2));
       int month = Integer.parseInt(topLevelMatcher.group(3));
 
@@ -184,7 +184,7 @@ public class ScanDatabaseStep extends CrawlPipelineStep implements Mapper<TextBy
       reporter.incrCounter(Counters.MATCHED_NESTED_POST_PATTERN, 1);
 
       if (!nestedBlogMatcher.group(1).endsWith("tumblr.com")) {
-        String uniqueURL = new String("http://" + nestedBlogMatcher.group(1) + "/" + nestedBlogMatcher.group(2) + "/");
+        String uniqueURL = "http://" + nestedBlogMatcher.group(1) + "/" + nestedBlogMatcher.group(2) + "/";
 
         int year = Integer.parseInt(nestedBlogMatcher.group(3));
         int month = Integer.parseInt(nestedBlogMatcher.group(4));

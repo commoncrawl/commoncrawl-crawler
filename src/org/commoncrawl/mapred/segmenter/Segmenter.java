@@ -59,7 +59,7 @@ public class Segmenter {
       JobConf job = new JobConf(conf);
 
       // compute crawlers string ... 
-      String crawlers = new String();
+      String crawlers = "";
 
       for (int i=0;i<crawlerArray.length;++i) { 
         if (i != 0)
