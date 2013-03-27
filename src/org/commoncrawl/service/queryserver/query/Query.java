@@ -435,7 +435,7 @@ public abstract class Query<DataType extends RPCStruct,ResultKeyType,ResultValue
   public void updateQueryStatusForSlave(String hostName,QueryStatus statusUpdate) throws IOException{
   	SlaveStatusInfo slaveInfo = _remoteQueryStates.get(hostName);
     if (slaveInfo != null) { 
-      //LOG.info("Recevied Query Status Update for Query:" + getQueryId() + " Slave:" + slaveInfo.getOnlineState().getFullyQualifiedName());
+      //LOG.info("Received Query Status Update for Query:" + getQueryId() + " Slave:" + slaveInfo.getOnlineState().getFullyQualifiedName());
       if (statusUpdate.getStatus() == QueryStatus.Status.ERROR && slaveInfo._queryStatus.getStatus() != QueryStatus.Status.ERROR) { 
         LOG.info("Slave:" + slaveInfo.getOnlineState().getFullyQualifiedName() + " Reported Error:" + statusUpdate.getOptErrorReason() + " for Query:" + getQueryId());
       }
@@ -510,7 +510,7 @@ public abstract class Query<DataType extends RPCStruct,ResultKeyType,ResultValue
         LOG.info("Query:" + getQueryId() + " Had :" + failedCount + " Failures");
         
         //if (completedCount == 0) { 
-          // udpate query status 
+          // update query status
           _queryStatus.setStatus(QueryStatus.Status.ERROR);
           _queryStatus.setOptErrorReason(failureReason);
           _completionCallback.queryFailed(this,failureReason);
@@ -521,7 +521,7 @@ public abstract class Query<DataType extends RPCStruct,ResultKeyType,ResultValue
       else
       {
         LOG.info("Query:" + getQueryId() + " Completed with Result Count:" + totalResultCount);
-        // udpate query status 
+        // update query status
         _queryStatus.setStatus(QueryStatus.Status.FINISHED);
         _queryStatus.setOptResultCount(totalResultCount);
         _completionCallback.queryComplete(this,totalResultCount);
