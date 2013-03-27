@@ -696,8 +696,8 @@ public class CacheManager {
             oldFile.close();
           }
         }
-        // if we reached here then checkpoint was successfull ... 
-        LOG.info("Checkpoint - Log Consolidation Successfull! TOOK:" + (System.currentTimeMillis() - logFileConsolidationStartTime));
+        // if we reached here then checkpoint was successful ...
+        LOG.info("Checkpoint - Log Consolidation Successful! TOOK:" + (System.currentTimeMillis() - logFileConsolidationStartTime));
         
         LOG.info("Loading Index Files");
         for (IndexDataFileTriple triple : tempFileTriples) { 

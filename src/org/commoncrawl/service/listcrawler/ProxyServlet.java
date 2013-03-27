@@ -718,11 +718,11 @@ public class ProxyServlet extends HttpServlet {
         public void requestComplete(AsyncRequest<ContentQueryRPCInfo, ContentQueryRPCResult> request) {
           if (request.getStatus() == AsyncRequest.Status.Success && request.getOutput().getSuccess()) { 
             if (request.getOutput().getArcFileResult().getContent().getCount() == (CrawlEnvironment.ORIGINAL_CONTENT_SIZE_LIMIT + 1)) {
-              LOG.error("RPC to QueryMaster Successfull BUT content size is 131072. Suspecting truncation. REJECTING S3 Data for targetURL:" + targetURL);
+              LOG.error("RPC to QueryMaster Successful BUT content size is 131072. Suspecting truncation. REJECTING S3 Data for targetURL:" + targetURL);
               queueHighPriorityURLRequest(targetURL,urlFingerprint,responseData,completionSemaphore,timeoutInMS,skipHTTPFetch);
             }
             else { 
-              LOG.info("RPC to QueryMaster Successfull. Servicing request for targetURL:" + targetURL + " via s3 cache");
+              LOG.info("RPC to QueryMaster Successful. Servicing request for targetURL:" + targetURL + " via s3 cache");
               // cache the http result 
               cacheS3ItemResult(request.getOutput().getArcFileResult(),targetURL,urlFingerprint);
               // set the result data .. 

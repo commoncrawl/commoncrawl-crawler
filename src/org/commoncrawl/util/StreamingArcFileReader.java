@@ -1002,7 +1002,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     
     /**  inform builder that input for the current item has been exhauseted
      * 
-     * @return ArcFileItem - the fully constructed ArcFileItem object if construction was successfull
+     * @return ArcFileItem - the fully constructed ArcFileItem object if construction was successful
      * @throws IOException - if building fails 
      */
     public final ArcFileItem finish() throws IOException { 

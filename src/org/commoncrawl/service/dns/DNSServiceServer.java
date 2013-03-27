@@ -1041,7 +1041,7 @@ implements DNSService,
         @Override
         public void requestComplete(AsyncRequest<DirectoryServiceSubscriptionInfo, DirectoryServiceItemList> request) {
           if (request.getStatus() == AsyncRequest.Status.Success){
-            LOG.info("Subscription Successfull!");
+            LOG.info("Subscription Successful!");
           }
           else { 
             LOG.info("Subscription Failed!");

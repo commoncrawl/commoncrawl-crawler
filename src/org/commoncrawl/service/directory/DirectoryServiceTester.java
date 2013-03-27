@@ -158,7 +158,7 @@ public class DirectoryServiceTester extends Server implements DirectoryServiceCa
             
             long currentTime = System.currentTimeMillis();
             
-            LOG.info("Subscription Successfull. Publishing Items... Seed:" + currentTime);
+            LOG.info("Subscription Successful. Publishing Items... Seed:" + currentTime);
             publishTestItem("/test/foo/bar","bar"+ currentTime);
             publishTestItem("/test/foo/bar2","bar2" + currentTime);
             publishTestItem("/test/foo/bar3","bar3" + currentTime);
@@ -166,7 +166,7 @@ public class DirectoryServiceTester extends Server implements DirectoryServiceCa
             publishTestItem("/test/zzz/bar2","zbar2" + currentTime);
             publishTestItem("/test/zzz/bar3","zbar3" + currentTime);
             
-            LOG.info("Publish Successfull. querying Items...");
+            LOG.info("Publish Successful. querying Items...");
             // queryItem("/test/foo/bar");
             // queryItem("/test/foo/bar2");
             // queryItem("/test/foo/bar3");

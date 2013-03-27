@@ -885,7 +885,7 @@ public final class CrawlLog {
           for (int i = 0; i < segmentLogStagingPaths.size(); ++i) {
             hdfs.rename(segmentLogStagingPaths.get(i), segmentLogFinalPaths.get(i));
           }
-          // if we got here checkpoint was successfull...
+          // if we got here checkpoint was successful...
           return true;
         } catch (Exception e) {
           LOG.error("Checkpoint:" + _checkpointId + " FAILED with exception:" + CCStringUtils.stringifyException(e));

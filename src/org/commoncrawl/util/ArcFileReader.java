@@ -797,7 +797,7 @@ public final class ArcFileReader extends InflaterInputStream implements
      * inform builder that input for the current item has been exhauseted
      * 
      * @return ArcFileItem - the fully constructed ArcFileItem object if
-     *         construction was successfull
+     *         construction was successful
      * @throws IOException
      *           - if building fails
      */

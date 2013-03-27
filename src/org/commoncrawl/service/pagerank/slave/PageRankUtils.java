@@ -1062,7 +1062,7 @@ public class PageRankUtils {
         public void requestComplete(AsyncRequest<FileInfo, FileInfo> request) {
           log(false,"createJobFile RPC returned with Status:" + request.getStatus());
           if (request.getStatus() == Status.Success) { 
-            log(false,"Create File Successfull!!");
+            log(false,"Create File Successful!!");
             _fileInfo.setFileId(request.getOutput().getFileId());
             // start polling 
             log(false,"Polling for Data Packets");
@@ -1537,9 +1537,9 @@ public class PageRankUtils {
                   public void execute(BlockRequest<FileInfo,Long> requestObject) {
                     try {
                       LOG.info("Received callback for createFile:" + requestObject._data.getFileName() + " Result:" + requestObject._result);
-                      // ok request was successfull ...
+                      // ok request was successful ...
                       if (requestObject._result != 0L) { 
-                        // write was successfull ... 
+                        // write was successful ...
                         rpcContext.getOutput().setFileId(rpcContext.getInput().getFileId());
                         rpcContext.getOutput().setFileId(requestObject._result);
                         rpcContext.setStatus(Status.Success);
@@ -1594,9 +1594,9 @@ public class PageRankUtils {
                 @Override
                 public void execute(BlockRequest<BlockTransfer, Boolean> requestObject) {
                   try {
-                    // ok request was successfull ...
+                    // ok request was successful ...
                     if (requestObject._result == true) { 
-                      // write was successfull ... 
+                      // write was successful ...
                       rpcContext.getOutput().setFileId(rpcContext.getInput().getFileId());
                       rpcContext.getOutput().setBlockId(rpcContext.getInput().getBlockId());
                       rpcContext.setStatus(Status.Success);
@@ -1642,9 +1642,9 @@ public class PageRankUtils {
                 @Override
                 public void execute(BlockRequest<FileInfo, Boolean> requestObject) {
                   
-                  try { // ok request was successfull ...
+                  try { // ok request was successful ...
                     if (requestObject._result == true) { 
-                      // write was successfull ... 
+                      // write was successful ...
                       rpcContext.setStatus(Status.Success);
                     }
                     else { 

@@ -103,7 +103,7 @@ public abstract class ServletRegistry {
       DynamicClassLoader loader = new DynamicClassLoader(urls.toArray(new URL[0]), ClassLoader.getSystemClassLoader(),
           servletName);
 
-      // LOG.info("Loader Init Successfull");
+      // LOG.info("Loader Init Successful");
       try {
         LOG.info("Construct class type:" + servletName);
         Class theClass = loader.loadClass(servletName, true);

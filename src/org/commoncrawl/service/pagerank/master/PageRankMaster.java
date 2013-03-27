@@ -654,7 +654,7 @@ public class PageRankMaster extends CommonCrawlServer {
           // if everyone completed active checkpoint 
           if (completedCheckpointsCount == _slaves.size()) {
           	// OK. advance to next MASTER state ..
-          	LOG.info("All Slaves Report Successfull Checkpoint Status for Txn:" + _serverState.getCurrentTxnId());
+          	LOG.info("All Slaves Report Successful Checkpoint Status for Txn:" + _serverState.getCurrentTxnId());
           
 	          // if we were in the distribute phase ... 
 	          if (_serverState.getServerStatus() == PRMasterState.ServerStatus.ITERATING_DISTRIBUTING) { 

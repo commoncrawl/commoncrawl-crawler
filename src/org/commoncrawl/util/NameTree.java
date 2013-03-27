@@ -528,7 +528,7 @@ public class NameTree<MetadataType> {
         
       }
       // finally, if we are still in multi-char search mode and multiNodeIdx != -1
-      // this means that we terminated a successfull match int the MIDDLE of a multi-char node
+      // this means that we terminated a successful match int the MIDDLE of a multi-char node
       if (searchMode == searchMode_MultiNodeChar && multiNodeIdx != -1) { 
         // in this case, we have to split the multi-char node appropriately ... 
         node.splitMultiCharNodeAt(this,multiNodeIdx);
@@ -581,7 +581,7 @@ public class NameTree<MetadataType> {
             }
           }
           
-          // now first condition for a successfull match is than we completely scanned the mutli-char array ... 
+          // now first condition for a successful match is than we completely scanned the mutli-char array ...
           if (multiCharArrayScanPos == -1) { 
             // now if char scan also reached the beginning of the search string ... 
             if (innerScanPos == -1) { 

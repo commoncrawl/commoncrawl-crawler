@@ -56,7 +56,7 @@ import org.commoncrawl.util.BitUtils.BitStream;
 import org.commoncrawl.util.BitUtils.BitStreamReader;
 
 /**
- * A transaction log that tracks crawl progress within a single crawl segemnt
+ * A transaction log that tracks crawl progress within a single crawl segment
  * 
  * @author rana
  *
@@ -826,7 +826,7 @@ public final class CrawlSegmentLog {
       // allocate an array that can hold up to the list size of items ...
       byte[] buffer = new byte[DEFAULT_LOGITEM_LIST_SIZE * LogItem.ItemSize_Bytes];
       
-      // calcuate item count 
+      // calculate item count
       int totalItemCount = (int)( (fileSize - getHeaderSize()) / LogItem.ItemSize_Bytes);
           
       // get a reader ... 
@@ -901,7 +901,7 @@ public final class CrawlSegmentLog {
       // allocate an array that can hold up to the list size of items ...
       byte[] buffer = new byte[DEFAULT_LOGITEM_LIST_SIZE * LogItem.ItemSize_Bytes];
       
-      // calcuate item count 
+      // calculate item count
       int totalItemCount = (int)( (fileSize - getHeaderSize()) / LogItem.ItemSize_Bytes);
           
       // get a reader ... 

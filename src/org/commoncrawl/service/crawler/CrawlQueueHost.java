@@ -45,7 +45,7 @@ public interface CrawlQueueHost extends CrawlHost {
 	/** get wait time for this host, if in a wait state **/
 	public long getWaitTime();
 
-	/** purge all object refrences to help garbage collection process */
+	/** purge all object references to help garbage collection process */
 	public void purgeReferences();
 	
 	/** returns true if no more active lists are present **/

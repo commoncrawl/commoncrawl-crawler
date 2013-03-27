@@ -350,7 +350,7 @@ public final class CrawlTarget extends
     return _activeRequestResultCode;
   }
 
-  /** retrieve the orignal request data **/
+  /** retrieve the origial request data **/
   public HTTPData getOriginalRequestData() {
     return _originalRequestData;
   }
@@ -454,10 +454,10 @@ public final class CrawlTarget extends
     int ipAddress = 0;
     if (address == null || address.getAddress() == null) {
       if (address == null) {
-        LOG.error("### BUG resolved Adddress is null in cacheOriginalRequest! for Target:"
+        LOG.error("### BUG resolved Address is null in cacheOriginalRequest! for Target:"
             + getOriginalURL());
       } else {
-        LOG.error("### BUG resolved Adddress.getAddress returned null in cacheOriginalRequest! for Target:"
+        LOG.error("### BUG resolved Address.getAddress returned null in cacheOriginalRequest! for Target:"
             + getOriginalURL());
       }
     } else {
@@ -627,7 +627,7 @@ public final class CrawlTarget extends
 
   /**
    * check final http response code against list of acceptable response code for
-   * a successfull fetch
+   * a successful fetch
    * 
    */
   private static boolean isAcceptableSuccessResponseCode(int responseCode) {
@@ -708,7 +708,7 @@ public final class CrawlTarget extends
         failure = true;
         failureReason = CrawlURL.FailureReason.IOException;
         failureException = e;
-        failureDescription = "Unable to read Content Buffer from successfull Fetch for URL:"
+        failureDescription = "Unable to read Content Buffer from successful Fetch for URL:"
             + getOriginalURL();
       }
     }

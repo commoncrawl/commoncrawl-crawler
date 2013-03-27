@@ -445,7 +445,7 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
       try { 
         LOG.info("Execute Local for Query:" + getQueryId() +".Running Merger");
         merger.mergeAndSpill();
-        LOG.info("Execute Local for Query:" + getQueryId() +".Merge Successfull.. Deleting Merge Inputs");
+        LOG.info("Execute Local for Query:" + getQueryId() +".Merge Successful.. Deleting Merge Inputs");
         for (FileStatus urlDataPath : urlDataStatusArray) { 
           remoteFileSystem.delete(urlDataPath.getPath(),false);
         }

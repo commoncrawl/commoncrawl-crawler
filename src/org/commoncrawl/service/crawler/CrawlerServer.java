@@ -666,7 +666,7 @@ public class CrawlerServer extends CommonCrawlServer
       @Override
       public void requestComplete(AsyncRequest<DirectoryServiceSubscriptionInfo, DirectoryServiceItemList> request) {
         if (request.getStatus() == AsyncRequest.Status.Success){
-          LOG.info("Subscription Successfull!");
+          LOG.info("Subscription Successful!");
         }
         else { 
           LOG.info("Subscription Failed!");
@@ -1061,9 +1061,9 @@ public class CrawlerServer extends CommonCrawlServer
         LOG.info("Received response from HistoryServer");
         
         if (request.getStatus() == Status.Success) {
-          LOG.info("History Server Sync Successfull - Initializing Engine");
+          LOG.info("History Server Sync Successful - Initializing Engine");
           if (initializeEngine(_crawlerStatus.getActiveListNumber())) {
-            LOG.info("Engine Initialization Successfull. Starting Crawl for List:" + _crawlerStatus.getActiveListNumber());
+            LOG.info("Engine Initialization Successful. Starting Crawl for List:" + _crawlerStatus.getActiveListNumber());
             // kick off the load process 
             _engine.loadCrawlSegments();
             _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.ACTIVE);

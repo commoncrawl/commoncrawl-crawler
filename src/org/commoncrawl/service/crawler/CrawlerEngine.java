@@ -173,7 +173,7 @@ public final class CrawlerEngine  {
   private long _lastCrawlerStatsUploadTime = -1;
   /** crawler stats flush interval **/
   private static final int CRAWLER_STATS_FLUSH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-  /** stats collecetor timer **/
+  /** stats collector timer **/
   private Timer     _statsCollectionTimer = null;
   /** startup time **/
   private long _startupTime = System.currentTimeMillis();

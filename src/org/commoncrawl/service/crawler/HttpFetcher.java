@@ -725,7 +725,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
                 }
               }
               else { 
-                // ok before passing things on ... check to see if this was a successfull get as a result of a redirect ... 
+                // ok before passing things on ... check to see if this was a successful get as a result of a redirect ...
                 if (context.getURL().getRedirectCount() != 0 && context.getURL().getActiveURL() != null) {
                   URLFP fingerprint = URLUtils.getURLFPFromURL(context.getURL().getActiveURL(),false);
                   if (fingerprint == null) { 

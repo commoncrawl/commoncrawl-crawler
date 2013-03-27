@@ -173,7 +173,7 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
 	      try { 
 	        LOG.info("Execute Local for Query:" + getQueryId() +" Running Merger");
 	        merger.mergeAndSpill(null);
-	        LOG.info("Execute Local for Query:" + getQueryId() +" Merge Successfull.. Deleting Merge Inputs");
+	        LOG.info("Execute Local for Query:" + getQueryId() +" Merge Successful.. Deleting Merge Inputs");
 	        for (Path inputPath : parts) { 
 	          remoteFileSystem.delete(inputPath,false);
 	        }
