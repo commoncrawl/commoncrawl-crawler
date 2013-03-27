@@ -195,7 +195,7 @@ public class CrawlDBMergeJob {
    * @throws IOException
    */
   static void runIntermediateMerge(FileSystem fs,Configuration conf,List<Long> partitionIds)throws IOException  { 
-    long maxTimestamp = Iterators.getLast(partitionIds.iterator(),-1).longValue();
+    long maxTimestamp = Iterators.getLast(partitionIds.iterator(),(long)-1).longValue();
     
     if (maxTimestamp == -1) { 
       throw new IOException("No Valid Partitions Found in List:" + partitionIds);
@@ -262,7 +262,7 @@ public class CrawlDBMergeJob {
    * @throws IOException
    */
   static void runFinalMerge(FileSystem fs,Configuration conf,List<Long> partitionIds, long latestFinalMergeTS)throws IOException  { 
-    long maxTimestamp = Iterators.getLast(partitionIds.iterator(),-1).longValue();
+    long maxTimestamp = Iterators.getLast(partitionIds.iterator(),(long)-1).longValue();
     
     if (maxTimestamp == -1) { 
       throw new IOException("No Valid Partitions Found in List:" + partitionIds);

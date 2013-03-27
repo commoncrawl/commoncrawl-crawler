@@ -1228,7 +1228,9 @@ public class ParserMapper implements Mapper<Text,CrawlURL,Text,ParseOutput> {
     @Override
     public void setStatus(String status) {}
     @Override
-    public void progress() {} 
+    public void progress() {}
+    //@Override
+    public float getProgress() { return 0; }
   }
   
   /** 
