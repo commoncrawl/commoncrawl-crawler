@@ -985,10 +985,10 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
     }
     else {
       if (_scheduled == null) { 
-        LOG.error("fetchStarted - scheduled target is null and fetch started target is:" + target.getOriginalURL().toString() + " list:" + target.getSourceList().getListName() );
+        LOG.error("fetchStarted - scheduled target is null and fetch started target is:" + target.getOriginalURL() + " list:" + target.getSourceList().getListName() );
       }
       else { 
-        LOG.error ( "fetchStarted - scheduled target is: " + _scheduled.getOriginalURL().toString() +" list:" +_scheduled.getSourceList().getListName() + " and fetch started target is:" + target.getOriginalURL().toString() + " list:" + target.getSourceList().getListName() );
+        LOG.error ( "fetchStarted - scheduled target is: " + _scheduled.getOriginalURL() +" list:" +_scheduled.getSourceList().getListName() + " and fetch started target is:" + target.getOriginalURL() + " list:" + target.getSourceList().getListName() );
       }
     }
     

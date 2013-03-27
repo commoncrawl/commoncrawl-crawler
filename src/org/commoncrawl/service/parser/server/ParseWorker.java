@@ -429,7 +429,7 @@ public class ParseWorker implements DocumentBuilder {
       objectOut.addProperty("docId",result.getDocId());
     }
     if (result.isFieldDirty(ParseResult.Field_CONTENTTYPE)) {
-      objectOut.addProperty("contentType",result.getContentType().toString());
+      objectOut.addProperty("contentType", result.getContentType());
     }
     if (result.isFieldDirty(ParseResult.Field_CONTEXT)) {
       objectOut.addProperty("context",result.getContext().toString());
@@ -469,7 +469,7 @@ public class ParseWorker implements DocumentBuilder {
       objectOut.add("extracted_links", extractedLinksArray);
     }
     if (result.isFieldDirty(ParseResult.Field_TEXT)) {
-      objectOut.addProperty("text",result.getText().toString());
+      objectOut.addProperty("text", result.getText());
     }
     return objectOut;
   }

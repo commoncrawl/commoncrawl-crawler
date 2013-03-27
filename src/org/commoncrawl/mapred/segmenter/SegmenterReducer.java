@@ -128,7 +128,7 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
         
         urlBytes.set(item.getUrlAsBuffer().getReadOnlyBytes(),0,item.getUrlAsBuffer().getCount());
         
-        GoogleURL urlObject = new GoogleURL(item.getUrl().toString());
+        GoogleURL urlObject = new GoogleURL(item.getUrl());
         
         String hostName = urlObject.getHost();
         

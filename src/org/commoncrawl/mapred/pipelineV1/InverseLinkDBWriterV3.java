@@ -333,7 +333,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
     for (FileStatus linkDBFile : fs.globStatus(new Path(tempOutputDir,
         "linkData_*"))) {
       Path destinationPath = new Path(linkDataDirectory, "part-"
-          + linkDBFile.getPath().getName().toString().substring(
+          + linkDBFile.getPath().getName().substring(
               "linkData_".length()));
       fs.rename(linkDBFile.getPath(), destinationPath);
       LOG.info("Moved " + linkDBFile.getPath() + " to: " + destinationPath);

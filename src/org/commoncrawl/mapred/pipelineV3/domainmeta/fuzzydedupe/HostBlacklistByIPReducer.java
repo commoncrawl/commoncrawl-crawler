@@ -101,7 +101,7 @@ public class HostBlacklistByIPReducer implements Reducer<TextBytes, JoinValue, T
     String ipAddress = realKey.toString();
     String tag = tagKey.toString();
     // ok if ip-address transition ...
-    LOG.info("Got Key:" + ipAddress.toString() + ":" + tag.toString());
+    LOG.info("Got Key:" + ipAddress + ":" + tag);
     if (activeIPAddress == null || !activeIPAddress.equals(ipAddress)) {
       // LOG.info("Reset State");
       blackListedItems.clear();
