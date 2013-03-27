@@ -57,7 +57,7 @@ public class StatsAggregationMapper implements Mapper<TextBytes, TextBytes, Text
 
   private static final Log LOG = LogFactory.getLog(StatsAggregationMapper.class);
 
-  static final long DURATION_MS_ONE_MONTH = 1000 * 60 * 60 * 24 * 30;
+  static final long DURATION_MS_ONE_MONTH = (long)1000 * 60 * 60 * 24 * 30;
 
   Set<Long> superDomainIdSet;
 

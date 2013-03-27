@@ -1311,7 +1311,7 @@ public final class CrawlLog {
 
       // now one more check to see if we have enough items to do a checkpoint
       // ...
-      if (_header._itemCount >= LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD || _header._fileSize >= 1073741824 * 4) {
+      if (_header._itemCount >= LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD || _header._fileSize >= (long)1073741824 * 4) {
         return true;
       }
     }
