@@ -466,7 +466,7 @@ implements DNSService,
       
       boolean skipCache = (_noCacheFilter != null && rootName != null && _noCacheFilter.filterItem(rootName,dnsName, null, null,filterResults) == FilterResult.Filter_Accept); 
       if (skipCache) { 
-        LOG.info("Skiiping Cache check for name:" + dnsName);
+        LOG.info("Skipping Cache check for name:" + dnsName);
       }
       
        
@@ -870,7 +870,7 @@ implements DNSService,
             
             boolean skipCache = (_noCacheFilter != null && rootName != null && _noCacheFilter.filterItem(rootName,hostName, null, null,filterResults) == FilterResult.Filter_Accept); 
             if (skipCache) { 
-              LOG.info("Skiiping Cache check for name:" + hostName);
+              LOG.info("Skipping Cache check for name:" + hostName);
             }
             else { 
               cache.cacheIPAddressForHost(hostName, ipAddressInteger, ttl, cname);

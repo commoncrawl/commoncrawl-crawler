@@ -56,7 +56,7 @@ public class DNSServiceTester extends Server implements AsyncClientChannel.Conne
   AsyncClientChannel _channel;
   DNSService.AsyncStub _serviceStub;
   long _connectionCookie = 0;
-  Semaphore _blockingSempahore = new Semaphore(0);
+  Semaphore _blockingSemaphore = new Semaphore(0);
   long _testItemCount = 0;
   // long _itemsComplete = 0;
   AtomicLong _itemsComplete = new AtomicLong();
@@ -246,7 +246,7 @@ public class DNSServiceTester extends Server implements AsyncClientChannel.Conne
               _itemsComplete.incrementAndGet();
 
               // release the semaphore 
-              _blockingSempahore.release();
+              _blockingSemaphore.release();
             }
             
             
@@ -259,7 +259,7 @@ public class DNSServiceTester extends Server implements AsyncClientChannel.Conne
           while (_testItemCount - _itemsComplete.get() > 1000) {
             LOG.info("Waiting for Count to Go Below 1000 ("+ (_testItemCount - _itemsComplete.get()) + ")");
             try {
-              _blockingSempahore.acquire();
+              _blockingSemaphore.acquire();
             } catch (InterruptedException e) {
             }
           }
@@ -285,7 +285,7 @@ public class DNSServiceTester extends Server implements AsyncClientChannel.Conne
 
     while (_itemsComplete.get() != _testItemCount) { 
       try {
-        _blockingSempahore.acquire();
+        _blockingSemaphore.acquire();
       } catch (InterruptedException e) {
       }
       if (_itemsComplete.get() % 1000 == 0) { 

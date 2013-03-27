@@ -240,7 +240,7 @@ public class Utils {
     throw new IOException("Unable to locate File:" + itemPath + " in local cache!");
   }
   
-  public void destoryCache(JobConf job)throws IOException { 
+  public void destroyCache(JobConf job)throws IOException {
     if (getJobCacheSessionId(job) != 0) { 
       FileSystem fs = FileSystem.get(job);
       fs.delete(getPathForSession(job), true);
