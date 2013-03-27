@@ -56,7 +56,6 @@ import org.commoncrawl.service.crawler.CrawlTarget;
 import org.commoncrawl.service.crawler.CrawlerServer;
 import org.commoncrawl.service.crawler.filters.URLPatternBlockFilter;
 import org.commoncrawl.service.crawler.filters.Filter.FilterResult;
-import org.commoncrawl.service.listcrawler.CrawlListDatabaseRecord;
 import org.commoncrawl.service.queryserver.QueryServerMaster;
 import org.commoncrawl.util.URLFingerprint;
 import org.commoncrawl.util.URLUtils;
@@ -497,8 +496,8 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
   }
 
   @Override
-  protected boolean parseArguements(String[] argv) {
-    if (super.parseArguements(argv)) {
+  protected boolean parseArguments(String[] argv) {
+    if (super.parseArguments(argv)) {
       for (int i = 0; i < argv.length; ++i) {
         if (argv[i].equalsIgnoreCase("--querymaster")) {
           if (i + 1 < argv.length) {

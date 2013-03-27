@@ -171,7 +171,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     
   
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
     return true;
   }
 

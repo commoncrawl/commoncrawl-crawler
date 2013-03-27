@@ -117,7 +117,7 @@ public class EC2ParserMaster extends CommonCrawlServer implements Constants {
   }
 
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
     return true;
   }
 

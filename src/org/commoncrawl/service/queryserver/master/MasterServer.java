@@ -794,7 +794,7 @@ implements QueryServerMaster, ShardMapper, AsyncServerChannel.ConnectionCallback
   }
 
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
 
     for(int i=0; i < argv.length;++i) {
       if (argv[i].equalsIgnoreCase("--slaves")) {

@@ -126,7 +126,7 @@ public class CrawlStatsCollectorService
 
 
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
     return true;
   }
   

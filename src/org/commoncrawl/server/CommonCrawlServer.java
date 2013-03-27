@@ -420,7 +420,7 @@ public abstract class CommonCrawlServer extends Server {
 
     _configuration = conf;
 
-    if (!parseArguements(argv)) {
+    if (!parseArguments(argv)) {
       printUsage();
       return false;
     }
@@ -548,7 +548,7 @@ public abstract class CommonCrawlServer extends Server {
   protected void overrideConfig(Configuration conf) {
   }
 
-  protected abstract boolean parseArguements(String argv[]);
+  protected abstract boolean parseArguments(String argv[]);
 
   protected abstract void printUsage();
 

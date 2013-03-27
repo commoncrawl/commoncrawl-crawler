@@ -132,7 +132,7 @@ public class StatsServiceServer
   }
 
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
     return true;
   }
   

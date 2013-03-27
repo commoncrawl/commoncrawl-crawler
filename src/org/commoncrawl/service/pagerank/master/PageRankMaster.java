@@ -312,7 +312,7 @@ public class PageRankMaster extends CommonCrawlServer {
   }
 
   @Override
-  protected boolean parseArguements(String[] argv) {
+  protected boolean parseArguments(String[] argv) {
     
     for(int i=0; i < argv.length;++i) {
     
