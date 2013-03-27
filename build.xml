@@ -230,6 +230,7 @@
                   webxml="${build.webapps}/crawler/WEB-INF/web.xml">
       </jsp-compile>
 
+<!--
       <jsp-compile
                   uriroot="${webapps.dir}/dservice"
                   outputdir="${build.src}"
@@ -243,7 +244,7 @@
                   package="org.commoncrawl.service.dns"
                   webxml="${build.webapps}/dnsservice/WEB-INF/web.xml">
       </jsp-compile>
-
+-->
       <!-- Compile Java files (excluding JSPs) checking warnings -->
 	  <echo message="Compiling Core Files"/>
       <javac 
