@@ -76,7 +76,7 @@ public final class CrawlQueue {
     private Protocol _protocol;
     private Fetcher   _fetcher;
     private boolean _active = false;
-    private Timer     _scheulderTimer = null;
+    private Timer _schedulerTimer = null;
     private long      _lastIdleCheckTime = -1;
     private long      _purgedHostCount = 0;
 
@@ -109,7 +109,7 @@ public final class CrawlQueue {
 
     private void setScheduleTimer() { 
       
-      _scheulderTimer = new Timer(SCHEDULER_SCAN_INTERVAL,true,new Timer.Callback() {
+      _schedulerTimer = new Timer(SCHEDULER_SCAN_INTERVAL,true,new Timer.Callback() {
 
         public void timerFired(Timer timer) {
           
@@ -151,7 +151,7 @@ public final class CrawlQueue {
           }
         }
       });
-      getEngine().getServer().getEventLoop().setTimer(_scheulderTimer);
+      getEngine().getServer().getEventLoop().setTimer(_schedulerTimer);
       
     }
 
@@ -209,10 +209,10 @@ public final class CrawlQueue {
       
     }
     private void stopScheduleTimer() { 
-      if (_scheulderTimer != null) { 
-        getEngine().getServer().getEventLoop().cancelTimer(_scheulderTimer);
+      if (_schedulerTimer != null) {
+        getEngine().getServer().getEventLoop().cancelTimer(_schedulerTimer);
       }
-      _scheulderTimer = null;
+      _schedulerTimer = null;
     }
     
     /** get access to the engine object **/
@@ -467,7 +467,7 @@ public final class CrawlQueue {
       _protocol = null;
       _fetcher.shutdown();
       _fetcher = null;
-      _scheulderTimer = null;
+      _schedulerTimer = null;
       
     }
     
