@@ -1,10 +1,22 @@
 package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
+
+import javax.annotation.Nullable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -20,12 +32,17 @@ import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyPartitioner;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.LinkKeyComparator;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.QueueItem;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.QueueTask;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
 import org.commoncrawl.util.TextBytes;
 
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class CrawlDBMergeJob {
   
@@ -40,11 +57,71 @@ public class CrawlDBMergeJob {
   static final String GRAPH_DATA_OUTPUT_PATH = "/common-crawl/crawl-db/intermediate/";
   static final String INTERMEDIATE_MERGE_PATH = "/common-crawl/crawl-db/merge/intermediate";
   static final String FULL_MERGE_PATH = "/common-crawl/crawl-db/merge/full";
+  static final String MULTIPART_SEGMENT_FILE = "MULTIPART.txt";
   
   // Default Max Paritions per Run 
-  static final int DEFAULT_MAX_PARTITIONS_PER_RUN = 10;
+  static final int DEFAULT_MAX_PARTITIONS_PER_RUN = 5;
   
+  // max simultaneous intermediate merge jobs ... 
+  static final int MAX_SIMULTANEOUS_JOBS = 1;
   
+  static LinkedBlockingQueue<QueueItem> jobQueue = new LinkedBlockingQueue<QueueItem>();
+
+  
+  static class QueueItem {
+    QueueItem() { 
+      segmentIds = null;
+    }
+    
+    QueueItem(FileSystem fs,Configuration conf,List<Long> segmentIds) { 
+      this.conf = conf;
+      this.fs = fs;
+      this.segmentIds = segmentIds;
+    }
+    
+    public Configuration conf;
+    public FileSystem fs;
+    public List<Long> segmentIds;
+    public boolean    finalMergeJob;
+  }
+  
+  static class QueueTask implements Runnable {
+
+    Semaphore jobTaskSemaphore = null;
+    
+    public QueueTask(Semaphore jobTaskSemaphore) { 
+      this.jobTaskSemaphore = jobTaskSemaphore;
+    }
+    
+    @Override
+    public void run() {
+      while (true) {
+        LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Running");
+        try {
+          QueueItem item = jobQueue.take();
+          
+          
+          if (item.segmentIds != null) { 
+            LOG.info("Queue Thread:" + Thread.currentThread().getId() + " got segments:" + item.segmentIds);
+            LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Starting Job");
+            try {
+              runIntermediateMerge(item.fs,item.conf,item.segmentIds);
+            } catch (IOException e) {
+              LOG.error("Queue Thread:" + Thread.currentThread().getId() + " threw exception:" + CCStringUtils.stringifyException(e));
+            }
+          }
+          else { 
+            LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Got Shutdown Queue Item - EXITING");
+            break;
+          }
+        } catch (InterruptedException e) {
+        }
+      }
+      
+      LOG.info("Queue Thread:" + Thread.currentThread().getId() + " Released Semaphore");
+      jobTaskSemaphore.release();
+    } 
+  }  
   
   public static void main(String[] args) throws Exception  {
 
@@ -56,31 +133,58 @@ public class CrawlDBMergeJob {
     
     
     // find latest intermediate merge timestamp ...
-    long latestIntermediateMergeTS = findLatestTimestamp(fs, conf,INTERMEDIATE_MERGE_PATH);
-    // final latest final merge 
-    LOG.info("Latest Intermediate Merge Timestamp is:" + latestIntermediateMergeTS);
-    // find latest intermediate merge timestamp ...
     long latestFullMergeTS = findLatestTimestamp(fs, conf,FULL_MERGE_PATH);
     LOG.info("Latest Full Merge Timestamp is:" + latestFullMergeTS);
-    // pick max timestamp 
-    long latestMergeTimestamp = Math.max(latestIntermediateMergeTS,latestFullMergeTS);
     
-    // find list of merge candidates ... 
-    List<Long> candidateList = filterAndSortRawInputs(fs, conf, GRAPH_DATA_OUTPUT_PATH, latestMergeTimestamp);
+    // find list of completed merge candidates ... 
+    SortedSet<Long> completedCandidateList = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS);
+        
+    // find list of raw merge candidates ... 
+    SortedSet<Long> rawCandidateList = filterAndSortRawInputs(fs, conf, GRAPH_DATA_OUTPUT_PATH, latestFullMergeTS);
 
-    // partition into groups
-    List<List<Long>> partitions = Lists.partition(candidateList, partitionSize);
+    // find list of raw candiates that still need an intermediate merge ... 
+    Set<Long> rawUnmergedSet = Sets.difference(rawCandidateList, completedCandidateList);
     
-    // ok run intermediate merges ...
-    for (List<Long> partitionIds : partitions) { 
-      runIntermediateMerge(fs,conf,partitionIds);
+    // convert to list 
+    List<Long> unmergedList = Lists.newArrayList(rawUnmergedSet);
+    // unecessary sort ?? 
+    Collections.sort(unmergedList);
+    // partition into groups
+    List<List<Long>> partitions = Lists.partition(unmergedList, partitionSize);
+    
+    if (partitions.size() != 0) { 
+      // create completion semaphore ... 
+      Semaphore mergeCompletionSemaphore = new Semaphore(-(partitions.size() - 1));
+      // ok queue intermediate merges ...
+      for (List<Long> partitionIds : partitions) { 
+        jobQueue.put(new QueueItem(fs,conf,partitionIds));
+      }
+      // queue shutdown items 
+      for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+        jobQueue.put(new QueueItem());
+      }
+
+      // start threads 
+      LOG.info("Starting Threads");
+      // startup threads .. 
+      for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+        Thread thread = new Thread(new QueueTask(mergeCompletionSemaphore));
+        thread.start();
+      }
+      
+      // wait for completion ... 
+      LOG.info("Waiting for intermediate merge completion");
+      mergeCompletionSemaphore.acquireUninterruptibly();
     }
     
     // find list of final merge candidates 
-    List<Long> finalMergeCandidates = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestMergeTimestamp);
+    Set<Long> finalMergeCandidates = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS);
     
-    // run final merge ... (if necessary)
-    runFinalMerge(fs,conf,finalMergeCandidates,latestFullMergeTS);    
+    if (finalMergeCandidates.size() != 0) {
+      LOG.info("Starting Potential Final Merge");
+      // run final merge ... (if necessary)
+      runFinalMerge(fs,conf,Lists.newArrayList(finalMergeCandidates),latestFullMergeTS);
+    }
   }
   
   /** 
@@ -99,6 +203,11 @@ public class CrawlDBMergeJob {
     
     // construct a final output path ...   
     Path finalOutputPath = new Path(S3N_BUCKET_PREFIX + INTERMEDIATE_MERGE_PATH,Long.toString(maxTimestamp));
+    
+    if (fs.exists(finalOutputPath)) {
+      LOG.info("Deleting Existing Output at:" + finalOutputPath);
+      fs.delete(finalOutputPath, true);
+    }
     
     LOG.info("Starting Intermeidate Merge for Paritions:" + partitionIds + " OutputPath is:" + finalOutputPath);
 
@@ -122,6 +231,9 @@ public class CrawlDBMergeJob {
     .speculativeExecution(true)
     .output(finalOutputPath)
     .compressMapOutput(true)
+    .maxMapAttempts(4)
+    .maxReduceAttempts(3)
+    .maxMapTaskFailures(1)
     .compressor(CompressionType.BLOCK, SnappyCodec.class)
     .build();
             
@@ -129,6 +241,12 @@ public class CrawlDBMergeJob {
     try { 
       JobClient.runJob(jobConf);
       LOG.info("Finished JOB:" + jobConf);
+      // write multipart candidate list 
+      if (partitionIds.size() != 1) { 
+        LOG.info("Writing Multipart Segment List for OutputSegment:"+ maxTimestamp);
+        listToTextFile(partitionIds,fs,new Path(finalOutputPath,MULTIPART_SEGMENT_FILE));
+        LOG.info("Successfully Wrote Multipart Segment List for OutputSegment:"+ maxTimestamp);
+      }
     }
     catch (IOException e) { 
       LOG.error("Failed to Execute JOB:" + jobConf + " Exception:\n" + CCStringUtils.stringifyException(e));
@@ -215,6 +333,59 @@ public class CrawlDBMergeJob {
     return timestampOut;
   }
   
+  
+  static List<String> textFileToList(FileSystem fs,Path path)throws IOException { 
+    
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>(); 
+    
+    BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(path),Charset.forName("UTF-8")));
+    try { 
+      String line;
+      while ((line = reader.readLine()) != null) { 
+        if (line.length() != 0 && !line.startsWith("#")) 
+          builder.add(line);
+      }
+    }
+    finally { 
+      reader.close();
+    }
+    return builder.build();
+  }
+  
+  static void listToTextFile(List<? extends Object> objects,FileSystem fs,Path path)throws IOException { 
+    Writer writer = new OutputStreamWriter(fs.create(path), Charset.forName("UTF-8"));
+    try { 
+      for (Object obj : objects) { 
+        writer.write(obj.toString());
+        writer.append("\n");
+      }
+      writer.flush();
+    }
+    finally { 
+      writer.close();
+    }
+  }
+  
+  /** 
+   * 
+   */
+  static List<Long> scanForMultiPartList(FileSystem fs,Configuration conf,Path rootSegmentPath)throws IOException { 
+    Path multiPartFilePath = new Path(rootSegmentPath,MULTIPART_SEGMENT_FILE);
+    if (fs.exists(multiPartFilePath)) { 
+      return Lists.transform(textFileToList(fs,multiPartFilePath), new Function<String,Long>() {
+
+        @Override
+        @Nullable
+        public Long apply(@Nullable String arg0) {
+          return Long.parseLong(arg0);
+        } 
+      });
+    }
+    else { 
+      return null;
+    }
+  }
+  
   /** 
    * iterate the intermediate link graph data and extract unmerged set ... 
    * 
@@ -224,8 +395,9 @@ public class CrawlDBMergeJob {
    * @return
    * @throws IOException
    */
-  static List<Long> filterAndSortRawInputs(FileSystem fs,Configuration conf,String searchPath, long latestMergeDBTimestamp )throws IOException { 
-    ArrayList<Long> list = new ArrayList<Long>();
+  static SortedSet<Long> filterAndSortRawInputs(FileSystem fs,Configuration conf,String searchPath, long latestMergeDBTimestamp )throws IOException { 
+    TreeSet<Long> set = new TreeSet<Long>();
+
     FileStatus candidates[] = fs.globStatus(new Path(S3N_BUCKET_PREFIX + searchPath,"[0-9]*"));
     
     for (FileStatus candidate : candidates) {
@@ -233,19 +405,23 @@ public class CrawlDBMergeJob {
       long candidateTimestamp = Long.parseLong(candidate.getPath().getName());
       if (candidateTimestamp > latestMergeDBTimestamp) { 
         Path successPath = new Path(candidate.getPath(),"_SUCCESS");
-        if (fs.exists(successPath)) { 
-          list.add(candidateTimestamp);
+        if (fs.exists(successPath)) {
+          // scan for a multipart result 
+          List<Long> multipartResult = scanForMultiPartList(fs,conf,candidate.getPath());
+          if (multipartResult != null) {
+            LOG.info("Merge Candidate Completed with Multipart Result:" + multipartResult);
+            set.addAll(multipartResult);
+          }
+          else { 
+            set.add(candidateTimestamp);
+          }
         }
         else { 
           LOG.info("Rejected Merge Candidate:" + candidate.getPath());
         }
       }
     }
-    
-    // sort the list ... 
-    Collections.sort(list);
-    
-    return list;
+    return set;
   }  
   
 }

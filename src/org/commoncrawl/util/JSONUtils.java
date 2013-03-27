@@ -150,6 +150,13 @@ public class JSONUtils {
       jsonObj.addProperty(property, stringElement.getAsString());
     }
   }
+  
+  public static String safeGetStringFromElement(JsonObject jsonObject,String property) { 
+    if (jsonObject.has(property)) { 
+      return jsonObject.get(property).getAsString();
+    }
+    return "";
+  }
 
   public static void stringCollectionToJsonArray(JsonObject jsonObject,
       String propertyName, Collection<String> stringSet) {

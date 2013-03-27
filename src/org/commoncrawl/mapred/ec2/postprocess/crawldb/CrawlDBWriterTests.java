@@ -101,7 +101,7 @@ public class CrawlDBWriterTests extends CrawlDBWriter {
     public void progress() {
     }
 
-    @Override
+    //@Override
     public float getProgress() { return 0; }
 
     @Override

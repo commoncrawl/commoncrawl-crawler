@@ -146,6 +146,10 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   static final String MERGE_INTERMEDIATE_OUTPUT_PATH = "/common-crawl/crawl-db/intermediate/";
   static final String MERGE_DB_PATH = "/common-crawl/crawl-db/mergedDB/";
 
+  ///////////////////////////////////////////////////////////////////////////
+  // CONSTANTS 
+  ///////////////////////////////////////////////////////////////////////////
+  
   static final int MAX_TYPE_SAMPLES = 5;
   
   static final int DEFAULT_OUTGOING_URLS_BUFFER_SIZE = 1 << 18; // 262K 
@@ -209,7 +213,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
     GOT_EXTERNAL_DOMAIN_SOURCE,
     NO_SOURCE_URL_FOR_CRAWL_STATUS,
     OUTPUT_KEY_FROM_INTERNAL_LINK,
-    OUTPUT_KEY_FROM_EXTERNAL_LINK, GOT_HTTP_200_CRAWL_STATUS, GOT_REDIRECT_CRAWL_STATUS, BAD_REDIRECT_URL, GOT_MERGED_RECORD, MERGED_OBJECT_FIRST_OBJECT, ADOPTED_SOURCE_SUMMARY_RECORD, MERGED_SOURCE_SUMMARY_RECORD_INTO_DEST, ADOPTED_SOURCE_LINKSUMMARY_RECORD, MERGED_SOURCE_LINKSUMMARY_RECORD_INTO_DEST, ALLOCATED_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_EXISTING_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_SUMMARY_RECORD_IN_FLUSH, ENCOUNTERED_LINKSUMMARY_RECORD_IN_FLUSH, EMITTED_SOURCEINPUTS_RECORD
+    OUTPUT_KEY_FROM_EXTERNAL_LINK, GOT_HTTP_200_CRAWL_STATUS, GOT_REDIRECT_CRAWL_STATUS, BAD_REDIRECT_URL, GOT_MERGED_RECORD, MERGED_OBJECT_FIRST_OBJECT, ADOPTED_SOURCE_SUMMARY_RECORD, MERGED_SOURCE_SUMMARY_RECORD_INTO_DEST, ADOPTED_SOURCE_LINKSUMMARY_RECORD, MERGED_SOURCE_LINKSUMMARY_RECORD_INTO_DEST, ALLOCATED_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_EXISTING_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_SUMMARY_RECORD_IN_FLUSH, ENCOUNTERED_LINKSUMMARY_RECORD_IN_FLUSH, EMITTED_SOURCEINPUTS_RECORD, GOT_NULL_REDIRECT_URL, INTERDOMAIN_LINKS_LTEQ_100, INTERDOMAIN_LINKS_LTEQ_1000, INTERDOMAIN_LINKS_GT_1000, EMITTED_SOURCEINPUTS_DATA_BYTES_EMITTED
     
   }
   
@@ -899,10 +903,13 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
         reporter.incrCounter(Counters.GOT_REDIRECT_CRAWL_STATUS,1);
         
         // get the target url ... 
-        String targetURL = jsonObject.get("target_url").getAsString();
+        JsonElement targetURL = jsonObject.get("target_url");
         if (targetURL != null) {
           // redirect details ...
-          crawlStatsJSON.addProperty(CRAWLDETAIL_REDIRECT_URL, targetURL);
+          crawlStatsJSON.addProperty(CRAWLDETAIL_REDIRECT_URL, targetURL.getAsString());
+        }
+        else { 
+          reporter.incrCounter(Counters.GOT_NULL_REDIRECT_URL, 1);
         }
       }
     }
@@ -911,8 +918,8 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
       
       // basic stats ... starting with crawl time ...
       crawlStatsJSON.addProperty(CRAWLDETAIL_FAILURE,true);
-      crawlStatsJSON.addProperty(CRAWLDETAIL_FAILURE_REASON,jsonObject.get("failure_reason").getAsString());
-      crawlStatsJSON.addProperty(CRAWLDETAIL_FAILURE_DETAIL,jsonObject.get("failure_detail").getAsString());
+      crawlStatsJSON.addProperty(CRAWLDETAIL_FAILURE_REASON,safeGetStringFromElement(jsonObject,"failure_reason"));
+      crawlStatsJSON.addProperty(CRAWLDETAIL_FAILURE_DETAIL,safeGetStringFromElement(jsonObject,"failure_detail"));
     }
     
     return crawlStatsJSON;
@@ -956,12 +963,12 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
 
           // update parsed as 
           if (crawlDetailRecord.has(CRAWLDETAIL_PARSEDAS_PROPERTY)) { 
-            _summaryRecord.addProperty(SUMMARYRECORD_PARSEDAS_PROPERTY, crawlDetailRecord.get(CRAWLDETAIL_PARSEDAS_PROPERTY).getAsString());
+            _summaryRecord.addProperty(SUMMARYRECORD_PARSEDAS_PROPERTY, safeGetStringFromElement(crawlDetailRecord,CRAWLDETAIL_PARSEDAS_PROPERTY));
           }
         }
         else if (httpResult >=300 && httpResult <= 399) {
           if (crawlDetailRecord.has(CRAWLDETAIL_REDIRECT_URL)) { 
-            _summaryRecord.addProperty(SUMMARYRECORD_REDIRECT_URL_PROPERTY, crawlDetailRecord.get(CRAWLDETAIL_REDIRECT_URL).getAsString());
+            _summaryRecord.addProperty(SUMMARYRECORD_REDIRECT_URL_PROPERTY, safeGetStringFromElement(crawlDetailRecord,CRAWLDETAIL_REDIRECT_URL));
           }
         }
       }
@@ -1015,7 +1022,9 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
                 interDomainLinkCount++;
                 // track domains we link to
                 if (extHRefs != null) {
-                  extHRefs.add(urlObject.getCanonicalURL());
+                  if (extHRefs.size() <= MAX_EXTERNALLY_REFERENCED_URLS) { 
+                    extHRefs.add(urlObject.getCanonicalURL());
+                  }
                 }
               }
             }
@@ -1026,6 +1035,16 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
       crawlStats.addProperty(CRAWLDETAIL_INTRADOMAIN_LINKS, intraDomainLinkCount);
       crawlStats.addProperty(CRAWLDETAIL_INTRAROOT_LINKS, intraRootLinkCount);
       crawlStats.addProperty(CRAWLDETAIL_INTERDOMAIN_LINKS, interDomainLinkCount);
+      
+      if (interDomainLinkCount <= 100) { 
+        reporter.incrCounter(Counters.INTERDOMAIN_LINKS_LTEQ_100, 1);
+      }
+      else if (interDomainLinkCount <= 1000) { 
+        reporter.incrCounter(Counters.INTERDOMAIN_LINKS_LTEQ_1000, 1);
+      }
+      else { 
+        reporter.incrCounter(Counters.INTERDOMAIN_LINKS_GT_1000, 1);
+      }
     }
   }
   
@@ -1040,8 +1059,10 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
     _urlsProcessed++;
 
     
-    if (_outputKeyString == null || !_outputKeyURLObj.isValid()) { 
-      reporter.incrCounter(Counters.FAILED_TO_GET_SOURCE_HREF, 1);
+    if (_outputKeyString == null || !_outputKeyURLObj.isValid()) {
+      if (reporter != null) { 
+        reporter.incrCounter(Counters.FAILED_TO_GET_SOURCE_HREF, 1);
+      }
     }
     else { 
     
@@ -1089,6 +1110,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
           TextBytes sourceInputsText= new TextBytes();
           sourceInputsText.set(_sourceInputsBuffer.getData(),0,_sourceInputsBuffer.getLength());
           output.collect(CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_INCOMING_URLS_SAMPLE, 0),sourceInputsText);
+          reporter.incrCounter(Counters.EMITTED_SOURCEINPUTS_DATA_BYTES_EMITTED, sourceInputsText.getLength());
         }
       }
       

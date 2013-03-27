@@ -45,8 +45,6 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey;
-import org.commoncrawl.mapred.ec2.postprocess.linkCollector.LinkKey.LinkKeyGroupingComparator;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyGroupingComparator;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineStep;
