@@ -577,7 +577,7 @@ public class LongOpenHashSet implements java.io.Serializable, Cloneable, Iterabl
 
     /** Delegates to the corresponding type-specific method. */
     public Long next() {
-      return Long.valueOf(nextLong());
+      return nextLong();
     }
 
     /**

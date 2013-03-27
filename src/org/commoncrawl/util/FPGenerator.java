@@ -75,7 +75,7 @@ public final class FPGenerator {
    * <code>polynomials</code> contains some irreducible polynomials).
    */
   public static FPGenerator make(long polynomial, int degree) {
-    Long l = new Long(polynomial);
+    Long l = polynomial;
     FPGenerator fpgen = (FPGenerator) generators.get(l);
     if (fpgen == null) {
       fpgen = new FPGenerator(polynomial, degree);

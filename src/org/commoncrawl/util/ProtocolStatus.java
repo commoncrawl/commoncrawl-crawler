@@ -90,22 +90,22 @@ public class ProtocolStatus implements Writable {
   private static final HashMap<Integer, String> codeToName =
     new HashMap<Integer, String>();
   static {
-    codeToName.put(new Integer(SUCCESS), "success");
-    codeToName.put(new Integer(FAILED), "failed");
-    codeToName.put(new Integer(PROTO_NOT_FOUND), "proto_not_found");
-    codeToName.put(new Integer(GONE), "gone");
-    codeToName.put(new Integer(MOVED), "moved");
-    codeToName.put(new Integer(TEMP_MOVED), "temp_moved");
-    codeToName.put(new Integer(NOTFOUND), "notfound");
-    codeToName.put(new Integer(RETRY), "retry");
-    codeToName.put(new Integer(EXCEPTION), "exception");
-    codeToName.put(new Integer(ACCESS_DENIED), "access_denied");
-    codeToName.put(new Integer(ROBOTS_DENIED), "robots_denied");
-    codeToName.put(new Integer(REDIR_EXCEEDED), "redir_exceeded");
-    codeToName.put(new Integer(NOTFETCHING), "notfetching");
-    codeToName.put(new Integer(NOTMODIFIED), "notmodified");
-    codeToName.put(new Integer(WOULDBLOCK), "wouldblock");
-    codeToName.put(new Integer(BLOCKED), "blocked");
+    codeToName.put(SUCCESS, "success");
+    codeToName.put(FAILED, "failed");
+    codeToName.put(PROTO_NOT_FOUND, "proto_not_found");
+    codeToName.put(GONE, "gone");
+    codeToName.put(MOVED, "moved");
+    codeToName.put(TEMP_MOVED, "temp_moved");
+    codeToName.put(NOTFOUND, "notfound");
+    codeToName.put(RETRY, "retry");
+    codeToName.put(EXCEPTION, "exception");
+    codeToName.put(ACCESS_DENIED, "access_denied");
+    codeToName.put(ROBOTS_DENIED, "robots_denied");
+    codeToName.put(REDIR_EXCEEDED, "redir_exceeded");
+    codeToName.put(NOTFETCHING, "notfetching");
+    codeToName.put(NOTMODIFIED, "notmodified");
+    codeToName.put(WOULDBLOCK, "wouldblock");
+    codeToName.put(BLOCKED, "blocked");
   }
   
   public ProtocolStatus() {

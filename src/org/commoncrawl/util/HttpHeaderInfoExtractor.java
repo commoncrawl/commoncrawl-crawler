@@ -77,7 +77,7 @@ public class HttpHeaderInfoExtractor {
     Pair<Integer,Integer> result = parseStatusLine(responseLine);
     if (result.e1 != 0) 
       metadata.setHttpResponseFlags((byte)result.e1.byteValue());
-    metadata.setHttpResultCode(result.e0.intValue());
+    metadata.setHttpResultCode(result.e0);
   }
   
   public static Pair<Integer,Integer> parseStatusLine(String responseLine) {

@@ -303,18 +303,18 @@ public class QueryServerFE {
   private static final HashMap<Integer, String> codeToName =
     new HashMap<Integer, String>();
   static {
-    codeToName.put(new Integer(ProtocolStatus.FAILED), "failed");
-    codeToName.put(new Integer(ProtocolStatus.GONE), "gone");
-    codeToName.put(new Integer(ProtocolStatus.MOVED), "moved");
-    codeToName.put(new Integer(ProtocolStatus.TEMP_MOVED), "temp_moved");
-    codeToName.put(new Integer(ProtocolStatus.NOTFOUND), "notfound");
-    codeToName.put(new Integer(ProtocolStatus.RETRY), "retry");
-    codeToName.put(new Integer(ProtocolStatus.EXCEPTION), "exception");
-    codeToName.put(new Integer(ProtocolStatus.ACCESS_DENIED), "access_denied");
-    codeToName.put(new Integer(ProtocolStatus.ROBOTS_DENIED), "robots_denied");
-    codeToName.put(new Integer(ProtocolStatus.REDIR_EXCEEDED), "redir_exceeded");
-    codeToName.put(new Integer(ProtocolStatus.NOTFETCHING), "notfetching");
-    codeToName.put(new Integer(ProtocolStatus.NOTMODIFIED), "notmodified");
+    codeToName.put(ProtocolStatus.FAILED, "failed");
+    codeToName.put(ProtocolStatus.GONE, "gone");
+    codeToName.put(ProtocolStatus.MOVED, "moved");
+    codeToName.put(ProtocolStatus.TEMP_MOVED, "temp_moved");
+    codeToName.put(ProtocolStatus.NOTFOUND, "notfound");
+    codeToName.put(ProtocolStatus.RETRY, "retry");
+    codeToName.put(ProtocolStatus.EXCEPTION, "exception");
+    codeToName.put(ProtocolStatus.ACCESS_DENIED, "access_denied");
+    codeToName.put(ProtocolStatus.ROBOTS_DENIED, "robots_denied");
+    codeToName.put(ProtocolStatus.REDIR_EXCEEDED, "redir_exceeded");
+    codeToName.put(ProtocolStatus.NOTFETCHING, "notfetching");
+    codeToName.put(ProtocolStatus.NOTMODIFIED, "notmodified");
   }
   
   public static String getStatusStringFromMetadata(CrawlDatumAndMetadata metadata) { 

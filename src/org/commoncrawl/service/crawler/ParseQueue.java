@@ -341,7 +341,7 @@ public class ParseQueue {
                 counts.put(domainKey,1);
               }
               else{ 
-                counts.put(domainKey,existingCount.intValue() + 1);
+                counts.put(domainKey, existingCount + 1);
               }
               if (unitsToAcquire == 0) 
                break;
