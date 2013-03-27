@@ -54,9 +54,9 @@ public class PageRankBoostFilter extends Filter {
 	    }
 	    return result;
     }
-  };
-  
-  
+  }
+
+
   private Vector<PageRankBoostItem> globalBoostItems = new Vector<PageRankBoostItem>();
   private TreeMultimap<String,PageRankBoostItem> domainToBoostMap = TreeMultimap.create();
   

@@ -183,7 +183,7 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
   @Override
   protected String getWebAppName() {
     return "proxy";
-  };
+  }
 
   SimpleDateFormat dateFormat = new SimpleDateFormat("YYYY.MM.dd-HH:mm:ss.SSS");
 

@@ -168,7 +168,7 @@ public class ArcFileWriter {
     }
 
     public ByteBuffer _buffer;
-  };
+  }
 
   private static final class ThreadSync extends AbstractQueuedSynchronizer {
 
@@ -253,8 +253,8 @@ public class ArcFileWriter {
                                                                                   b,
                                                                                   off,
                                                                                   len);
-                                                                        };
-                                                                      };
+                                                                        }
+    };
 
     private LinkedBlockingQueue<BufferItem> _consumerQueue            = new LinkedBlockingQueue<BufferItem>();
     private LinkedList<BufferItem>          _rewindQueue              = new LinkedList<BufferItem>();

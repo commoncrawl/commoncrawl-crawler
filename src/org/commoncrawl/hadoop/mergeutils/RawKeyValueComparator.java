@@ -54,6 +54,6 @@ public interface RawKeyValueComparator<KeyType extends WritableComparable, Value
    */
   int compareRaw(byte[] key1Data, int key1Offset, int key1Length, byte[] key2Data, int key2Offset, int key2Length,
       byte[] value1Data, int value1Offset, int value1Length, byte[] value2Data, int value2Offset, int value2Length)
-      throws IOException;;
+      throws IOException;
 
 }

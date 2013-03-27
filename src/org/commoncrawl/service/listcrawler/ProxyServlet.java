@@ -150,10 +150,10 @@ public class ProxyServlet extends HttpServlet {
       _httpErrorCode = httpErrorCode;
       _httpErrorCodeDesc = httpErrorResponse;
     }
-  };
-  
-  
-  public ProxyServlet() { 
+  }
+
+
+  public ProxyServlet() {
     
   }
   
@@ -1054,4 +1054,4 @@ public class ProxyServlet extends HttpServlet {
     }
   }
 
-};
+}

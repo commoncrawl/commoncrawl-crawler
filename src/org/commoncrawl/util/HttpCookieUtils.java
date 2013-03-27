@@ -639,8 +639,8 @@ public class HttpCookieUtils {
     @Override
     public int hashCode() {
       return _rootDomainHash;
-    };
-    
+    }
+
     public int       getRootDomainHash() { return _rootDomainHash; }
     
     /** cookie attributes **/
@@ -712,7 +712,7 @@ public class HttpCookieUtils {
     private static final ThreadLocal<SimpleDateFormat> dateFormat = new ThreadLocal<SimpleDateFormat>() { 
       protected SimpleDateFormat initialValue() {
         return new SimpleDateFormat("yyyy.MM.dd-HH:mm:ss.SSS ZZZ");
-      };
+      }
     };
     
     @Override

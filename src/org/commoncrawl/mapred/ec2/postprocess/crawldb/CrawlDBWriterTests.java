@@ -175,9 +175,9 @@ public class CrawlDBWriterTests extends CrawlDBWriter {
     CRAWL_STATUS,
     CRAWL_STATUS_WITH_REDIRECT,
     INLINK
-  };
-  
-  public static class TestModel implements Comparable<TestModel> { 
+  }
+
+  public static class TestModel implements Comparable<TestModel> {
     
     TreeMap<URLFPV2,URLStateModel> fpToModelMap = new TreeMap<URLFPV2, URLStateModel>();
     

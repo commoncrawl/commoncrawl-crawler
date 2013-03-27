@@ -52,8 +52,8 @@ public class DNSNoCacheFilter extends URLPatternBlockFilter  {
 	      throw new IOException("Pattern syntax exception parsing line:" + filterItemLine + "\nException:" + CCStringUtils.stringifyException(e));
 	    }
   	}
-  };
-  
+  }
+
   @Override
   public FilterResult filterItem(String rootDomainName,String fullyQualifiedDomainName, String urlPath,CrawlURLMetadata metadata, FilterResults results) {
   	return super.filterItem(rootDomainName, fullyQualifiedDomainName, "*", metadata, results); 

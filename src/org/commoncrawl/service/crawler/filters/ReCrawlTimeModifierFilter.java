@@ -53,9 +53,9 @@ public class ReCrawlTimeModifierFilter extends Filter {
 	    }
 	    return result;
     }
-  };
-  
-  
+  }
+
+
   private Vector<RecrawlTimeModifierItem> globalBoostItems = new Vector<RecrawlTimeModifierItem>();
   private TreeMultimap<String,RecrawlTimeModifierItem> domainToModifierListMap = TreeMultimap.create();
   

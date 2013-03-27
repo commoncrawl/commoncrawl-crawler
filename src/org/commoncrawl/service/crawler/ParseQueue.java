@@ -613,9 +613,9 @@ public class ParseQueue {
       return new Triple<Long,Long,Integer>(domainId,timestamp,state);
       
     }
-  };
-  
-  public static String createTestValue(int index,int count) { 
+  }
+
+  public static String createTestValue(int index,int count) {
     StringBuffer buf = new StringBuffer();
     for (int i=0;i<count+1;++i) { 
       buf.append(index);

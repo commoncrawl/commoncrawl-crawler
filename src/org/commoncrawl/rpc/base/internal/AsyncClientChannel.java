@@ -101,7 +101,7 @@ public class AsyncClientChannel implements NIOClientSocketListener, Comparable<A
   /** back pointer to server channel is this is an inoming client channel **/
   AsyncServerChannel _serverChannel = null;
   /** connection callback **/
-  ConnectionCallback _connectionCallback;;
+  ConnectionCallback _connectionCallback;
 
   ByteBuffer readBufferDirect = ByteBuffer.allocateDirect(8096 * 4);
 
@@ -358,7 +358,6 @@ public class AsyncClientChannel implements NIOClientSocketListener, Comparable<A
         readRequestFrames();
       }
 
-      ;
       // reset the selection state
 
       // if the output buffer has data that needs to go out ...

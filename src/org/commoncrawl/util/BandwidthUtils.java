@@ -155,9 +155,9 @@ public class BandwidthUtils {
         }
       }
     }
-  };
+  }
 
-  public static class RateLimiter {
+    public static class RateLimiter {
 
     // desired rate limit ...
     private int              _desiredBandwidthBytes;

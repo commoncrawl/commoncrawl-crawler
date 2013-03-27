@@ -87,7 +87,7 @@ public class DNSServiceTester extends Server implements AsyncClientChannel.Conne
   
      _eventLoop = new EventLoop();
      _address = address;
-     _testFile = null;;
+     _testFile = null;
      _testName = queryName;
     
      _eventLoop.start();

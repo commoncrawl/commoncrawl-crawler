@@ -718,7 +718,6 @@ public final class CrawlTarget extends
       _activeRequestHeaders = httpHeaders.toString();
       _activeRequestResultCode = (short) NIOHttpConnection
           .getHttpResponseCode(httpHeaders);
-      ;
     }
 
     if (failure) {

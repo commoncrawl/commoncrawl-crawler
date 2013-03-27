@@ -93,7 +93,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
      * @return
      */
     boolean read(NIOBufferList dataBuffer) throws IOException;
-  };
+  }
 
   /** Error Type Enum **/
   public enum ErrorType {
@@ -361,7 +361,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   private int _downloadLength = 0;
 
   /** open time - absolute time at which this socket was opened **/
-  private long _openTime = -1;;
+  private long _openTime = -1;
   /** Statistic: time it took for DNS resolution (MS) */
   private int _resolveTime = 0;
   /** Statistic: time it took to connect (after resolution) (MS) */

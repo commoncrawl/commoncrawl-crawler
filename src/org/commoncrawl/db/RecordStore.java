@@ -63,8 +63,8 @@ public class RecordStore {
     
   }
   
-  private enum RecordStatus{ ALIVE,DELETED };
-  
+  private enum RecordStatus{ ALIVE,DELETED }
+
   private int   		_databaseVersion = 0;
   private long   	_lastCheckpointNumber = 0;
   private long   	_lastTxnNumber = 0;

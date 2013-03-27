@@ -633,7 +633,6 @@ public class CompressedURLFPList {
   public static void validateURLFPFlagSerializationOneSubDomain() {
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -675,7 +674,6 @@ public class CompressedURLFPList {
   public static void validateURLFPFlagSerializationRootDomain() {
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -723,7 +721,6 @@ public class CompressedURLFPList {
   public static void validateURLFPFlagSerializationMultipleSubDomains() {
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -772,7 +769,6 @@ public class CompressedURLFPList {
 
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     // single top level domain with one sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_1_SUBDOMAIN_1_URL_1, 1);
@@ -836,7 +832,6 @@ public class CompressedURLFPList {
 
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     // single top level domain with one sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_1_SUBDOMAIN_1_URL_1 + "0", 1);
@@ -906,7 +901,6 @@ public class CompressedURLFPList {
 
     TreeMultimap<Integer, URLFP> sourceMap = TreeMultimap.create();
     TreeMultimap<Integer, URLFP> destMap = TreeMultimap.create();
-    ;
 
     // top level domain with matching sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_2_SUBDOMAIN_1_URL_1 + "0", 1);

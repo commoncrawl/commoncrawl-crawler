@@ -293,7 +293,7 @@ public abstract class CommonCrawlServer extends Server {
     @Override
     protected Object initialValue() {
       return _serverSingleton;
-    };
+    }
   };
 
   public static CommonCrawlServer getServerSingleton() {

@@ -612,7 +612,7 @@ public final class CrawlLog {
     public List<Path> getFilenames() {
       return _outputPaths;
     }
-  };
+  }
 
   private static class URLWriterException extends IOException {
     public URLWriterException() {

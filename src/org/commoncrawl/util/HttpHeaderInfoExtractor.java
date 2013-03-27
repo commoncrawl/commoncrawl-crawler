@@ -410,7 +410,7 @@ public class HttpHeaderInfoExtractor {
   static ThreadLocal<DateParser> _dateParser = new ThreadLocal<DateParser>() { 
     protected DateParser initialValue() {
       return new DateParser(_datePatterns);
-    };
+    }
   };
   
   static ThreadLocal<SimpleDateFormat> _httpDateParser = new ThreadLocal<SimpleDateFormat>() { 

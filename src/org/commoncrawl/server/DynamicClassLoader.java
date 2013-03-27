@@ -129,7 +129,6 @@ public class DynamicClassLoader extends URLClassLoader {
           return (clazz);
         }
       } catch (ClassNotFoundException e) {
-        ;
       }
     }
 
@@ -146,7 +145,6 @@ public class DynamicClassLoader extends URLClassLoader {
         return (clazz);
       }
     } catch (ClassNotFoundException e) {
-      ;
     }
 
     ServletRegistry.LOG.info("Class:" + name + " not found");

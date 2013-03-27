@@ -64,10 +64,10 @@ public class CrawlRateOverrideFilter extends Filter {
         return 1;
       return 0;
     }
-  };
-  
-  
-  private SortedSetMultimap<String,CrawlRateBoostItem> rootDomainToBoostMap = TreeMultimap.create(); 
+  }
+
+
+  private SortedSetMultimap<String,CrawlRateBoostItem> rootDomainToBoostMap = TreeMultimap.create();
   
   // private Map<String,Map<String,CrawlRateBoostItem> > rootDomainToBoostMap = new HashMap<String,Map<String,CrawlRateBoostItem>>();
   

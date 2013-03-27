@@ -76,8 +76,8 @@ public class IPAddressHintFilter extends Filter {
   @Override
   public void clear() {
     cache = new NIODNSCache();
-  };
-  
+  }
+
   @Test
   public void testname() throws Exception {
     cache.cacheIPAddressForHost("cnn.com", 1, Long.MAX_VALUE,null).markAsSuperNode();

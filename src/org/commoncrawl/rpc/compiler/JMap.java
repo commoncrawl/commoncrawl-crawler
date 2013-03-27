@@ -88,7 +88,7 @@ public class JMap extends JCompType {
           cb.append("}\n");
           decrLevel();
           cb.append("}\n");
-		};
+		}
 
 		@Override
 		void genJSON(CodeBuffer cb, String fname) throws IOException {

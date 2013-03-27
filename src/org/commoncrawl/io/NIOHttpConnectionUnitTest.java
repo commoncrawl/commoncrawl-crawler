@@ -53,7 +53,7 @@ public class NIOHttpConnectionUnitTest implements NIOHttpConnection.Listener {
   private long loopCounter = 0;
   private CookieStore cookieStore = new CookieStore();
 
-  private EventLoop eventLoop;;
+  private EventLoop eventLoop;
 
   private ArrayList<String> urlList = null;
   private static final int HEX_CHARS_PER_LINE = 32;

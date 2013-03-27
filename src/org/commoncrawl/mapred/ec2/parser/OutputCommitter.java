@@ -72,8 +72,8 @@ public class OutputCommitter extends FileOutputCommitter {
     super.setupTask(context);
     
     _taskDataClient = TaskDataUtils.getTaskDataClientForTask(context.getJobConf());
-  };
-   
+  }
+
   Path getTempTaskOutputPath(TaskAttemptContext taskContext) {
     JobConf conf = taskContext.getJobConf();
     Path outputPath = FileOutputFormat.getOutputPath(conf);

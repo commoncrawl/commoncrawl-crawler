@@ -758,7 +758,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
 
   public long getQueryCount() {
     return _queryCount;
-  };
+  }
 
   public int getQueuedItemCount() {
     if (_threadPool != null) {

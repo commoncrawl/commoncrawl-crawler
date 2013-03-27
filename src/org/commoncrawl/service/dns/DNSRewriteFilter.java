@@ -49,8 +49,8 @@ public class DNSRewriteFilter extends Filter {
     public enum TestType { 
       Inclusion,
       Exclusion
-    };
-    
+    }
+
     public TestType   testType = TestType.Inclusion;
     public String     tldName;
     public Pattern    pattern;
@@ -99,8 +99,8 @@ public class DNSRewriteFilter extends Filter {
     else { 
       throw new IOException("Invalid Filter Line:" + filterItemLine);
     }
-  };
-  
+  }
+
   @Override
   public FilterResult filterItem(String rootDomainName,String fullyQualifiedDomainName, String urlPath,CrawlURLMetadata metadata, FilterResults results) {
     

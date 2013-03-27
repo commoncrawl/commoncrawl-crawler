@@ -632,7 +632,6 @@ public class NIODNSCache {
 
   private void addIPToNameNode(int ipAddress, String hostName) {
     String ipAddressStr = IPAddressUtils.IntegerToIPAddressString(ipAddress);
-    ;
     // create or access ip address node ...
     Node ipAddressNode = addNode(_ipRoot, ipAddressStr);
     // increment hit count

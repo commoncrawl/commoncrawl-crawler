@@ -834,7 +834,6 @@ public class LongOpenHashSet implements java.io.Serializable, Cloneable, Iterabl
     final int n = PRIMES[p];
     maxFill = (int) (n * f);
     free = n - count;
-    ;
     final long key[] = this.key = new long[n];
     final byte state[] = this.state = new byte[n];
     int i, k2i, h1, h2;

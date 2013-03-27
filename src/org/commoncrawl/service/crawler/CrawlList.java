@@ -265,8 +265,8 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
     public String  _wwwRuleDomain = null;
     public long    _lastUpdateTime = -1;    
     public byte    _wwwRuleType = 0;
-  };
-  
+  }
+
   private static final int MAX_REWRITE_ITEMS = 5;
   
   IntrusiveList<WWWReWriteItem> _rewriteItemList = null;
@@ -1006,8 +1006,8 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   static class RobotRuleResult { 
     public RobotRuleSet ruleSet;
     public long         crcValue;
-  };
-  
+  }
+
   /** fetch succeeded **/
   void fetchSucceeded(final CrawlTarget target,int downloadTime,final NIOHttpHeaders httpHeaders,final Buffer contentBuffer) { 
    

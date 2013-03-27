@@ -45,7 +45,7 @@ public class LinkExtractionDocumentBuilder implements DocumentBuilder {
     @Override
     public String toString() {
       return "textNode:" + text;
-    };
+    }
 
   }
   

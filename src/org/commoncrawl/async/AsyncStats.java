@@ -57,8 +57,8 @@ public final  class AsyncStats extends RuntimeStatsCollector.Namespace {
     AsyncStats_LoopTimeinSelectorPoll_ProcessingWritable,
     AsyncStats_LoopTimeinSelectorPoll_ProcessingWritableAVG,
     
-  };
-    
+  }
+
   public static AsyncStats ID = new AsyncStats();
   
   private AsyncStats() {

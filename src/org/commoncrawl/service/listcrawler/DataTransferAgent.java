@@ -153,9 +153,9 @@ public class DataTransferAgent {
       _buffer = b;
       _id = id;
     }
-  };
-  
-  static class CCBridgeServerMapping { 
+  }
+
+  static class CCBridgeServerMapping {
     
     public CCBridgeServerMapping(String internalIP,String externalIP) { 
       _internalName = internalIP;

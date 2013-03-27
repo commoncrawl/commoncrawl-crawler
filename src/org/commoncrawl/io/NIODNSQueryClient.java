@@ -31,7 +31,7 @@ public interface NIODNSQueryClient {
 
   public enum Status {
     SUCCESS, SERVER_FAILURE, RESOLVER_FAILURE
-  };
+  }
 
   /** address resolution failed on the specified host */
   void AddressResolutionFailure(NIODNSResolver source, String hostName, Status status, String errorDesc);

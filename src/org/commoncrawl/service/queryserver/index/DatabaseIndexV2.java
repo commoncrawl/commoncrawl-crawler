@@ -141,8 +141,8 @@ public class DatabaseIndexV2 {
                                                            .setGroupingUsed(false);
 
                                                        return formatOut;
-                                                     };
-                                                   };
+                                                     }
+    };
 
     /**
      * return an shardIdToHost mapping given an index name
@@ -750,8 +750,8 @@ public class DatabaseIndexV2 {
                                                            .setGroupingUsed(false);
 
                                                        return formatOut;
-                                                     };
-                                                   };
+                                                     }
+    };
 
     public SlaveDatabaseIndex(Configuration conf, FileSystem remoteFS,
         long databaseTimestamp) throws IOException {

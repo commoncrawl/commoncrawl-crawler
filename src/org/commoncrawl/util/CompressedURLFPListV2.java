@@ -621,7 +621,6 @@ public class CompressedURLFPListV2 {
   public static void validateDuplicateChecking() {
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -674,7 +673,6 @@ public class CompressedURLFPListV2 {
   public static void validateURLFPFlagSerializationOneSubDomain() {
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -716,7 +714,6 @@ public class CompressedURLFPListV2 {
   public static void validateURLFPFlagSerializationRootDomain() {
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -764,7 +761,6 @@ public class CompressedURLFPListV2 {
   public static void validateURLFPFlagSerializationMultipleSubDomains() {
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     Builder firstBuilder = new Builder(FLAG_ARCHIVE_SEGMENT_ID
@@ -813,7 +809,6 @@ public class CompressedURLFPListV2 {
 
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     // single top level domain with one sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_1_SUBDOMAIN_1_URL_1, 1);
@@ -877,7 +872,6 @@ public class CompressedURLFPListV2 {
 
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     // single top level domain with one sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_1_SUBDOMAIN_1_URL_1 + "0", 1);
@@ -947,7 +941,6 @@ public class CompressedURLFPListV2 {
 
     TreeMultimap<Long, URLFPV2> sourceMap = TreeMultimap.create();
     TreeMultimap<Long, URLFPV2> destMap = TreeMultimap.create();
-    ;
 
     // top level domain with matching sub domain an two urls
     insertURLFPItem(sourceMap, DOMAIN_2_SUBDOMAIN_1_URL_1 + "0", 1);

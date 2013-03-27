@@ -101,7 +101,6 @@ public final class FPGenerator {
       temp ^= ByteModTable[8 + i][((int) fp) & 0xff];
       fp >>>= 8;
     }
-    ;
     return local ^ temp;
   }
 

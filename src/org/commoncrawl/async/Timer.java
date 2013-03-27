@@ -32,8 +32,8 @@ public final class Timer implements Comparable<Timer> {
 	
 	public static interface Callback { 
 		public void timerFired(Timer timer);
-	};
-	
+	}
+
 	private Callback _callback;
 	
 	public Timer(long delay,boolean periodic,Callback callback)  {

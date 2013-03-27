@@ -83,7 +83,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     public ByteBuffer _buffer;
-  };
+  }
 
   /**
    * helper dummy stream used to get around some stupid design decisions in
@@ -662,7 +662,6 @@ public final class ArcFileReader extends InflaterInputStream implements
 
       SequenceInputStream seqInputStream = new SequenceInputStream(inputStreams
           .elements());
-      ;
 
       return new InputStreamReader(seqInputStream, charset);
     }
