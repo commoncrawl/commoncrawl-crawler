@@ -503,18 +503,18 @@ public abstract class StatsCollection<ValueType extends Comparable> {
           jsonWriter.endArray();
           writer.flush();
           
-          completionCallback.execute(new Boolean(true));
+          completionCallback.execute(Boolean.TRUE);
         }
         catch (IOException e){ 
           LOG.error(CCStringUtils.stringifyException(e));
-          completionCallback.execute(new Boolean(false));
+          completionCallback.execute(Boolean.FALSE);
         }
       }
 
       @Override
       public void taskFailed(Exception e) {
         LOG.error(CCStringUtils.stringifyException(e));
-        completionCallback.execute(new Boolean(false));
+        completionCallback.execute(Boolean.FALSE);
       }
     });
   }
@@ -535,13 +535,13 @@ public abstract class StatsCollection<ValueType extends Comparable> {
             multiMap.put(new Date(entry.getKey().getFirstMillisecond()), entry.getValue());
           }
         }
-        completionCallback.execute(new Boolean(true));
+        completionCallback.execute(Boolean.TRUE);
       }
 
       @Override
       public void taskFailed(Exception e) {
         LOG.error(CCStringUtils.stringifyException(e));
-        completionCallback.execute(new Boolean(false));
+        completionCallback.execute(Boolean.FALSE);
       }
     });
   }
