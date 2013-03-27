@@ -74,7 +74,6 @@ import org.junit.Assert;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 /** 
@@ -1090,7 +1089,7 @@ public class CacheManager {
    */
   private void queueLocalCacheLoadRequest(final CacheLoadRequest loadRequest) { 
     // queue up requests into the thread pool executor (for now)
-    for (final Long location : loadRequest._loacations) { 
+    for (final Long location : loadRequest._locations) {
       
       _cacheLoadThreadPool.submit(new ConcurrentTask<CacheItem>(_eventLoop, new Callable<CacheItem>() {
 
@@ -1187,7 +1186,7 @@ public class CacheManager {
       CacheItem loadResult = null;
       
       // queue up requests into the thread pool executor (for now)
-      for (final Long location : loadRequest._loacations) { 
+      for (final Long location : loadRequest._locations) {
         
           LOG.info("### Local Cache Loader Called. Acquiring Semaphore");
           getLocalLogAccessSemaphore().acquireUninterruptibly();

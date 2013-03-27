@@ -43,7 +43,7 @@ class CacheLoadRequest {
   
   public CacheLoadRequest(String url,Long[] locationHints,CacheItemCheckCallback callback) { 
     _targetURL = url;
-    _loacations = locationHints;
+    _locations = locationHints;
     _callback = callback;
     _pendingItemCount = locationHints.length;
     _requestType = RequestType.LocalCacheLoadRequest;
@@ -52,7 +52,7 @@ class CacheLoadRequest {
   
   public RequestType _requestType;
   public String _targetURL;
-  public Long[] _loacations;
+  public Long[] _locations;
   public CacheItemCheckCallback _callback;
   public int _pendingItemCount;
   public long _fingerprint;

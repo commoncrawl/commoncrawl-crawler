@@ -82,7 +82,7 @@ class CacheItemHeader {
     stream.readFully(_sync);
     // read checksum value 
     int checksumOnDisk = stream.readInt();
-    // read reamining bytes 
+    // read remaining bytes
     byte[] headerData = new byte[SIZE-STATUS_BYTE_OFFSET]; 
     // no open a checked input stream ... 
     stream.readFully(headerData);

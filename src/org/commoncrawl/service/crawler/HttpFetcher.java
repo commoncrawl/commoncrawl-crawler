@@ -788,7 +788,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
           context.getURL().fetchStarted();
         }
         else { 
-          LOG.error("SENDING_REQUEST STATE TRIGERRED W/ NULL CONTEXT URL:" + theConnection.getURL());
+          LOG.error("SENDING_REQUEST STATE TRIGGERED W/ NULL CONTEXT URL:" + theConnection.getURL());
         }
         sendingCount++;
       }
