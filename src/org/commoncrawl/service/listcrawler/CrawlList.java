@@ -868,7 +868,7 @@ public final class CrawlList implements ItemUpdater {
       String rootDomainName = URLUtils.extractRootDomainName(urlObject.getHost());
       
       // if root domain name different than last root domain name ... 
-      if (rootDomainName != lastRootDomainName) {
+      if (!rootDomainName.equals(lastRootDomainName)) {
         // flush last entry 
         flushCachedSubDomainMetadata();
         // load new entry 
