@@ -57,13 +57,12 @@ public class CrawlDBKey {
   }
   
   public enum Type { 
-    KEY_TYPE_MERGED_RECORD,
     KEY_TYPE_CRAWL_STATUS, 
     KEY_TYPE_HTML_LINK,
     KEY_TYPE_ATOM_LINK,
     KEY_TYPE_RSS_LINK,
     KEY_TYPE_INCOMING_URLS_SAMPLE,
-    
+    KEY_TYPE_MERGED_RECORD
   }
   
   public static FlexBuffer[] allocateScanArray() { 
@@ -300,7 +299,15 @@ public class CrawlDBKey {
         long type1 = getLongComponentFromComponentArray(scanArray1,ComponentId.TYPE_COMPONENT_ID);
         long type2 = getLongComponentFromComponentArray(scanArray2,ComponentId.TYPE_COMPONENT_ID);
         
-        result = (type1 < type2) ? -1 : (type1 > type2) ? 1 : 0;
+        if (type1 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
+          result = -1;
+        }
+        else if (type1 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
+          result = 1;
+        }
+        else { 
+          result = (type1 < type2) ? -1 : (type1 > type2) ? 1 : 0;
+        }
       
         if (result == 0) { 
           if (type1 == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) { 
