@@ -64,7 +64,7 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
   public final static String SORT_BY_NAME      = "NAME";
   public final static String SORT_BY_URL_COUNT = "URLCOUNT";
   
-  private final String getOutputFileNameBasedOnSortByField(String sortByField) throws IOException { 
+  private String getOutputFileNameBasedOnSortByField(String sortByField) throws IOException {
     if(sortByField.equals(SORT_BY_NAME)) { 
       return "DATA_" + SORT_BY_NAME;
     }
@@ -74,7 +74,7 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
     throw new IOException(sortByField +" is an INVALID SORT FIELD");
   }
   
-  private final String getMergedResultsFileName() { 
+  private String getMergedResultsFileName() {
     return "DATA_" + SORT_BY_NAME;
   }
   

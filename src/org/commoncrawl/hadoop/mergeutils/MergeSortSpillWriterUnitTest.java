@@ -58,7 +58,7 @@ public class MergeSortSpillWriterUnitTest {
 
   static abstract class BaseTest {
 
-    private static final String keyForNumber(int number) {
+    private static String keyForNumber(int number) {
       // establish pattern start location
       int patternStartIdx = number % 26;
       // establish pattern size ...
@@ -74,7 +74,7 @@ public class MergeSortSpillWriterUnitTest {
       return buffer.toString();
     }
 
-    private static final void swap(int[] arr, int i, int j) {
+    private static void swap(int[] arr, int i, int j) {
       int tmp = arr[i];
       arr[i] = arr[j];
       arr[j] = tmp;

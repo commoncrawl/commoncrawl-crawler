@@ -289,7 +289,7 @@ public class SequenceFileMerger<KeyType extends WritableComparable, ValueType ex
   }
 
   // do a binary search in the map to find the right value
-  private final MergeResultSegment<KeyType, ValueType> _findInsertionPos(
+  private MergeResultSegment<KeyType, ValueType> _findInsertionPos(
       MergeResultSegment<KeyType, ValueType> searchSegment, MergeResultSegment<KeyType, ValueType>[] array,
       int arrayCount) throws IOException {
 
@@ -356,7 +356,7 @@ public class SequenceFileMerger<KeyType extends WritableComparable, ValueType ex
    * @param array
    * @param list
    */
-  private final void addItemsToArray(MergeResultSegment<KeyType, ValueType>[] array,
+  private void addItemsToArray(MergeResultSegment<KeyType, ValueType>[] array,
       IntrusiveList<MergeResultSegment<KeyType, ValueType>> list) {
     MergeResultSegment<KeyType, ValueType> current = list.getHead();
     int pos = 0;

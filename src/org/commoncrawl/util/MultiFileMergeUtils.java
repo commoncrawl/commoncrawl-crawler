@@ -637,7 +637,7 @@ public class MultiFileMergeUtils {
       _validStreams = 0;
     }
 
-    private final void sortStreams() { 
+    private void sortStreams() {
 
       if (_rawComparator != null) { 
         Arrays.sort(_inputs,0,_validStreams,new Comparator<InputSource>() {

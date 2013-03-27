@@ -128,7 +128,7 @@ public class JVector extends JCompType {
     	genMergeOrClone(false, cb, type, targetField, sourceField);
     }
 
-    private final void genMergeOrClone(boolean isClone,CodeBuffer cb,String type, String targetField, String sourceField) {
+    private void genMergeOrClone(boolean isClone,CodeBuffer cb,String type, String targetField, String sourceField) {
     	
     	cb.append("//Deep Copy Vector\n");
     	

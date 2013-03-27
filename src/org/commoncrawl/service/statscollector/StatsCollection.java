@@ -185,7 +185,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
     });
   }
 
-  private final void truncateEvents(final Hour newEventTime) {
+  private void truncateEvents(final Hour newEventTime) {
     final long newEventSerialIndex = newEventTime.getSerialIndex();
     // create a filtered set 
     Hour hoursToRemove[]  = Sets.filter(_hourlyValues.keySet(), new Predicate<Hour>() {
@@ -212,7 +212,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
     }
   }
   
-  private final void flushPreviosuDaysEvents(final Day dayToFlush) throws IOException { 
+  private void flushPreviosuDaysEvents(final Day dayToFlush) throws IOException {
         
     // flush previous days event to disk
     Set<Map.Entry<Hour,ValueType>> previousDaysEvents = Sets.filter(_hourlyValues.entries(), new Predicate<Map.Entry<Hour,ValueType>>() {
@@ -237,7 +237,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
     }
   }
   
-  private final void updateEventTimes(Hour newestEventTime) { 
+  private void updateEventTimes(Hour newestEventTime) {
     // update event times 
     if (_highestEventTime == null ) { 
       _lowestEventTime = newestEventTime;
@@ -297,7 +297,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
   
  
   
-  private final void writeToSequentialEventLog(final long timestamp,ValueType value) throws IOException { 
+  private void writeToSequentialEventLog(final long timestamp,ValueType value) throws IOException {
     final Buffer buffer = valueTypeToBuffer(value);
     BytesWritable dataOut = new BytesWritable(buffer.get());
     dataOut.setSize(buffer.getCount());
@@ -320,7 +320,7 @@ public abstract class StatsCollection<ValueType extends Comparable> {
    * @param day
    * @param finalValue
    */
-  private final void writeToDailyEventLog(final Day day,final ValueType finalValue) throws IOException { 
+  private void writeToDailyEventLog(final Day day,final ValueType finalValue) throws IOException {
     final Buffer buffer = valueTypeToBuffer(finalValue);
     BytesWritable dataOut = new BytesWritable(buffer.get());
     dataOut.setSize(buffer.getCount());

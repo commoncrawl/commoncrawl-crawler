@@ -507,7 +507,7 @@ public class SlaveServer
     sendStatusResponse(rpcContext);
   }
  
-  private final void failRequest(AsyncContext<? extends RPCStruct,? extends RPCStruct> rpcContext,String reason) { 
+  private void failRequest(AsyncContext<? extends RPCStruct,? extends RPCStruct> rpcContext,String reason) {
     LOG.info("failRequest called");
     // not good... time to fail the request ... 
     rpcContext.setStatus(AsyncRequest.Status.Error_RequestFailed);

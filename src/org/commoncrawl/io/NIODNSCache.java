@@ -904,7 +904,7 @@ public class NIODNSCache {
     }
   }
 
-  private synchronized final void dumpStats() {
+  private synchronized void dumpStats() {
     LOG.info("Nodes Count:" + numberOfNodes);
     LOG.info("Nodes Removed:" + numberOfNodesRemoved);
   }

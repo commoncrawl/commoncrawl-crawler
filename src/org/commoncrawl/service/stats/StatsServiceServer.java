@@ -74,7 +74,7 @@ public class StatsServiceServer
     return _fileSystem;
   }
   
-  private final File getLocalRoot() {
+  private File getLocalRoot() {
     return _localDataDir;
   }
   

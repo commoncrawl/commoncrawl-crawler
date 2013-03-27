@@ -1391,7 +1391,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   }
   
   /** get total request count **/
-  private final int getTotalFailureCount() {
+  private int getTotalFailureCount() {
     if (getActiveDomain() != null)
       return getActiveDomain()._HTTP400Count + getActiveDomain()._HTTP500Count;
     return 0;
@@ -1790,7 +1790,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   public boolean robotsRetrieved() { return _robotsRetrieved; }
  
   /** */
-  private final int getCrawlDelay(boolean checkForOverride) { 
+  private int getCrawlDelay(boolean checkForOverride) {
     
     if (checkForOverride) { 
       CrawlTarget potentialTarget = getNextPending(false);

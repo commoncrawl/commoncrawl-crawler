@@ -298,7 +298,7 @@ public class NIOHttpConnectionUnitTest implements NIOHttpConnection.Listener {
 
   }
 
-  private final void run() {
+  private void run() {
 
     long startTime = System.currentTimeMillis();
 

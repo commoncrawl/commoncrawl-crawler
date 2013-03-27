@@ -465,7 +465,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     _cookieStore = cookieStore;
   }
 
-  private final void _buildAndWriteRequestHeader() throws IOException {
+  private void _buildAndWriteRequestHeader() throws IOException {
 
     if (_populateDefaultHeaderItems) {
 
@@ -1526,7 +1526,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     _resolvedCName = optionalCName;
   }
 
-  private final void setState(State newState, Exception e) {
+  private void setState(State newState, Exception e) {
 
     long currentTime = System.currentTimeMillis();
 

@@ -500,7 +500,7 @@ public final class ArcFileReader extends InflaterInputStream implements
    * @throws IOException
    *           if error occurs
    */
-  private final int getARCFileStreamPos() throws IOException {
+  private int getARCFileStreamPos() throws IOException {
     PushbackInputStream in = (PushbackInputStream) this.in;
     return _streamPos - in.available();
   }
@@ -554,7 +554,7 @@ public final class ArcFileReader extends InflaterInputStream implements
       _item = itemToConstruct;
     }
 
-    private final boolean checkForCRLFTerminator(byte matchingChar) {
+    private boolean checkForCRLFTerminator(byte matchingChar) {
       if (matchingChar == '\n') {
         switch (matchCount) {
           case 1:
@@ -582,7 +582,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     /** check for terminator pattern **/
-    private final boolean checkForTerminator(byte matchingChar) {
+    private boolean checkForTerminator(byte matchingChar) {
 
       boolean terminatorFound = false;
 
@@ -668,7 +668,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     /** construct a single line from the current input state **/
-    private final String readLine(Charset charset) throws IOException {
+    private String readLine(Charset charset) throws IOException {
 
       BufferedReader reader = new BufferedReader(readerFromScanBufferList(
           _buffers, charset));
@@ -677,7 +677,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     /** process the metadata line of an ARC File Entry **/
-    private final void processMetadataLine(String metadata) throws IOException {
+    private void processMetadataLine(String metadata) throws IOException {
 
       StringTokenizer tokenizer = new StringTokenizer(metadata, " ");
       int tokenCount = 0;
@@ -726,7 +726,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     /** extract http headers from the current input state **/
-    private final void processHeaders() throws IOException {
+    private void processHeaders() throws IOException {
 
       BufferedReader reader = new BufferedReader(readerFromScanBufferList(
           _buffers, ArcFileBuilder.UTF8_Charset));
@@ -771,7 +771,7 @@ public final class ArcFileReader extends InflaterInputStream implements
     }
 
     /** transition from the current input state to the next input state **/
-    private final void transitionState() throws IOException {
+    private void transitionState() throws IOException {
 
       switch (_state) {
 

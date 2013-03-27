@@ -504,7 +504,7 @@ public class Frame {
       write((byte) fieldCount);
     }
 
-    private final void writeInt(int v) {
+    private void writeInt(int v) {
 
       // fixed length for integer types so, no need to encode length ...
       write((v >>> 24) & 0xFF);

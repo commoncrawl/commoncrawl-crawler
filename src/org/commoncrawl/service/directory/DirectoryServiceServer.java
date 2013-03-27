@@ -282,7 +282,7 @@ public class DirectoryServiceServer
     }
   }
 
-  private static final Path buildFullUserItemPath(String itemName,long versionNumber) { 
+  private static Path buildFullUserItemPath(String itemName,long versionNumber) {
     return new Path(USER_DATA_ROOT_PATH + itemName + "$" + Long.toString(versionNumber));
   }
 
@@ -461,7 +461,7 @@ public class DirectoryServiceServer
     return itemOut;
   }
   
-  private final void processSystemFiles() throws IOException  { 
+  private void processSystemFiles() throws IOException  {
     for (DirectoryServiceItem item : _systemItems.values()) { 
       if (item.getItemPath().equals(IN_MEMORYPATHS_FILE)) { 
         processInMemoryPathsFile(item.getItemData().getReadOnlyBytes());
@@ -470,7 +470,7 @@ public class DirectoryServiceServer
     _systemItems.clear();
   }
   
-  private final void processInMemoryPathsFile(byte[] inMemoryFileData)throws IOException { 
+  private void processInMemoryPathsFile(byte[] inMemoryFileData)throws IOException {
     CharBuffer charBuf = Charset.forName("UTF8").decode(ByteBuffer.wrap(inMemoryFileData));
     BufferedReader reader = new BufferedReader(new CharArrayReader(charBuf.array(),0,charBuf.limit()));
     

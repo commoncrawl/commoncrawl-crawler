@@ -325,7 +325,7 @@ public final class CrawlHostImpl implements CrawlListHost, CrawlQueueHost {
   }
   
   
-  private final CrawlList getHead() { 
+  private CrawlList getHead() {
     return _crawlLists.getHead();
   }
   
@@ -540,7 +540,7 @@ public final class CrawlHostImpl implements CrawlListHost, CrawlQueueHost {
  
   private static SimpleDateFormat _formatter = new SimpleDateFormat("yyyy.MM.dd 'at' hh:mm:ss z");
   
-  private static final String dateStringFromTimeValue(long timeValue) { 
+  private static String dateStringFromTimeValue(long timeValue) {
     
     if (timeValue != -1) { 
       Date theDate = new Date(timeValue);

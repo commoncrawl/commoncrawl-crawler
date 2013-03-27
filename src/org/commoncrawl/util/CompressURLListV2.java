@@ -366,7 +366,7 @@ public class CompressURLListV2 {
         return (WritableUtils.isNegativeVInt(firstByte) ? (i ^ -1L) : i);
       }
 
-      private static final byte[] decompressBytes(ByteBuffer buffer,
+      private static byte[] decompressBytes(ByteBuffer buffer,
           int decompressedBufferSize) throws IOException {
         Configuration conf = new Configuration();
         conf.setInt("io.file.buffer.size", DATA_BLOCK_SIZE);
@@ -395,7 +395,7 @@ public class CompressURLListV2 {
         }
       }
 
-      private static final TextBytes decodeURL(byte[] decompressedBytes,
+      private static TextBytes decodeURL(byte[] decompressedBytes,
           int urlDataPos, int urlDataLength) throws IOException {
 
         // allocate a buffer

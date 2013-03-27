@@ -35,7 +35,7 @@ public class NIOBufferOutputStream extends OutputStream {
     _target = buffer;
   }
 
-  private final int capacity() {
+  private int capacity() {
     return (_buffer != null) ? _buffer.remaining() : 0;
   }
 
@@ -49,7 +49,7 @@ public class NIOBufferOutputStream extends OutputStream {
     _target.flush();
   }
 
-  private final void grow() throws IOException {
+  private void grow() throws IOException {
     synchronized (this) {
 
       if (_buffer != null) {

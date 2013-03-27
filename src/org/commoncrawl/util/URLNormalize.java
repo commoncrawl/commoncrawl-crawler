@@ -55,7 +55,7 @@ public class URLNormalize {
     return url;
   }
   
-  private static final String  tweakURL(boolean normalize,String url) { 
+  private static String  tweakURL(boolean normalize,String url) {
     
     boolean modify = false;
     

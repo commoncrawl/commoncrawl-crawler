@@ -281,15 +281,15 @@ public class CrawlHistoryServer extends CommonCrawlServer
   }
 
   
-  private final Path getDataFileBasePath() { 
+  private Path getDataFileBasePath() {
     return new Path(CrawlEnvironment.HDFS_HistoryServerBase,getHostName());
   }
   
-  private final Path getDataFileFinalPath() { 
+  private Path getDataFileFinalPath() {
     return new Path(CrawlEnvironment.HDFS_HistoryServerBase,getHostName()+".data");
   }
 
-  private final Path getDataFileCheckpointPath() { 
+  private Path getDataFileCheckpointPath() {
     return new Path(CrawlEnvironment.HDFS_HistoryServerBase,getHostName()+".checkpoint");
   }
     

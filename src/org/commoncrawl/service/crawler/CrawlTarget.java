@@ -572,15 +572,15 @@ public final class CrawlTarget extends
     _sourceList.fetchStarted(this);
   }
 
-  private final EventLoop getEventLoop() {
+  private EventLoop getEventLoop() {
     return getServer().getEventLoop();
   }
 
-  private final CommonCrawlServer getServer() {
+  private CommonCrawlServer getServer() {
     return getEngine().getServer();
   }
 
-  private final CrawlerEngine getEngine() {
+  private CrawlerEngine getEngine() {
     return CrawlerServer.getEngine();
   }
 

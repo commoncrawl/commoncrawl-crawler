@@ -325,19 +325,19 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     }
   }
   
-  private final void requeueDownloadItem(S3DownloadItem item) { 
+  private void requeueDownloadItem(S3DownloadItem item) {
     synchronized (_queuedItems) {
       _queuedItems.addLast(item);
     }
   }
   
-  private final void resetConnection(NIOHttpConnection theConnection) { 
+  private void resetConnection(NIOHttpConnection theConnection) {
     theConnection.close();
     theConnection.setListener(null);
     theConnection.setContext(null);
     _activeConnections.remove(theConnection);
   }
-  private final void failDownload(S3DownloadItem item,NIOHttpConnection.ErrorType errorType,NIOHttpConnection theConnection,boolean potentiallyRetry) { 
+  private void failDownload(S3DownloadItem item,NIOHttpConnection.ErrorType errorType,NIOHttpConnection theConnection,boolean potentiallyRetry) {
     
     int resultCode = -1;
     
@@ -369,7 +369,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     }
   }
   
-  private final void completeDownload(S3DownloadItem item,NIOHttpConnection theConnection) { 
+  private void completeDownload(S3DownloadItem item,NIOHttpConnection theConnection) {
 
     if (item != null) { 
       if (_callback != null) { 

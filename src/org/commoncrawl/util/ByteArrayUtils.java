@@ -52,7 +52,7 @@ public class ByteArrayUtils {
    * Computes the failure function using a boot-strapping process, where the
    * pattern is matched against itself.
    */
-  private static final int[] computeFailure(byte[] pattern) {
+  private static int[] computeFailure(byte[] pattern) {
     int[] failure = new int[pattern.length];
 
     int j = 0;

@@ -107,7 +107,7 @@ public class NutchStringUtil {
     return res;
   }
   
-  private static final int charToNibble(char c) {
+  private static int charToNibble(char c) {
     if (c >= '0' && c <= '9') {
       return c - '0';
     } else if (c >= 'a' && c <= 'f') {

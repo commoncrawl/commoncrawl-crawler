@@ -627,7 +627,7 @@ public class CacheManager {
   
   
   // shrink the log file by the desired amount and update the header 
-  private final void flushLocalLog(final long bytesToRemove,final int itemsToRemove,final List<FingerprintAndOffsetTuple> flushedTupleList,final ArrayList<IndexDataFileTriple> tempFileTriples) {
+  private void flushLocalLog(final long bytesToRemove,final int itemsToRemove,final List<FingerprintAndOffsetTuple> flushedTupleList,final ArrayList<IndexDataFileTriple> tempFileTriples) {
     
     
     LOG.info("Acquiring Log Access Semaphores");

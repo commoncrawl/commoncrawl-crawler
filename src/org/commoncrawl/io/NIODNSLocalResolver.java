@@ -768,7 +768,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
   }
 
   /** lookup default nameserver **/
-  private final void lookupNameServer() {
+  private void lookupNameServer() {
     String server = ResolverConfig.getCurrentConfig().server();
     if (server != null) {
       LOG.info("Using NameServer:" + server);

@@ -39,7 +39,7 @@ public class CrawlStatsCollectorService
     return _fileSystem;
   }
   
-  private final File getLocalRoot() {
+  private File getLocalRoot() {
     return _localDataDir;
   }
   

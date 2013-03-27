@@ -95,7 +95,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
   // sort / spill process
   public static final String SPILL_DATA_BUFFER_SIZE_PARAM = "commoncrawl.spill.databuffer.size";
 
-  private static final int compareUsingRawComparator(RawKeyValueComparator comparator, byte[] keyValueData1,
+  private static int compareUsingRawComparator(RawKeyValueComparator comparator, byte[] keyValueData1,
       int offset1, byte[] keyValueData2, int offset2) throws IOException {
 
     ByteBuffer buffer = ByteBuffer.wrap(keyValueData1);
@@ -353,7 +353,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
     }
   }
 
-  private final int compareUsingOptimizedRawBufferValues(byte[] dataAsBytes, int lValueDataOffset, int rValueDataOffset)
+  private int compareUsingOptimizedRawBufferValues(byte[] dataAsBytes, int lValueDataOffset, int rValueDataOffset)
       throws IOException {
     int buffer1Len = _spillDataBuffer.getInt(lValueDataOffset);
     int buffer2Len = _spillDataBuffer.getInt(rValueDataOffset);
@@ -364,7 +364,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
         dataAsBytes, rValueDataOffset + buffer2Offset, buffer2Len);
   }
 
-  private final int compareUsingOptimizedRawLongAndBufferValues(byte[] dataAsBytes, int lValueDataOffset,
+  private int compareUsingOptimizedRawLongAndBufferValues(byte[] dataAsBytes, int lValueDataOffset,
       int rValueDataOffset) throws IOException {
     final long lValue = _spillDataBuffer.getLong(lValueDataOffset);
     final long rValue = _spillDataBuffer.getLong(rValueDataOffset);
@@ -434,7 +434,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
    * Returns the index of the median of the three elements using optimized
    * buffer key comparator.
    */
-  private final int med3UsingOptimizedComparatorWithBuffer(byte[] spillData, int x[], int a, int b, int c)
+  private int med3UsingOptimizedComparatorWithBuffer(byte[] spillData, int x[], int a, int b, int c)
       throws IOException {
 
     return (compareUsingOptimizedRawBufferValues(spillData, x[a], x[b]) < 0 ? // x[a]
@@ -453,7 +453,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
   /**
    * Returns the index of the median of the three indexed longs.
    */
-  private final int med3UsingOptimizedComparatorWithLongs(int x[], int a, int b, int c) throws IOException {
+  private int med3UsingOptimizedComparatorWithLongs(int x[], int a, int b, int c) throws IOException {
 
     long aValue = _spillDataBuffer.getLong(x[a]);
     long bValue = _spillDataBuffer.getLong(x[b]);
@@ -467,7 +467,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
    * Returns the index of the median of the three elements using optimized long
    * and buffer key comparator.
    */
-  private final int med3UsingOptimizedComparatorWithLongsAndBuffer(byte[] spillData, int x[], int a, int b, int c)
+  private int med3UsingOptimizedComparatorWithLongsAndBuffer(byte[] spillData, int x[], int a, int b, int c)
       throws IOException {
 
     return (compareUsingOptimizedRawLongAndBufferValues(spillData, x[a], x[b]) < 0 ? // x[a]
@@ -498,7 +498,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
    * Returns the index of the median of the three elements using raw key
    * comparator.
    */
-  private final int med3UsingRawComparator(byte[] spillData, int x[], int a, int b, int c) throws IOException {
+  private int med3UsingRawComparator(byte[] spillData, int x[], int a, int b, int c) throws IOException {
 
     return (compareUsingRawComparator(_comparator, spillData, x[a], spillData, x[b]) < 0 ? // x[a]
                                                                                            // <

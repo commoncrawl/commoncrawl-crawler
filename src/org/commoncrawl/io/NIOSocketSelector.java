@@ -312,7 +312,7 @@ public class NIOSocketSelector {
     return count;
   }
 
-  private final void processPendingRegistrations() {
+  private void processPendingRegistrations() {
     synchronized (_pendingRegistrations) {
       if (_pendingRegistrations.size() != 0) {
         for (PendingRegistration registration : _pendingRegistrations.values()) {

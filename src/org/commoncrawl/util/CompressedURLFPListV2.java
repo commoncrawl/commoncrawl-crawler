@@ -349,7 +349,7 @@ public class CompressedURLFPListV2 {
       return _flags;
     }
 
-    private final void readURLFPFlagStates(int urlCount) throws IOException {
+    private void readURLFPFlagStates(int urlCount) throws IOException {
       // read first byte ...
       byte firstByte = _din.readByte();
       if (firstByte != 0) {
@@ -374,7 +374,7 @@ public class CompressedURLFPListV2 {
       }
     }
 
-    private final void readLinkCountStates(int urlCount) throws IOException {
+    private void readLinkCountStates(int urlCount) throws IOException {
       // read first byte ...
       byte firstByte = _din.readByte();
       if (firstByte != 0) {

@@ -752,7 +752,7 @@ public class XMLWriter
     }
 
     // XHTML elements declared as EMPTY print differently
-    final private static boolean isEmptyElementTag (String tag)
+    private static boolean isEmptyElementTag (String tag)
     {
   switch (tag.charAt (0)) {
     case 'a': return "area".equals (tag);

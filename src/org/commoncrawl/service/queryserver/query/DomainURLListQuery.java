@@ -67,7 +67,7 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
     setQueryData(queryInfo);
   }  
   
-  private final String getURLOutputFileNameBasedOnSortByField(String sortByField) throws IOException { 
+  private String getURLOutputFileNameBasedOnSortByField(String sortByField) throws IOException {
     if(sortByField.length() == 0 || sortByField.equals(SORT_BY_NAME)) { 
       return "DATA_" + SORT_BY_NAME;
     }
@@ -83,7 +83,7 @@ public class DomainURLListQuery extends Query<DomainURLListQueryInfo,URLFPV2,Cra
     throw new IOException(sortByField +" is an INVALID SORT FIELD");
   }
   
-  private final String getSharedOutputFileNameBasedOnSortByAndShardId(String sortByField,int shardId) throws IOException { 
+  private String getSharedOutputFileNameBasedOnSortByAndShardId(String sortByField,int shardId) throws IOException {
   	if (sortByField == null) { 
   		throw new IOException("Invalid Sort By Field");
   	}

@@ -119,7 +119,7 @@ public class RecordStore {
    * @return true if tables actually created
    * @throws RecordStoreException
    */
-  private final void createTables()throws RecordStoreException {
+  private void createTables()throws RecordStoreException {
     Stmt stmt = null;
     
       try { 
@@ -180,7 +180,7 @@ public class RecordStore {
       }
   }
   
-  private synchronized final void queryMetadata() throws RecordStoreException { 
+  private synchronized void queryMetadata() throws RecordStoreException {
     try { 
  
       // query the master table ...
@@ -212,7 +212,7 @@ public class RecordStore {
       throw wrapSQLiteException(e);
     }
   }
-  private synchronized final boolean checkTables()throws RecordStoreException {
+  private synchronized boolean checkTables()throws RecordStoreException {
     
     SQLite.TableResult result = null;
     
@@ -609,7 +609,7 @@ public class RecordStore {
   
   static String org_crawlcommons = "org.crawlcommons";
 
-  private synchronized final RPCStruct getRecordByKeyOrId(String key,long recordId) throws RecordStoreException  { 
+  private synchronized RPCStruct getRecordByKeyOrId(String key,long recordId) throws RecordStoreException  {
 
 	  String strSQL;
 	  
@@ -743,7 +743,7 @@ public class RecordStore {
       }
       return children;
   }
-  private final synchronized void validateTransaction() throws RecordStoreException { 
+  private synchronized void validateTransaction() throws RecordStoreException {
     if (_txnState == null || _txnState._activeThread != Thread.currentThread()) {
       throw new RecordStoreException("Invalid State.No current Transaction or Txn opened in another thread.");
     }

@@ -623,7 +623,7 @@ public class PageRankSlaveServer  extends CommonCrawlServer implements PageRankS
     sendStatusResponse(rpcContext);
   }
  
-  private final void failRequest(AsyncContext<? extends RPCStruct,? extends RPCStruct> rpcContext,String reason) { 
+  private void failRequest(AsyncContext<? extends RPCStruct,? extends RPCStruct> rpcContext,String reason) {
     // not good... time to fail the request ... 
     rpcContext.setStatus(AsyncRequest.Status.Error_RequestFailed);
     rpcContext.setErrorDesc(reason);

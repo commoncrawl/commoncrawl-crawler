@@ -782,7 +782,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     
     
     /** check for terminator pattern **/
-    private final boolean checkForTerminator() { 
+    private boolean checkForTerminator() {
       
       boolean terminatorFound = false;
       
@@ -868,7 +868,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     }
     
     /** construct a single line from the current input state **/
-    private final String readLine(Charset charset) throws IOException {
+    private String readLine(Charset charset) throws IOException {
       
       BufferedReader reader = new BufferedReader(readerFromScanBufferList(_buffers, charset));
       
@@ -877,7 +877,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     
     
     /** process the metadata line of an ARC File Entry **/
-    private final void processMetadataLine(String metadata)throws IOException {
+    private void processMetadataLine(String metadata)throws IOException {
       
       //LOG.info("Metadata line is:" + metadata);
       StringTokenizer tokenizer = new StringTokenizer(metadata," ");
@@ -929,7 +929,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     }
     
     /** extract http headers from the current input state **/
-    private final void processHeaders() throws IOException { 
+    private void processHeaders() throws IOException {
 
       BufferedReader reader = new BufferedReader(readerFromScanBufferList(_buffers,ArcFileBuilder.UTF8_Charset));
       
@@ -970,7 +970,7 @@ public final class StreamingArcFileReader implements NIODataSink  {
     }
     
     /** transition from the current input state to the next  input state **/
-    private final void transitionState()throws IOException { 
+    private void transitionState()throws IOException {
       
       switch (_state) {
       
