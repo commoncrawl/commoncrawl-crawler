@@ -179,7 +179,7 @@ public class BandwidthUtils {
      * take in bytes available and based on desired rate limit return adjusted
      * bytes available
      * 
-     * @param bytesAvilable
+     * @param byteAvailable
      * @return
      */
     public int checkRateLimit(int byteAvailable) {
@@ -193,7 +193,7 @@ public class BandwidthUtils {
         _bytesAccumulated = 0;
       }
 
-      // now calulate bandwidth available
+      // now calculate bandwidth available
       return Math.min((_desiredBandwidthBytes - _bytesAccumulated),
           byteAvailable);
     }
