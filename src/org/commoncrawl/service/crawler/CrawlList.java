@@ -138,7 +138,7 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
   private long   _uniqueListId;
   /** next crawl interface used to service this list **/
   private int    _nextCrawlInterface = 0;
-  /** cumilative list of crawl targets associated with this queue ...*/ 
+  /** cumulative list of crawl targets associated with this queue ...*/
   private IntrusiveList<CrawlTarget> _pending = new IntrusiveList<CrawlTarget>();
   /** list of crawl targets directly scheduled for disk queue */
   private IntrusiveList<CrawlTarget> _queued = new IntrusiveList<CrawlTarget>();

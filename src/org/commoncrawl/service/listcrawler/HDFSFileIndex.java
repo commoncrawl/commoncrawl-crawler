@@ -405,9 +405,9 @@ public class HDFSFileIndex {
       
 
       if (hintIdx < hints.size() - 1) { 
-        // track cumilative delta and offset values (for average calc later)
-        double cumilativeDelta = 0;
-        long cumilativeOffset  =0;
+        // track cumulative delta and offset values (for average calc later)
+        double cumulativeDelta = 0;
+        long cumulativeOffset = 0;
         
         int  subIndexItemCount = 0;
         int  nonZeroDeltaCount = 0;
@@ -430,12 +430,12 @@ public class HDFSFileIndex {
   
           if (fingerprintDelta != 0) { 
             
-            cumilativeDelta += (double) fingerprintDelta;
-            LOG.info("Cumilative Delta is:" + cumilativeDelta);
+            cumulativeDelta += (double) fingerprintDelta;
+            LOG.info("Cumulative Delta is:" + cumulativeDelta);
             nonZeroDeltaCount++;
           }
           
-          cumilativeOffset += offsetInfo.get(nonIndexItem)._offset; 
+          cumulativeOffset += offsetInfo.get(nonIndexItem)._offset;
           
           ++subIndexItemCount;
           
@@ -450,12 +450,12 @@ public class HDFSFileIndex {
         }
           
         // calculate average delta value 
-        double averageDeltaValue = (double)cumilativeDelta / (double)nonZeroDeltaCount;
+        double averageDeltaValue = (double)cumulativeDelta / (double)nonZeroDeltaCount;
         // calculate m for fingerprint deltas 
         int mForFingerprints =  (int) Math.floor(lg(averageDeltaValue));
         LOG.info("Average Delta Value is:" + averageDeltaValue + " m is:" + mForFingerprints);
         // cacluldate average offset value 
-        double averageOffsetValue = (double)cumilativeOffset/ (double)subIndexItemCount;
+        double averageOffsetValue = (double)cumulativeOffset/ (double)subIndexItemCount;
         // calculate m for offsets 
         int mForOffsets =  (int) Math.floor(lg(averageOffsetValue));
         

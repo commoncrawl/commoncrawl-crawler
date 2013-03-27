@@ -81,7 +81,7 @@ public class SequenceFileReader<KeyType extends WritableComparable, ValueType ex
 
   @SuppressWarnings("unchecked")
   public void readAndSpill() throws IOException {
-    long cumilativeReadTimeStart = System.currentTimeMillis();
+    long cumulativeReadTimeStart = System.currentTimeMillis();
 
     for (Path sequenceFilePath : _inputSegments) {
 
@@ -126,7 +126,7 @@ public class SequenceFileReader<KeyType extends WritableComparable, ValueType ex
         }
       }
     }
-    // LOG.info("Cumilative Read and Spill took:" + (System.currentTimeMillis()
-    // - cumilativeReadTimeStart) + " Spilled RecordCount:" + _recordCount);
+    // LOG.info("Cumulative Read and Spill took:" + (System.currentTimeMillis()
+    // - cumulativeReadTimeStart) + " Spilled RecordCount:" + _recordCount);
   }
 }

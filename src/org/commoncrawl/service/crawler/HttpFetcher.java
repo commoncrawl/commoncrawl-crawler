@@ -95,16 +95,16 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
   private int 		   sendingCount = 0;
   private int		   receivingCount = 0;
 
-  private long    cumilativeURLCount = 0;
+  private long cumulativeURLCount = 0;
   private long    firstSnapShotTime = -1;
   private int       snapShotURLCount = 0;
   private int       snapShotConnectionCount = 0;
   private long    snapShotTime = -1;
-  private long    cumilativeURLSSEC = 0;
+  private long cumulativeURLSSEC = 0;
 
   private int       snapShotCount = 0;
   private long    snapShotDownloadAmt = 0;
-  private long    cumilativeDownloadPerSec = 0;
+  private long cumulativeDownloadPerSec = 0;
 
   private MovingAverage _urlsPerSecMovingAverage;
   private MovingAverage _kbPerSecMovingAverage;
@@ -646,8 +646,8 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
               if (snapShotTime != -1) { 
                 // increment snapshot stats ... 
                 snapShotURLCount++;
-                // increment cumilative number 
-                cumilativeURLCount++;
+                // increment cumulative number
+                cumulativeURLCount++;
               }
 
               // handle redirects ... 
@@ -837,18 +837,18 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
       _urlsPerSecMovingAverage.addSample(urlsPerSecond);
       _urlsPerSecSmoothed.addSample(urlsPerSecond);
 
-      cumilativeURLSSEC += urlsPerSecond;
+      cumulativeURLSSEC += urlsPerSecond;
       snapShotCount += 1;
 
-      bytesSnapShot = (int) (NIOHttpConnection.getCumilativeBytesRead() - this.snapShotDownloadAmt);
-      snapShotDownloadAmt = NIOHttpConnection.getCumilativeBytesRead();
+      bytesSnapShot = (int) (NIOHttpConnection.getCumulativeBytesRead() - this.snapShotDownloadAmt);
+      snapShotDownloadAmt = NIOHttpConnection.getCumulativeBytesRead();
 
       bytesPerSec =( (double)bytesSnapShot / ((double)millisecondsElapsed / 1000.00));
 
       _kbPerSecMovingAverage.addSample(bytesPerSec / 1000.00);
       _kbPerSecSmoothed.addSample(bytesPerSec / 1000.00);
 
-      cumilativeDownloadPerSec += bytesPerSec;
+      cumulativeDownloadPerSec += bytesPerSec;
     }
     snapShotTime = curTime;
     if (firstSnapShotTime == -1)
@@ -933,8 +933,8 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
     sb.append("]");
 
     stats.setStringValue(CrawlerEngineStats.ID,CrawlerEngineStats.Name.HTTPFetcher_ConnectionMap,sb.toString());
-    stats.setLongValue(CrawlerEngineStats.ID,CrawlerEngineStats.Name.HTTPFetcher_CumilativeKBytesIN, NIOHttpConnection.getCumilativeBytesRead() / 1000);
-    stats.setLongValue(CrawlerEngineStats.ID,CrawlerEngineStats.Name.HTTPFetcher_CumilativeKBytesOUT, NIOHttpConnection.getCumilativeBytesWritten() / 1000);
+    stats.setLongValue(CrawlerEngineStats.ID,CrawlerEngineStats.Name.HTTPFetcher_CumilativeKBytesIN, NIOHttpConnection.getCumulativeBytesRead() / 1000);
+    stats.setLongValue(CrawlerEngineStats.ID,CrawlerEngineStats.Name.HTTPFetcher_CumilativeKBytesOUT, NIOHttpConnection.getCumulativeBytesWritten() / 1000);
 
   }
 

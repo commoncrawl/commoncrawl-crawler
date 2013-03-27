@@ -220,7 +220,7 @@ public class CompressedIndex {
       CRC32 crc = new CRC32();
       DataOutputStream checkedOutputStream = new DataOutputStream(
           new CheckedOutputStream(indexStream, new CRC32()));
-      // write out cumilative length
+      // write out cumulative length
       indexStream.writeInt(blockIndexPosStream.getLength()
           + blockIndexDataStream.getLength());
       // write out data via checked stream

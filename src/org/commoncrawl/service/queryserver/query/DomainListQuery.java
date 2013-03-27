@@ -434,10 +434,10 @@ public class DomainListQuery extends Query<DomainListQueryInfo,Text,SubDomainMet
   				throw e;
   			}
   		}
-  		long cumilativeRecordCount = 0L;
+  		long cumulativeRecordCount = 0L;
   		for (long recordCount : recordCounts)
-  			cumilativeRecordCount += recordCount;
-      return cumilativeRecordCount;
+  			cumulativeRecordCount += recordCount;
+      return cumulativeRecordCount;
   }
   
   @Override

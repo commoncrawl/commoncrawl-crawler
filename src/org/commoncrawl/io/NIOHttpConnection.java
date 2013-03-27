@@ -156,14 +156,14 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   private static final int HTTP_STATUS_LINE_SLOP = 4;
   private static byte[] httpStr = { 'h', 't', 't', 'p' };
 
-  /** cumilative bytes read **/
-  public static long getCumilativeBytesRead() {
-    return _cumilativeRead;
+  /** cumulative bytes read **/
+  public static long getCumulativeBytesRead() {
+    return _cumulativeRead;
   }
 
-  /** cumilative byte written */
-  public static long getCumilativeBytesWritten() {
-    return _cumilativeWritten;
+  /** cumulative byte written */
+  public static long getCumulativeBytesWritten() {
+    return _cumulativeWritten;
   }
 
   /** helper - get the response code given headers **/
@@ -298,10 +298,10 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   private NIOSocketSelector _selector = null;
   /** resolver to use for DNS resolution */
   private NIODNSResolver _resolver = null;
-  /** cumilative bytes read **/
-  private static long _cumilativeRead = 0;
-  /** cumilative byte written */
-  private static long _cumilativeWritten = 0;
+  /** cumulative bytes read **/
+  private static long _cumulativeRead = 0;
+  /** cumulative byte written */
+  private static long _cumulativeWritten = 0;
   /** Statistic: total bytes written */
   private int _totalWritten = 0;
   /** Statistic: total bytes read */
@@ -1345,7 +1345,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
           if (singleReadAmount > 0) {
             _inBuf.write(buffer);
             _totalRead += singleReadAmount;
-            _cumilativeRead += singleReadAmount;
+            _cumulativeRead += singleReadAmount;
             totalBytesRead += singleReadAmount;
           }
 
@@ -1685,7 +1685,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
               // dump stats ...
               // System.out.println("Connection: "+ this+"Upload Speed:" +
               // stats.scaledBitsPerSecond + " " + stats.scaledBitsUnits +
-              // " TotalWritten:" + (_cumilativeWritten + amountWritten) );
+              // " TotalWritten:" + (_cumulativeWritten + amountWritten) );
               LOG.info("Connection:[" + getId() + "] BytesOut:" + amountWritten + " Upload Speed:"
                   + stats.scaledBitsPerSecond + " " + stats.scaledBitsUnits + " TotalWritten:"
                   + (_totalWritten + amountWritten));
@@ -1696,10 +1696,10 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
           throw exception;
         }
         _totalWritten += amountWritten;
-        _cumilativeWritten += amountWritten;
+        _cumulativeWritten += amountWritten;
 
         // System.out.println("NIOHttpConnection->wrote:" + amountWritten +
-        // "Bytes TotalWritten:" + _cumilativeWritten);
+        // "Bytes TotalWritten:" + _cumulativeWritten);
 
         if (bufferToWrite.remaining() > 0) {
           _outBuf.putBack(bufferToWrite);
