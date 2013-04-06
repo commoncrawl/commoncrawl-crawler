@@ -50,7 +50,7 @@ import org.apache.log4j.Layout;
 import org.apache.log4j.spi.LoggingEvent;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.io.DNSQueryResult;
+import org.commoncrawl.io.NIODNSQueryResult;
 import org.commoncrawl.io.NIODNSCache;
 import org.commoncrawl.io.NIODNSLocalResolver;
 import org.commoncrawl.io.NIODNSQueryClient;
@@ -431,7 +431,7 @@ implements DNSService,
       }
 
       @Override
-      public void done(NIODNSResolver eventSource,FutureTask<org.commoncrawl.io.DNSQueryResult> task) {
+      public void done(NIODNSResolver eventSource,FutureTask<org.commoncrawl.io.NIODNSQueryResult> task) {
         
         if (eventSource != null) { 
           rpcContext.getOutput().setSourceServer(((NIODNSLocalResolver)eventSource).getName());
@@ -470,7 +470,7 @@ implements DNSService,
       }
       
        
-      final DNSQueryResult cachedResult = (!skipCache) ? NIODNSLocalResolver.checkCache(queryClient, dnsName) : null;
+      final NIODNSQueryResult cachedResult = (!skipCache) ? NIODNSLocalResolver.checkCache(queryClient, dnsName) : null;
       
       if (cachedResult != null) { 
         _eventLoop.setTimer(new Timer(0,false,new Timer.Callback() {
@@ -589,7 +589,7 @@ implements DNSService,
    
     public void cancelWorkItems() { 
       LOG.info("Cancelling Work Items for Client");
-      for (Future<DNSQueryResult> task : queuedWorkItems) { 
+      for (Future<NIODNSQueryResult> task : queuedWorkItems) { 
         task.cancel(false);
       }
       queuedWorkItems.clear();
@@ -597,7 +597,7 @@ implements DNSService,
     }
     
     public AsyncClientChannel channel;
-    public LinkedList<Future<DNSQueryResult>> queuedWorkItems = new LinkedList<Future<org.commoncrawl.io.DNSQueryResult>>(); 
+    public LinkedList<Future<NIODNSQueryResult>> queuedWorkItems = new LinkedList<Future<org.commoncrawl.io.NIODNSQueryResult>>(); 
   }
   
   NIODNSLocalResolver getResolverForName(String hostName) { 

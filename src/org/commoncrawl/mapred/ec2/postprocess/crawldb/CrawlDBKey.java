@@ -165,9 +165,6 @@ public class CrawlDBKey {
       scanPos++;
     }while (scanPos <= endPos && partCount < parts.length);
     
-    if (scanPos <= endPos) { 
-      LOG.error("scanPos:" + scanPos + "<= endPos:" + endPos + " partCount:"+ partCount + " for key:" + key.toString()); 
-    }
     return partCount;
   }
   

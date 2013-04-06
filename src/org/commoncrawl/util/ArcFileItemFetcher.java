@@ -20,6 +20,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.io.NIOBufferList;
+import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.protocol.shared.ArcFileHeaderItem;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 
@@ -63,7 +64,7 @@ public class ArcFileItemFetcher {
     downloader.initialize(new S3Downloader.Callback() {
 
       @Override
-      public boolean contentAvailable(int itemId, String itemKey,NIOBufferList contentBuffer) {
+      public boolean contentAvailable(NIOHttpConnection connection,int itemId, String itemKey,NIOBufferList contentBuffer) {
         LOG.info("ContentQuery contentAvailable called for Item:" + itemKey + " totalBytesAvailable:" + contentBuffer.available());
         
         
@@ -92,7 +93,7 @@ public class ArcFileItemFetcher {
       }
 
       @Override
-      public boolean downloadStarting(int itemId, String itemKey,int contentLength) {
+      public boolean downloadStarting(int itemId, String itemKey,long contentLength) {
         LOG.info("ContentQuery DownloadStarting for Item:" + itemKey + " contentLength:" + contentLength);
         return true;
       } 

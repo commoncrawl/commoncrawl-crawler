@@ -59,4 +59,7 @@ public interface NIOSocket {
   /** set the socket listener for this object */
   void setListener(NIOSocketListener listener);
 
+  /** are reads disabled on this socket **/
+  boolean readsDisabled();
+
 }

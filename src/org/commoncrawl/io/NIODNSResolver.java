@@ -37,7 +37,7 @@ public interface NIODNSResolver {
    * @return
    * @throws IOException
    */
-  public Future<DNSQueryResult> resolve(NIODNSQueryClient client, String theHost, boolean noCache,
+  public Future<NIODNSQueryResult> resolve(NIODNSQueryClient client, String theHost, boolean noCache,
       boolean highPriorityRequest, int timeoutValue) throws IOException;
 
 }

@@ -66,7 +66,7 @@ import org.commoncrawl.async.Timer;
 import org.commoncrawl.async.ConcurrentTask.CompletionCallback;
 import org.commoncrawl.common.Environment;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.io.DNSQueryResult;
+import org.commoncrawl.io.NIODNSQueryResult;
 import org.commoncrawl.io.NIODNSCache;
 import org.commoncrawl.io.NIODNSQueryClient;
 import org.commoncrawl.io.NIODNSResolver;
@@ -1605,7 +1605,7 @@ public final class CrawlerEngine  {
           public void DNSResultsAvailable() {}
 
           @Override
-          public void done(NIODNSResolver source,FutureTask<DNSQueryResult> task) {
+          public void done(NIODNSResolver source,FutureTask<NIODNSQueryResult> task) {
           }
 
         };
@@ -2293,7 +2293,7 @@ public final class CrawlerEngine  {
         public void DNSResultsAvailable() {}
 
         @Override
-        public void done(NIODNSResolver source,FutureTask<DNSQueryResult> task) {
+        public void done(NIODNSResolver source,FutureTask<NIODNSQueryResult> task) {
         }
       };
       try {

@@ -76,17 +76,17 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     NIODNSResolver {
 
   /** custom completion service **/
-  public class DNSExecutorCompletionService implements CompletionService<DNSQueryResult> {
+  public class DNSExecutorCompletionService implements CompletionService<NIODNSQueryResult> {
 
     /**
      * FutureTask extension to enqueue upon completion
      */
-    private class QueueingFuture extends FutureTask<DNSQueryResult> {
-      QueueingFuture(Callable<DNSQueryResult> c) {
+    private class QueueingFuture extends FutureTask<NIODNSQueryResult> {
+      QueueingFuture(Callable<NIODNSQueryResult> c) {
         super(c);
       }
 
-      QueueingFuture(Runnable t, DNSQueryResult r) {
+      QueueingFuture(Runnable t, NIODNSQueryResult r) {
         super(t, r);
       }
 
@@ -102,7 +102,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
           public void timerFired(Timer timer) {
 
             if (!isCancelled()) {
-              DNSQueryResult qResult = null;
+              NIODNSQueryResult qResult = null;
               try {
                 qResult = QueueingFuture.this.get();
               } catch (Exception e) {
@@ -143,7 +143,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     }
 
     private final Executor executor;
-    private final BlockingQueue<Future<DNSQueryResult>> completionQueue;
+    private final BlockingQueue<Future<NIODNSQueryResult>> completionQueue;
 
     private final EventLoop eventLoop;
 
@@ -160,19 +160,19 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       if (executor == null)
         throw new NullPointerException();
       this.executor = executor;
-      this.completionQueue = new LinkedBlockingQueue<Future<DNSQueryResult>>();
+      this.completionQueue = new LinkedBlockingQueue<Future<NIODNSQueryResult>>();
       this.eventLoop = eventLoop;
     }
 
-    public Future<DNSQueryResult> poll() {
+    public Future<NIODNSQueryResult> poll() {
       return completionQueue.poll();
     }
 
-    public Future<DNSQueryResult> poll(long timeout, TimeUnit unit) throws InterruptedException {
+    public Future<NIODNSQueryResult> poll(long timeout, TimeUnit unit) throws InterruptedException {
       return completionQueue.poll(timeout, unit);
     }
 
-    public Future<DNSQueryResult> submit(Callable<DNSQueryResult> task) {
+    public Future<NIODNSQueryResult> submit(Callable<NIODNSQueryResult> task) {
       if (task == null)
         throw new NullPointerException();
       QueueingFuture f = new QueueingFuture(task);
@@ -180,7 +180,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       return f;
     }
 
-    public Future<DNSQueryResult> submit(Runnable task, DNSQueryResult result) {
+    public Future<NIODNSQueryResult> submit(Runnable task, NIODNSQueryResult result) {
       if (task == null)
         throw new NullPointerException();
       QueueingFuture f = new QueueingFuture(task, result);
@@ -188,7 +188,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       return f;
     }
 
-    public Future<DNSQueryResult> take() throws InterruptedException {
+    public Future<NIODNSQueryResult> take() throws InterruptedException {
       return completionQueue.take();
     }
 
@@ -198,7 +198,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
    * DNSQuery - internal class used to encapsulate an active DNS Query Request
    * 
    */
-  private static class DNSQuery implements Callable<DNSQueryResult> {
+  private static class DNSQuery implements Callable<NIODNSQueryResult> {
 
     private String _hostName = null;
     private NIODNSQueryClient _client;
@@ -233,9 +233,9 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
      * thread
      * 
      */
-    public DNSQueryResult call() throws Exception {
+    public NIODNSQueryResult call() throws Exception {
 
-      DNSQueryResult result = null;
+      NIODNSQueryResult result = null;
 
       try {
         result = _resolver.doDNSQuery(_client, _hostName, (_flags & DNSQuery.Flag_UseTCP) != 0,
@@ -258,8 +258,8 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     public void logDNSQuery(String hostName, InetAddress address, long ttl, String opCName);
   }
 
-  /** ReverseDNSQueryResult - the end result of a DNS Query operation */
-  public static class ReverseDNSQueryResult {
+  /** ReverseNIODNSQueryResult - the end result of a DNS Query operation */
+  public static class ReverseNIODNSQueryResult {
 
     /** SUCCESS or FAILURE */
     private Status _status = Status.RESOLVER_FAILURE;
@@ -281,7 +281,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
      * @param hostName
      *          - host name associated with this query
      */
-    ReverseDNSQueryResult(InetAddress address) {
+    ReverseNIODNSQueryResult(InetAddress address) {
 
       _targetAddress = address;
     }
@@ -376,7 +376,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
 
   private static final int MAX_DNS_RETRIES = 1;
 
-  public static DNSQueryResult checkCache(NIODNSQueryClient client, String hostName) throws UnknownHostException {
+  public static NIODNSQueryResult checkCache(NIODNSQueryClient client, String hostName) throws UnknownHostException {
 
     NIODNSCache.DNSResult result = _dnsCache.getIPAddressForHost(hostName);
 
@@ -399,7 +399,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
        * (result.getIPAddress())); }
        */
 
-      DNSQueryResult queryResult = new DNSQueryResult(null, client, hostName);
+      NIODNSQueryResult queryResult = new NIODNSQueryResult(null, client, hostName);
 
       queryResult.setAddress(IPAddressUtils.IntegerToInetAddress(result.getIPAddress()));
       queryResult.setCName(result.getCannonicalName());
@@ -422,7 +422,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       if (Environment.detailLogEnabled())
         LOG.info("Host:" + hostName + " Identified as Bad Host via Cache");
 
-      DNSQueryResult queryResult = new DNSQueryResult(null, client, hostName);
+      NIODNSQueryResult queryResult = new NIODNSQueryResult(null, client, hostName);
 
       queryResult.setStatus(Status.SERVER_FAILURE);
       queryResult.setErrorDesc("Failed via Bad Host Cache");
@@ -475,11 +475,11 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     _dnsCache.enableIPAddressTracking();
   }
 
-  public DNSQueryResult doDNSQuery(NIODNSQueryClient client, String hostName, boolean useTCP, boolean noCache,
+  public NIODNSQueryResult doDNSQuery(NIODNSQueryClient client, String hostName, boolean useTCP, boolean noCache,
       int timeoutValue) {
 
     // check cache first ...
-    DNSQueryResult result = null;
+    NIODNSQueryResult result = null;
     int retryCount = 0;
     boolean retry = false;
     boolean resultViaCache = false;
@@ -594,7 +594,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
 
         if (!retry) {
           // create result object ...
-          result = new DNSQueryResult(this, client, hostName);
+          result = new NIODNSQueryResult(this, client, hostName);
 
           if (response == null) {
 
@@ -655,14 +655,14 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     return result;
   }
 
-  public ReverseDNSQueryResult doReverseDNSQuery(InetAddress address, boolean useTCP, int timeoutValue) {
+  public ReverseNIODNSQueryResult doReverseDNSQuery(InetAddress address, boolean useTCP, int timeoutValue) {
 
     // Ask dnsjava for the inetaddress. Should be in its cache.
     Message response = null;
     Exception resolverException = null;
 
     // check cache first ...
-    ReverseDNSQueryResult result = new ReverseDNSQueryResult(address);
+    ReverseNIODNSQueryResult result = new ReverseNIODNSQueryResult(address);
 
     if (true) {
 
@@ -785,11 +785,11 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
    */
   public final void poll() {
 
-    Future<DNSQueryResult> result;
+    Future<NIODNSQueryResult> result;
 
     while ((result = _completionService.poll()) != null) {
 
-      DNSQueryResult qResult = null;
+      NIODNSQueryResult qResult = null;
       try {
         qResult = result.get();
       } catch (Exception e) {
@@ -818,7 +818,7 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
    * @return
    * @throws IOException
    */
-  public Future<DNSQueryResult> resolve(NIODNSQueryClient client, String theHost, boolean noCache,
+  public Future<NIODNSQueryResult> resolve(NIODNSQueryClient client, String theHost, boolean noCache,
       boolean highPriorityRequest, int timeoutValue) throws IOException {
     int flags = (noCache) ? DNSQuery.Flag_SkipCache : 0;
     if (_useTCP) {

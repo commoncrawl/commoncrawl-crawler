@@ -410,7 +410,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   private BandwidthUtils.RateLimiter _uploadRateLimiter;
 
   /** optional cookie store **/
-  private HttpCookieStore _cookieStore;
+  private NIOHttpCookieStore _cookieStore;
 
   /** internal constructor - for test purposes **/
   private NIOHttpConnection() {
@@ -432,7 +432,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
    * 
    * */
   public NIOHttpConnection(URL theURL, InetSocketAddress localBindAddress, NIOSocketSelector selector,
-      NIODNSResolver resolver, HttpCookieStore cookieStore) throws IOException {
+      NIODNSResolver resolver, NIOHttpCookieStore cookieStore) throws IOException {
     GoogleURL canonicalURL = new GoogleURL(theURL.toString());
     _url = new URL(canonicalURL.getCanonicalURL());
     _sourceIP = localBindAddress;
@@ -454,7 +454,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
    *          - shared resolver object
    * 
    * */
-  public NIOHttpConnection(URL theURL, NIOSocketSelector selector, NIODNSResolver resolver, HttpCookieStore cookieStore)
+  public NIOHttpConnection(URL theURL, NIOSocketSelector selector, NIODNSResolver resolver, NIOHttpCookieStore cookieStore)
       throws IOException {
     GoogleURL cannonicalURL = new GoogleURL(theURL.toString());
     _url = new URL(cannonicalURL.getCanonicalURL());
@@ -705,7 +705,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   }
 
   @Override
-  public void done(NIODNSResolver eventSource, FutureTask<DNSQueryResult> task) {
+  public void done(NIODNSResolver eventSource, FutureTask<NIODNSQueryResult> task) {
     // TODO Auto-generated method stub
 
   }
@@ -1734,4 +1734,17 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     }
   }
 
+  public void disableReads() { 
+    if (_socket != null) { 
+      _socket.disableReads();
+    }
+  }
+  
+  public void enableReads()throws IOException { 
+    if (_socket != null && _socket.isOpen()) { 
+      _socket.enableReads();
+      _selector.registerForRead(_socket);
+    }
+  }
+  
 }

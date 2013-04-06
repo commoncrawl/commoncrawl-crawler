@@ -122,30 +122,34 @@ public class MultiFileMergeUtils {
 
         // get job affinity mask 
         String nodeAffinityMask = NodeAffinityMaskBuilder.getNodeAffinityMask(job);
-        // ok build a mapping 
-        Map<Integer,String> rootAffinityMap = NodeAffinityMaskBuilder.parseAffinityMask(nodeAffinityMask);
-        // ok validate that all input paths have a matching mapping 
-        for (int i=0;i<paths.length;++i) { 
-
-          Path nextPath = paths[i];
-
-          String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs,nextPath,rootAffinityMap);
-
-          if (nodeAffinityMask.compareTo(nextPathAffinityMask) != 0) { 
-            LOG.error("Input Path:" + paths[i] + " had an incompatible NodeAffinityMask with root path.");
-            LOG.error("Root Path:" + paths[0]);
-            LOG.error("Root Mask:" + nodeAffinityMask);
-            LOG.error("Current Mask:" + nextPathAffinityMask);
-            // throw new IOException("NodeAffinity Masks Mismatch!");
+        
+        if (nodeAffinityMask != null) { 
+          // ok build a mapping 
+          Map<Integer,String> rootAffinityMap = NodeAffinityMaskBuilder.parseAffinityMask(nodeAffinityMask);
+          // ok validate that all input paths have a matching mapping 
+          for (int i=0;i<paths.length;++i) { 
+  
+            Path nextPath = paths[i];
+  
+            String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs,nextPath,rootAffinityMap);
+  
+            if (nodeAffinityMask.compareTo(nextPathAffinityMask) != 0) { 
+              LOG.error("Input Path:" + paths[i] + " had an incompatible NodeAffinityMask with root path.");
+              LOG.error("Root Path:" + paths[0]);
+              LOG.error("Root Mask:" + nodeAffinityMask);
+              LOG.error("Current Mask:" + nextPathAffinityMask);
+              // throw new IOException("NodeAffinity Masks Mismatch!");
+            }
           }
-
         }
 
         // ok build an array of all possible paths
         final ArrayList<Path> pathList = new ArrayList<Path>();
 
         for (Path path : paths) { 
-          FileStatus parts[] = fs.globStatus(new Path(path,"part-*"));
+          FileSystem pathFS = FileSystem.get(path.toUri(),job);
+          FileStatus parts[] = pathFS.globStatus(new Path(path,"part-*"));
+          
           for (FileStatus part : parts) { 
             pathList.add(part.getPath());
           }
@@ -188,8 +192,6 @@ public class MultiFileMergeUtils {
           public void close() throws IOException { }
           public float getProgress() throws IOException { return 0.0f; }
         };
-
-
       }
     }
 

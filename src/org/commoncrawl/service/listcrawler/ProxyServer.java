@@ -42,7 +42,7 @@ import org.apache.log4j.spi.LoggingEvent;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.db.RecordStore;
-import org.commoncrawl.io.DNSQueryResult;
+import org.commoncrawl.io.NIODNSQueryResult;
 import org.commoncrawl.io.NIODNSQueryClient;
 import org.commoncrawl.io.NIODNSResolver;
 import org.commoncrawl.io.NIOHttpConnection;
@@ -838,7 +838,7 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
       }
 
       @Override
-      public void done(NIODNSResolver source, FutureTask<DNSQueryResult> task) {
+      public void done(NIODNSResolver source, FutureTask<NIODNSQueryResult> task) {
       }
     };
 

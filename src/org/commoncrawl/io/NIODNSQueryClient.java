@@ -53,6 +53,6 @@ public interface NIODNSQueryClient {
   void DNSResultsAvailable();
 
   /** task competed **/
-  void done(NIODNSResolver source, FutureTask<DNSQueryResult> task);
+  void done(NIODNSResolver source, FutureTask<NIODNSQueryResult> task);
 
 }

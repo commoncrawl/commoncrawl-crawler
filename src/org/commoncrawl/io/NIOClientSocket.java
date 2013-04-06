@@ -26,25 +26,33 @@ import java.nio.ByteBuffer;
  * @author rana
  *
  */
-public interface NIOClientSocket extends NIOSocket {
-
-  /** connect to the given address and port */
-  void connect(InetSocketAddress address) throws IOException;
-
-  /**
-   * used to finalize the establishment of the connection once the underlying
-   * Socket has become connectable
-   */
-  boolean finishConnect() throws IOException;
-
-  InetSocketAddress getLocalSocketAddress() throws IOException;
-
-  InetSocketAddress getSocketAddress() throws IOException;
-
+public abstract class NIOClientSocket implements NIOSocket {
+  boolean _readsDisabled;
+  
+  /** connect to the given address and port  */
+  public abstract void  connect(InetSocketAddress address) throws IOException;
+  /** used to finalize the establishment of the connection once the underlying Socket has become connectable*/
+  public abstract boolean finishConnect()throws IOException;
+  
+  public abstract InetSocketAddress getLocalSocketAddress() throws IOException;
+  public abstract InetSocketAddress getSocketAddress()throws IOException;
+  
   /** read some data from the socket */
-  int read(ByteBuffer dst) throws IOException;
-
+  public abstract int   read(ByteBuffer dst)throws IOException;
   /** write some data to the socket */
-  int write(ByteBuffer dst) throws IOException;
+  public abstract int   write(ByteBuffer dst) throws IOException ;
+  
+  /** return true if reads have been disabled **/
+  synchronized public boolean readsDisabled() { 
+    return _readsDisabled;
+  }
+  
+  synchronized public void disableReads() { 
+    _readsDisabled = true;
+  }
+  
+  synchronized public void enableReads() { 
+   _readsDisabled = false;
+  }
 
 }

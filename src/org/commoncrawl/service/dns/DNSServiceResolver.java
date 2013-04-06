@@ -24,7 +24,7 @@ import java.util.concurrent.Future;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.commoncrawl.io.DNSQueryResult;
+import org.commoncrawl.io.NIODNSQueryResult;
 import org.commoncrawl.io.NIODNSQueryClient;
 import org.commoncrawl.io.NIODNSResolver;
 import org.commoncrawl.io.NIODNSQueryClient.Status;
@@ -52,7 +52,7 @@ public class DNSServiceResolver implements NIODNSResolver{
   }
   
   @Override
-  public Future<DNSQueryResult> resolve(final NIODNSQueryClient client,final String theHost,boolean noCache,boolean highPriority,final int timeoutValue) throws IOException {
+  public Future<NIODNSQueryResult> resolve(final NIODNSQueryClient client,final String theHost,boolean noCache,boolean highPriority,final int timeoutValue) throws IOException {
     
     DNSQueryInfo queryInfo = new DNSQueryInfo();
     queryInfo.setHostName(theHost);
@@ -66,7 +66,7 @@ public class DNSServiceResolver implements NIODNSResolver{
       @Override
       public void requestComplete(AsyncRequest<DNSQueryInfo, DNSQueryResponse> request) {
         
-        DNSQueryResult result = new DNSQueryResult(DNSServiceResolver.this,client,theHost);
+        NIODNSQueryResult result = new NIODNSQueryResult(DNSServiceResolver.this,client,theHost);
         
         if (request.getStatus() == AsyncRequest.Status.Success) { 
           if (request.getOutput().getStatus() == DNSQueryResponse.Status.SUCCESS) { 

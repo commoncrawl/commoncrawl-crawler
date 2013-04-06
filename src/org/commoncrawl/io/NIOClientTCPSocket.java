@@ -33,7 +33,7 @@ import org.apache.commons.logging.LogFactory;
  * @author rana
  * 
  */
-public class NIOClientTCPSocket implements NIOClientSocket {
+public class NIOClientTCPSocket extends NIOClientSocket {
 
   enum SocketType {
     /** outgoing socket, initiated by the client **/

@@ -33,7 +33,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.service.crawler.CrawlHostImpl;
 import org.commoncrawl.io.HttpCookie;
-import org.commoncrawl.io.HttpCookieStore;
+import org.commoncrawl.io.NIOHttpCookieStore;
 import org.junit.Test;
 
 /**
@@ -743,7 +743,7 @@ public class HttpCookieUtils {
   }
   
     
-  public static class CookieStore implements HttpCookieStore { 
+  public static class CookieStore implements NIOHttpCookieStore { 
     
     Vector<CanonicalCookie> _cookies = new Vector<CanonicalCookie>();
     

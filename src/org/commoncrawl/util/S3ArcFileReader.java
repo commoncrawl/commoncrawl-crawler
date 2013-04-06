@@ -28,6 +28,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
 import org.commoncrawl.io.NIOBufferList;
+import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.protocol.shared.ArcFileItem;
 
 /**
@@ -85,7 +86,7 @@ public class S3ArcFileReader implements S3Downloader.Callback {
   // item list 
   String _keys[] = null;
   
-  public S3ArcFileReader(String bucketName,String s3AccessId, String s3SecretKey,String[] arcFileNames, int maxParallelStreams) { 
+  public S3ArcFileReader(String bucketName,String s3AccessId, String s3SecretKey,String[] arcFileNames, int maxParallelStreams)throws IOException { 
     _downloader = new S3Downloader(bucketName,s3AccessId,s3SecretKey,false);
     _downloader.setMaxParallelStreams(maxParallelStreams);
     _keys = arcFileNames;
@@ -244,7 +245,7 @@ public class S3ArcFileReader implements S3Downloader.Callback {
   
   
   // @Override
-  public boolean downloadStarting(int itemId,String itemKey,int contentLength) { 
+  public boolean downloadStarting(int itemId,String itemKey,long contentLength) { 
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
     
@@ -255,7 +256,7 @@ public class S3ArcFileReader implements S3Downloader.Callback {
   }
   
   // @Override
-  public boolean contentAvailable(int itemId,String itemKey,NIOBufferList contentBuffer) {
+  public boolean contentAvailable(NIOHttpConnection connection,int itemId,String itemKey,NIOBufferList contentBuffer) {
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
 

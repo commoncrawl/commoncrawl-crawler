@@ -24,7 +24,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -36,6 +38,7 @@ import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.Qu
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.QueueTask;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
+import org.commoncrawl.util.MultiFileMergeUtils;
 import org.commoncrawl.util.TextBytes;
 
 import com.google.common.base.Function;
@@ -131,59 +134,67 @@ public class CrawlDBMergeJob {
     //TODO: Read Parition Size from Command Line
     int partitionSize = DEFAULT_MAX_PARTITIONS_PER_RUN;
     
-    
+    boolean finalMerge = (args.length != 0 && args[0].equalsIgnoreCase("--final")); 
+
     // find latest intermediate merge timestamp ...
     long latestFullMergeTS = findLatestTimestamp(fs, conf,FULL_MERGE_PATH);
+    
     LOG.info("Latest Full Merge Timestamp is:" + latestFullMergeTS);
     
-    // find list of completed merge candidates ... 
-    SortedSet<Long> completedCandidateList = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS);
-        
-    // find list of raw merge candidates ... 
-    SortedSet<Long> rawCandidateList = filterAndSortRawInputs(fs, conf, GRAPH_DATA_OUTPUT_PATH, latestFullMergeTS);
-
-    // find list of raw candiates that still need an intermediate merge ... 
-    Set<Long> rawUnmergedSet = Sets.difference(rawCandidateList, completedCandidateList);
-    
-    // convert to list 
-    List<Long> unmergedList = Lists.newArrayList(rawUnmergedSet);
-    // unecessary sort ?? 
-    Collections.sort(unmergedList);
-    // partition into groups
-    List<List<Long>> partitions = Lists.partition(unmergedList, partitionSize);
-    
-    if (partitions.size() != 0) { 
-      // create completion semaphore ... 
-      Semaphore mergeCompletionSemaphore = new Semaphore(-(partitions.size() - 1));
-      // ok queue intermediate merges ...
-      for (List<Long> partitionIds : partitions) { 
-        jobQueue.put(new QueueItem(fs,conf,partitionIds));
-      }
-      // queue shutdown items 
-      for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
-        jobQueue.put(new QueueItem());
-      }
-
-      // start threads 
-      LOG.info("Starting Threads");
-      // startup threads .. 
-      for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
-        Thread thread = new Thread(new QueueTask(mergeCompletionSemaphore));
-        thread.start();
-      }
+    if (!finalMerge) { 
       
-      // wait for completion ... 
-      LOG.info("Waiting for intermediate merge completion");
-      mergeCompletionSemaphore.acquireUninterruptibly();
+      // find list of completed merge candidates ... 
+      SortedSet<Long> completedCandidateList = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS,true);
+          
+      // find list of raw merge candidates ... 
+      SortedSet<Long> rawCandidateList = filterAndSortRawInputs(fs, conf, GRAPH_DATA_OUTPUT_PATH, latestFullMergeTS,true);
+  
+      // find list of raw candiates that still need an intermediate merge ... 
+      Set<Long> rawUnmergedSet = Sets.difference(rawCandidateList, completedCandidateList);
+      
+      // convert to list 
+      List<Long> unmergedList = Lists.newArrayList(rawUnmergedSet);
+      // unecessary sort ?? 
+      Collections.sort(unmergedList);
+      // partition into groups
+      List<List<Long>> partitions = Lists.partition(unmergedList, partitionSize);
+      
+      if (partitions.size() != 0) { 
+        // create completion semaphore ... 
+        Semaphore mergeCompletionSemaphore = new Semaphore(-(partitions.size() - 1));
+        // ok queue intermediate merges ...
+        for (List<Long> partitionIds : partitions) { 
+          jobQueue.put(new QueueItem(fs,conf,partitionIds));
+        }
+        // queue shutdown items 
+        for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+          jobQueue.put(new QueueItem());
+        }
+  
+        // start threads 
+        LOG.info("Starting Threads");
+        // startup threads .. 
+        for (int i=0;i<MAX_SIMULTANEOUS_JOBS;++i) { 
+          Thread thread = new Thread(new QueueTask(mergeCompletionSemaphore));
+          thread.start();
+        }
+        
+        // wait for completion ... 
+        LOG.info("Waiting for intermediate merge completion");
+        mergeCompletionSemaphore.acquireUninterruptibly();
+      }
     }
-    
-    // find list of final merge candidates 
-    Set<Long> finalMergeCandidates = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS);
-    
-    if (finalMergeCandidates.size() != 0) {
-      LOG.info("Starting Potential Final Merge");
-      // run final merge ... (if necessary)
-      runFinalMerge(fs,conf,Lists.newArrayList(finalMergeCandidates),latestFullMergeTS);
+    else { 
+      // find list of final merge candidates 
+      Set<Long> finalMergeCandidates = filterAndSortRawInputs(fs, conf, INTERMEDIATE_MERGE_PATH, latestFullMergeTS,false);
+      
+      LOG.info("final Merge Candidates:" + finalMergeCandidates);
+      
+      if (finalMergeCandidates.size() != 0) {
+        LOG.info("Starting Potential Final Merge");
+        // run final merge ... (if necessary)
+        runFinalMerge(fs,conf,Lists.newArrayList(finalMergeCandidates),latestFullMergeTS);
+      }
     }
   }
   
@@ -282,16 +293,17 @@ public class CrawlDBMergeJob {
     if (latestFinalMergeTS != -1) { 
       inputPaths.add(new Path(S3N_BUCKET_PREFIX + FULL_MERGE_PATH,Long.toString(latestFinalMergeTS)));
     }
+
+    // ok we will need to run this job as a shuffle free reduce 
     
     JobConf jobConf = new JobBuilder("Final Merge for Segments:" + partitionIds, conf)
     .inputs(inputPaths)
-    .inputFormat(SequenceFileInputFormat.class)
-    .mapperKeyValue(TextBytes.class, TextBytes.class)
+    .inputFormat(MultiFileMergeUtils.MultiFileMergeInputFormat.class)
+    .mapperKeyValue(IntWritable.class, Text.class)
     .outputKeyValue(TextBytes.class, TextBytes.class)
     .outputFormat(SequenceFileOutputFormat.class)
-    .reducer(CrawlDBWriter.class,true)
-    .partition(CrawlDBKeyPartitioner.class)
-    .sort(LinkKeyComparator.class)
+    .reducer(CrawlDBFinalMerge.class,false)
+    .partition(MultiFileMergeUtils.MultiFileMergePartitioner.class)
     .numReducers(CrawlDBCommon.NUM_SHARDS)
     .speculativeExecution(true)
     .output(finalOutputPath)
@@ -395,7 +407,7 @@ public class CrawlDBMergeJob {
    * @return
    * @throws IOException
    */
-  static SortedSet<Long> filterAndSortRawInputs(FileSystem fs,Configuration conf,String searchPath, long latestMergeDBTimestamp )throws IOException { 
+  static SortedSet<Long> filterAndSortRawInputs(FileSystem fs,Configuration conf,String searchPath, long latestMergeDBTimestamp,boolean processMultipartFiles)throws IOException { 
     TreeSet<Long> set = new TreeSet<Long>();
 
     FileStatus candidates[] = fs.globStatus(new Path(S3N_BUCKET_PREFIX + searchPath,"[0-9]*"));
@@ -408,7 +420,7 @@ public class CrawlDBMergeJob {
         if (fs.exists(successPath)) {
           // scan for a multipart result 
           List<Long> multipartResult = scanForMultiPartList(fs,conf,candidate.getPath());
-          if (multipartResult != null) {
+          if (processMultipartFiles && multipartResult != null) {
             LOG.info("Merge Candidate Completed with Multipart Result:" + multipartResult);
             set.addAll(multipartResult);
           }

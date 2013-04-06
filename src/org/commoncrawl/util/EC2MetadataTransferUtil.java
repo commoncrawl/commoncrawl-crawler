@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.commoncrawl.io.NIOBufferList;
+import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.util.Tuples.Pair;
 
 import com.amazonaws.auth.BasicAWSCredentials;
@@ -155,7 +156,7 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
   ConcurrentSkipListMap<String, Pair<Path,FSDataOutputStream>> _pathToStreamMap = new ConcurrentSkipListMap<String, Pair<Path,FSDataOutputStream>>();
   
   @Override
-  public boolean contentAvailable(int itemId, String itemKey,NIOBufferList contentBuffer) {
+  public boolean contentAvailable(NIOHttpConnection connection,int itemId, String itemKey,NIOBufferList contentBuffer) {
     
     Pair<Path,FSDataOutputStream> downloadTuple = _pathToStreamMap.get(itemKey);
     if (downloadTuple != null) {
@@ -275,7 +276,7 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
 
 
   @Override
-  public boolean downloadStarting(int itemId, String itemKey, int contentLength) {
+  public boolean downloadStarting(int itemId, String itemKey, long contentLength) {
     LOG.info("Received Download Start Event for Key:" + itemKey);
     
     Matcher segmentNameMatcher = metadataInfoPattern.matcher(itemKey);

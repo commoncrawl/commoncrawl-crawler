@@ -359,27 +359,40 @@ public class NIOSocketSelector {
   /** internal registration helper */
   private void registerSocket(NIOSocket theSocket, int interestOps) throws IOException {
 
-    if (_eventLoop == null || _eventLoop.getEventThread() == Thread.currentThread()) {
+    if (_eventLoop == null || _eventLoop.getEventThread() == Thread.currentThread()) { 
+
 
       SelectionKey key = theSocket.getChannel().keyFor(_selector);
 
       if (key == null) {
-        key = theSocket.getChannel().register(_selector, interestOps, theSocket);
-      } else {
-        key.interestOps(key.interestOps() | interestOps);
+        if (theSocket.readsDisabled()) { 
+          interestOps = (interestOps & ~SelectionKey.OP_READ);
+        }
+        if (interestOps != 0) { 
+          key = theSocket.getChannel().register(_selector,interestOps,theSocket);
+        }
       }
-    } else {
-      synchronized (_pendingRegistrations) {
+      else {
+        key.interestOps(key.interestOps() | interestOps);
+        if (theSocket.readsDisabled()) { 
+          key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
+        }
+      }
+    }
+    else { 
+      synchronized(_pendingRegistrations) {
 
         PendingRegistration pendingRegistration = _pendingRegistrations.get(theSocket.getSocketId());
-        if (pendingRegistration == null) {
-          _pendingRegistrations.put(theSocket.getSocketId(), new PendingRegistration(theSocket, interestOps));
-        } else {
+        if (pendingRegistration == null) { 
+          _pendingRegistrations.put(theSocket.getSocketId(),new PendingRegistration(theSocket,interestOps));
+        }
+        else { 
           pendingRegistration.setInterestOps(pendingRegistration.getInterestOps() | interestOps);
         }
       }
       _eventLoop.wakeup();
     }
+
   }
 
   /**

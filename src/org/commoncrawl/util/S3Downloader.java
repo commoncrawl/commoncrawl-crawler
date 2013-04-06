@@ -1,32 +1,28 @@
 /**
- * Copyright 2008 - CommonCrawl Foundation
+* Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * 
- *    This program is free software: you can redistribute it and/or modify
- *    it under the terms of the GNU General Public License as published by
- *    the Free Software Foundation, either version 3 of the License, or
- *    (at your option) any later version.
- *
- *    This program is distributed in the hope that it will be useful,
- *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *    GNU General Public License for more details.
- *
- *    You should have received a copy of the GNU General Public License
- *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
  **/
 
 package org.commoncrawl.util;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -34,6 +30,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.Semaphore;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -45,8 +42,13 @@ import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.io.NIOHttpConnection.State;
 import org.commoncrawl.io.NIOHttpHeaders;
 
+import com.google.common.collect.Lists;
+
 
 /**
+ * 
+ * Async S3Downloader Class 
+ *  Uses CC NIO library to perform IO
  * 
  * @author rana
  *
@@ -65,7 +67,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
   private String _s3SecretKey;
   private LinkedList<S3DownloadItem> _queuedItems   = new LinkedList<S3DownloadItem>();
   private LinkedList<NIOHttpConnection> _activeConnections      = new LinkedList<NIOHttpConnection>();
-  private EventLoop _eventLoop = new EventLoop();
+  private EventLoop _eventLoop = null;
   private boolean   _ownsEventLoop = false;
   private S3Utils.CallingFormat _callingFormat = S3Utils.CallingFormat.getSubdomainCallingFormat();
   private Callback _callback; 
@@ -77,17 +79,22 @@ public class S3Downloader implements NIOHttpConnection.Listener {
   
 
   public static interface Callback { 
-    public boolean downloadStarting(int itemId,String itemKey,int contentLength);
-    public boolean contentAvailable(int itemId,String itemKey,NIOBufferList contentBuffer);
+    public boolean downloadStarting(int itemId,String itemKey,long contentLength);
+    public boolean contentAvailable(NIOHttpConnection theConnection,int itemId,String itemKey,NIOBufferList contentBuffer);
     public void downloadFailed(int itemId,String itemKey,String errorCode);
     public void downloadComplete(int itemId,String itemKey);
   }
   
-  public S3Downloader(String s3BucketName,String s3AccessId,String s3SecretKey, boolean isRequesterPays) {
+  public S3Downloader(String s3BucketName,String s3AccessId,String s3SecretKey, boolean isRequesterPays)throws IOException {
     _s3BucketName = s3BucketName;
     _s3AccessId = s3AccessId;
     _s3SecretKey = s3SecretKey;
     _isRequesterPays = isRequesterPays;
+    _eventLoop = new EventLoop();
+  }
+  
+  public EventLoop getEventLoop() { 
+    return _eventLoop;
   }
   
   public void setMaxParallelStreams(int maxStreams) { 
@@ -135,39 +142,52 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     
     Thread eventThread = (_ownsEventLoop) ? _eventLoop.getEventThread() : null;
     
+    final Semaphore shutdownSemaphore = new Semaphore(0);
     
     _eventLoop.setTimer(new Timer(1,false,new Timer.Callback() {
 
       // shutdown within the context of the async thread ... 
       public void timerFired(Timer timer) {
-        
-        // fail any active connections 
-        for (NIOHttpConnection connection : _activeConnections) { 
-          S3DownloadItem item = (S3DownloadItem) connection.getContext();
-          if (item != null) { 
-            failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,connection, false);
+      
+        try { 
+          
+          // fail any active connections 
+          for (NIOHttpConnection connection : Lists.newArrayList(_activeConnections)) { 
+            S3DownloadItem item = (S3DownloadItem) connection.getContext();
+            if (item != null) { 
+              failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,connection, false);
+            }
           }
+          
+          _activeConnections.clear();
+          
+          // next, fail all queued items 
+          for (S3DownloadItem item : _queuedItems) { 
+            failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,null, false);
+          }
+          _queuedItems.clear();
+          _freezeDownloads = false;
+          _callback = null;
+          
+          if (_ownsEventLoop) { 
+            System.out.println("Stopping Event Loop");
+            _eventLoop.stop();
+          }
+          _eventLoop = null;
+          _ownsEventLoop = false;
         }
-        
-        
-        _activeConnections.clear();
-        
-        // next, fail all queued items 
-        for (S3DownloadItem item : _queuedItems) { 
-          failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,null, false);
+        finally { 
+          //System.out.println("Releasing Semaphore");
+          shutdownSemaphore.release();
         }
-        _queuedItems.clear();
-        _freezeDownloads = false;
-        _callback = null;
-        if (_ownsEventLoop) { 
-          _eventLoop.stop();
-        }
-        _eventLoop = null;
-        _ownsEventLoop = false;
       }  
     }));
-      
+    //System.out.println("Acquiring Shutdown Semaphore");
+    shutdownSemaphore.acquireUninterruptibly();
+    //System.out.println("Acquired Shutdown Semaphore");
+    
     try {
+      
       if (eventThread != null) { 
         eventThread.join();
       }
@@ -202,12 +222,14 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     return itemId;
   }
   
-  public synchronized  int fetchPartialItem(String itemKey,int rangeStart,int bytesToFetch) throws IOException { 
+  public synchronized  int fetchPartialItem(String itemKey,long rangeStart,long bytesToFetch) throws IOException { 
     int itemId = -1;
     S3DownloadItem downloadItem = new S3DownloadItem(itemKey,itemId);
     
     downloadItem.setLastReadPos(rangeStart);
-    downloadItem.setContentLength(downloadItem.getLastReadPos() + bytesToFetch);
+    if (bytesToFetch != -1L) { 
+      downloadItem.setContentLength(downloadItem.getLastReadPos() + bytesToFetch);
+    }
     
     synchronized (_queuedItems) { 
       itemId = ++_lastItemId;
@@ -286,7 +308,10 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       // figure out of this is a continuation ... 
       if (item.isContinuation()) { 
         // figure out where to start ...
-        String rangeString = "bytes=" + item.getLastReadPos() + "-" + item.getContentLength();
+        String rangeString = "bytes=" + item.getLastReadPos() + "-";
+        if (item.getContentLength() != -1L) 
+          rangeString += item.getContentLength();
+        
         // set the range header ... 
         headers.set("Range",rangeString);
         // and if etag is valid ... 
@@ -298,6 +323,8 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       headers.set ("Connection", "close");
       headers.set("Cache-Control", "no-cache");
       headers.set("Pragma", "no-cache");
+      headers.remove("Accept-Encoding");
+      headers.set("Accept-Encoding","identity");
       
       // set up the listener relationship 
       connection.setListener(this);
@@ -498,7 +525,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       boolean continueDownload = true;
       // callback to listener 
       if (_callback != null) { 
-        continueDownload = _callback.contentAvailable(item.getId(),item.getKey(), contentBuffer);
+        continueDownload = _callback.contentAvailable(theConnection,item.getId(),item.getKey(), contentBuffer);
       }
       
       if (!continueDownload) { 
@@ -535,101 +562,6 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     list.add(value);
   }
 
-  public static void main(String[] args) {
-    
-    boolean isRequesterPays = args[3].equals("1");
-    S3Downloader downloader = new S3Downloader(args[0],args[1],args[2],isRequesterPays);
-    String itemToFetch = args[4];
-    
-    try {
-      
-      
-      downloader.initialize( new Callback() {
-
-        Map<String,FileChannel> channelMap = new HashMap<String,FileChannel>();
-        
-        public boolean contentAvailable(int itemId,String itemKey, NIOBufferList contentBuffer) {
-          LOG.info("Key:" + itemKey + " GOT:" + contentBuffer.available() + " Bytes");
-          
-          FileChannel channel  = channelMap.get(itemKey);
-          if (channel != null) { 
-            try { 
-              while (contentBuffer.available() != 0) { 
-                ByteBuffer buffer = contentBuffer.read();
-                channel.write(buffer);  
-              }
-              return true;
-            }
-            catch (IOException e) { 
-              LOG.error(StringUtils.stringifyException(e));
-              return false;
-            }
-          }
-          return false;
-        }
-
-        public void downloadComplete(int itemId,String itemKey) {
-          LOG.info("Key:" + itemKey + " DownloadComplete");
-          FileChannel channel  = channelMap.get(itemKey);
-          if (channel != null) { 
-            try {
-              channel.close();
-            } catch (IOException e) {
-              LOG.error(StringUtils.stringifyException(e));
-            }
-          }
-          channelMap.remove(itemKey);
-        }
-
-        public void downloadFailed(int itemId,String itemKey, String errorCode) {
-          LOG.info("Key:" + itemKey + " DownloadFailed. ErrorCode:" + errorCode);
-          FileChannel channel  = channelMap.get(itemKey);
-          if (channel != null) { 
-            try {
-              channel.close();
-            } catch (IOException e) {
-              LOG.error(StringUtils.stringifyException(e));
-            }
-          }
-          channelMap.remove(itemKey);
-        }
-
-        public boolean downloadStarting(int itemId,String itemKey, int contentLength) {
-          LOG.info("Key:" + itemKey + " DownloadStarting - ContentLength:" + contentLength);
-          File file = new File("/tmp/" + itemKey);
-          if (file.exists())
-            file.delete();
-          file.getParentFile().mkdirs();
-          FileOutputStream fileHandle = null;
-          try {
-            fileHandle = new FileOutputStream(file);
-            //LOG.info("Key:" + itemKey + " Created File:" + file.getAbsolutePath());
-            channelMap.put(itemKey, fileHandle.getChannel());
-          } catch (IOException e) {
-            LOG.error(StringUtils.stringifyException(e));
-            if (fileHandle != null)
-              try {
-                fileHandle.close();
-              } catch (IOException e1) {
-              }
-            return false;
-          }
-
-          return true;
-        }
-      });
-      
-      downloader.fetchItem(itemToFetch);
-      
-      downloader.waitForCompletion();
-    } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
-    
-    
-  }
-  
   private static class S3DownloadItem { 
     
     public S3DownloadItem(String itemKey,int itemId) { 
@@ -648,10 +580,10 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     public String getKey() { return _itemKey; }
     public int     getId() {  return _itemId; }
     
-    public void setLastReadPos(int lastReadPos) { 
+    public void setLastReadPos(long lastReadPos) { 
       _lastReadPos= lastReadPos;
     }
-    public int   getLastReadPos() { 
+    public long   getLastReadPos() { 
       return _lastReadPos;
     }
     
@@ -687,11 +619,11 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       return _lastKnownETag;
     }
     
-    public int getContentLength() { 
+    public long getContentLength() { 
       return _lastKnownContentLength;
     }
     
-    public void setContentLength(int contentLength) { 
+    public void setContentLength(long contentLength) { 
       _lastKnownContentLength = contentLength;
     }
 
@@ -719,9 +651,9 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     private String      _itemKey;
     private int         _itemId =0;
     private String      _lastKnownETag = null;
-    private int          _lastKnownContentLength = -1;
+    private long        _lastKnownContentLength = -1;
     private short      _failureCount = 0;
-    private int          _lastReadPos = 0;
+    private long       _lastReadPos = 0;
     private NIOHttpConnection.ErrorType _lastErrorType=NIOHttpConnection.ErrorType.UNKNOWN;
     private int          _lastKnownResultCode=-1;
     private int          _downloadedBytes;
