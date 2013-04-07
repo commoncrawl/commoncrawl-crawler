@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -308,7 +309,7 @@ public class CrawlDBMergeJob {
     .speculativeExecution(true)
     .output(finalOutputPath)
     .compressMapOutput(true)
-    .compressor(CompressionType.BLOCK, SnappyCodec.class)
+    .compressor(CompressionType.BLOCK, GzipCodec.class)
     .build();
             
     LOG.info("Starting JOB:" + jobConf);

@@ -1,5 +1,6 @@
 package org.commoncrawl.util;
 
+import java.io.EOFException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,8 +12,12 @@ import org.apache.hadoop.fs.PositionedReadable;
 import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.IOUtils;
 
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+
 /** 
- * A resilient blocking InputStream that reads data off of S3. Resilient as in able to transparently recover from 
+ * A resilient blocking InputStream that reads data off of S3. Resilient - as in able to transparently recover from 
  * IO errors when reading data from S3. 
  *  
  * @author rana
@@ -26,6 +31,7 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
   S3InputStream _s3Stream;
   int           _bufferSize;
   long          _streamPos = 0;
+  long          _streamLength=-1;
   int           _retryCounts;
   int           _maxRetries;
 
@@ -40,8 +46,26 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
     _s3AccessKey = s3AccessKey;
     _s3Secret = s3Secret;
     _maxRetries = maxRetries;
+    _streamLength = getFileLength(uri, s3AccessKey, s3Secret);
     
     restartStream();
+  }
+  
+  private static long getFileLength(URI uri,String s3AccessKey,String s3Secret)throws IOException { 
+    BasicAWSCredentials credentials 
+    = new BasicAWSCredentials(
+        s3AccessKey,
+        s3Secret);
+  
+    AmazonS3Client s3Client = new AmazonS3Client(credentials);
+    try { 
+      ObjectMetadata metadata = s3Client.getObjectMetadata(uri.getHost(), uri.getPath().substring(1));
+      return metadata.getContentLength();
+    }
+    finally { 
+      s3Client.shutdown();
+    }
+    
   }
   
   private void restartStream()throws IOException {
@@ -59,8 +83,12 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
     do {
       try { 
         int bytesRead = _s3Stream.read();
-        if (bytesRead != -1)
+        if (bytesRead != -1) { 
           _streamPos++;
+        }
+        else if (_streamPos != _streamLength) { 
+          throw new EOFException();
+        }
         return bytesRead;
       }
       catch (IOException e) {
@@ -86,8 +114,12 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
     do {
       try { 
         int bytesRead = _s3Stream.read(b, off, len);
-        if (bytesRead != -1) 
+        if (bytesRead != -1) {  
           _streamPos += bytesRead;
+        }
+        else if (_streamPos != _streamLength) { 
+          throw new EOFException();
+        }
         return bytesRead;
       }
       catch (IOException e) { 

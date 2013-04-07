@@ -206,6 +206,8 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
       rawValueIterator.reset(nextItem.e1);
       // output to reducer ... 
       crawlDBWriter.reduce(nextItem.e0._keyObject,rawValueIterator, output, reporter);
+      
+      reporter.progress();
     }
     // flush output 
     crawlDBWriter.close();

@@ -61,32 +61,26 @@ public class SequenceFileUtils {
       Writable value = (Writable)  reader.getValueClass().newInstance();
       
       boolean more = true;
-      boolean checkedIsJSON = false;
-      boolean isJSON = false;
       do { 
         more = reader.next(key,value);
         if (more) {
           System.out.println("Key:" + key.toString());
           
-          if (!checkedIsJSON) {
-            checkedIsJSON = true;
-            try {
-              parser.parse(value.toString());
-              isJSON = true;
-            }
-            catch (Exception e) { 
-              
-            }
+          JsonElement jsonElement = null;
+          try {
+            jsonElement = parser.parse(value.toString());
           }
-          if (!isJSON) {
+          catch (Exception e) { 
+            
+          }
+          if (jsonElement == null) {
             OutputStreamWriter writer = new OutputStreamWriter(System.out, "UTF-8");
             writer.write(value.toString());
             writer.flush();
           }
           else { 
             System.out.print("\n");
-            JsonElement e = parser.parse(value.toString());
-            System.out.println(JSONUtils.prettyPrintJSON(e));
+            System.out.println(JSONUtils.prettyPrintJSON(jsonElement));
           }
         }
       }
