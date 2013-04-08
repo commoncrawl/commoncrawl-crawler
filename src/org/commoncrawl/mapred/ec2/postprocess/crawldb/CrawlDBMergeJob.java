@@ -310,6 +310,10 @@ public class CrawlDBMergeJob {
     .output(finalOutputPath)
     .compressMapOutput(true)
     .compressor(CompressionType.BLOCK, GzipCodec.class)
+    .maxMapAttempts(10)
+    .maxReduceAttempts(4)
+    .maxMapTaskFailures(1)
+    .reuseJVM(1)
     .build();
             
     LOG.info("Starting JOB:" + jobConf);
@@ -319,7 +323,6 @@ public class CrawlDBMergeJob {
     }
     catch (IOException e) { 
       LOG.error("Failed to Execute JOB:" + jobConf + " Exception:\n" + CCStringUtils.stringifyException(e));
-       fs.delete(finalOutputPath, true);
     }
   }
   
