@@ -642,7 +642,7 @@ public class MergeSortSpillWriter<KeyType extends WritableComparable, ValueType 
               + _spillDataBuffer.capacity() + " spillDataPosition:" + _spillDataBuffer.position()
               + " spillDataRemaining:" + _spillDataBuffer.remaining());
 
-          StringUtils.stringifyException(e);
+          LOG.error(StringUtils.stringifyException(e));
           throw new IOException(e);
         }
       }

@@ -2,7 +2,10 @@ package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
 import java.io.IOException;
 import java.net.URI;
+import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -20,18 +23,29 @@ import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.util.Progressable;
+import org.commoncrawl.util.ByteArrayUtils;
 import org.commoncrawl.util.CCStringUtils;
+import org.commoncrawl.util.MockReporter;
 import org.commoncrawl.util.S3SeekableResilientInputStream;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.KeyAndValueData;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.RawRecordValue;
 import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.Tuples.Pair;
+
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.google.common.collect.Lists;
 
 /** 
  * Final Merge Step is done using a non-shuffle reduce since all input segments have been pre-sorted and 
@@ -45,18 +59,24 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
   static final Log LOG = LogFactory.getLog(CrawlDBFinalMerge.class);
   
   JobConf _conf;
+  AmazonS3Client _s3Client;
+
   @Override
   public void configure(JobConf job) {
     _conf = job;
+    _s3Client = new AmazonS3Client(new BasicAWSCredentials(_conf.get("fs.s3n.awsAccessKeyId"),_conf.get("fs.s3n.awsSecretAccessKey")));
   }
 
   @Override
   public void close() throws IOException {
+    _s3Client.shutdown();
   }
 
   static class RawValueIterator implements Iterator<TextBytes>  {
 
+    TextBytes keyBytes  = new TextBytes();
     TextBytes valueBytes = new TextBytes();
+    DataInputBuffer keyInputBuffer = new DataInputBuffer();
     DataInputBuffer inputBuffer = new DataInputBuffer();
     
     Iterator<RawRecordValue> rawIterator;
@@ -74,9 +94,14 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
       try { 
         RawRecordValue nextRawValue = rawIterator.next();
         // read in text bytes key ... 
+        keyInputBuffer.reset(nextRawValue.key.getData(),0,nextRawValue.key.getLength());
         inputBuffer.reset(nextRawValue.data.getData(),0,nextRawValue.data.getLength());
         int valueTextLen = WritableUtils.readVInt(inputBuffer);
         valueBytes.set(nextRawValue.data.getData(),inputBuffer.getPosition(),valueTextLen);
+        int keyTextLen = WritableUtils.readVInt(keyInputBuffer);
+        keyBytes.set(nextRawValue.key.getData(),keyInputBuffer.getPosition(),keyTextLen);
+        
+        System.out.println("NextKey:" + keyBytes.toString() + " Source:" + nextRawValue.source);
         return valueBytes;
       }
       catch (IOException e) { 
@@ -90,7 +115,7 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
       throw new UnsupportedOperationException("remove");
     } 
   }
-  
+    
   public void reduce(IntWritable key, Iterator<Text> values,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
     // collect all incoming paths first
     Vector<Path> incomingPaths = new Vector<Path>();
@@ -106,11 +131,8 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
     Configuration localMergeConfig = new Configuration(_conf);
     // we don't want to use a grouping comparator because the we are using the reducer code from the intermediate 
     // merge 
-    localMergeConfig.setClass(
-        MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS,
-        CrawlDBKey.LinkKeyComparator.class, RawComparator.class);
+    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS,CrawlDBKey.LinkKeyComparator.class, RawComparator.class);
     localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS,TextBytes.class, WritableComparable.class);
-    
     
     // spawn merger
     // Skip using s3n fs, as it seems to have a limitation on the number of parallel s3 streams it can open :-(
@@ -188,8 +210,17 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
 
       @Override
       public FileStatus getFileStatus(Path f) throws IOException {
-        FileSystem fs = FileSystem.get(f.toUri(),_conf);
-        return fs.getFileStatus(f);
+        // get uri from path ... 
+        URI uri = f.toUri();
+        // convert to s3 path .. 
+        String key = uri.getPath().substring(1);
+        System.out.println("***uri path:" +key );
+        ObjectMetadata metadata = _s3Client.getObjectMetadata(uri.getHost(), key);
+        if (metadata != null) { 
+          FileStatus fileStatus = new FileStatus(metadata.getContentLength(),false,1,0,metadata.getLastModified().getTime(),0,FsPermission.getDefault(),"","",f);
+          return fileStatus;
+        }
+        return null;
       } 
       
     }, incomingPaths, localMergeConfig);
@@ -203,6 +234,8 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
     Pair<KeyAndValueData<TextBytes>,Iterable<RawRecordValue>> nextItem = null;
     // walk tuples and feed them to the actual reducer ...  
     while ((nextItem = multiFileInputReader.getNextItemIterator()) != null) {
+      
+      System.out.println("PKey:" + nextItem.e0._keyObject);
       rawValueIterator.reset(nextItem.e1);
       // output to reducer ... 
       crawlDBWriter.reduce(nextItem.e0._keyObject,rawValueIterator, output, reporter);
@@ -211,6 +244,96 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
     }
     // flush output 
     crawlDBWriter.close();
+
+  }
+  
+  private static final NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
+  static {
+    NUMBER_FORMAT.setMinimumIntegerDigits(5);
+    NUMBER_FORMAT.setGroupingUsed(false);
+  }    
+
+  
+  private static List<Path> getIntermediateSegmentPaths(AmazonS3Client s3Client)throws IOException { 
+    ArrayList<Path> listOut = Lists.newArrayList();
+    ObjectListing response = s3Client.listObjects(new ListObjectsRequest()
+      .withBucketName("aws-publicdatasets")
+      .withPrefix("common-crawl/crawl-db/merge/intermediate/")
+      .withDelimiter("/")
+      );
+
+    do {
+      LOG.info("Response Key Count:" + response.getCommonPrefixes());
+      
+      for (String entry : response.getCommonPrefixes()) { 
+        try { 
+          Path s3nPath =new Path("s3n","aws-publicdatasets","/"+entry);
+          long timestamp = Long.parseLong(s3nPath.getName());
+          listOut.add(s3nPath);
+        }
+        catch (Exception e) { 
+          
+        }
+      }
+
+      if (response.isTruncated()) { 
+        response = s3Client.listNextBatchOfObjects(response);
+      }
+      else { 
+        break;
+      }
+    }
+    while (true);
+    
+    return listOut;
   }
 
+  /** 
+   * do a merge on a single shard for test purposes
+   * @param args
+   * @throws IOException
+   */
+  public static void main(String[] args)throws IOException {
+    String s3AccessKey = args[0];
+    String s3Secret    = args[1];
+    int    partNumber  = Integer.parseInt(args[2]);
+    
+    AmazonS3Client s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AccessKey,s3Secret));
+    
+    List<Path> segments = getIntermediateSegmentPaths(s3Client);
+    
+    String partName = "part-" + NUMBER_FORMAT.format(partNumber);
+    
+    List<Text> transformedPaths = Lists.newArrayList();
+    
+    for (Path path : segments) { 
+      transformedPaths.add(new Text(new Path(path,partName).toUri().toString()));
+      if (transformedPaths.size() >= 3)
+        break;
+    }
+    
+    CrawlDBFinalMerge finalMerge = new CrawlDBFinalMerge();
+    
+    JobConf conf = new JobConf();
+
+    conf.set("fs.s3n.awsAccessKeyId",s3AccessKey);
+    conf.set("fs.s3n.awsSecretAccessKey",s3Secret);
+    
+    finalMerge.configure(conf);
+    finalMerge.reduce(new IntWritable(1), transformedPaths.iterator(), new OutputCollector<TextBytes, TextBytes>() {
+
+      long lastValue = Long.MIN_VALUE;
+      
+      @Override
+      public void collect(TextBytes key, TextBytes value) throws IOException {
+        long domainHash = CrawlDBKey.getLongComponentFromKey(key, CrawlDBKey.ComponentId.DOMAIN_HASH_COMPONENT_ID);
+        if (domainHash < lastValue) { 
+          throw new IOException("LastValue:" + lastValue + " CurrentValue:" + domainHash + " " + value.toString());
+        }
+        lastValue = domainHash;
+        System.out.println("OutputKey:"+ key.toString());
+      }
+    },new MockReporter());
+        
+  }
 }

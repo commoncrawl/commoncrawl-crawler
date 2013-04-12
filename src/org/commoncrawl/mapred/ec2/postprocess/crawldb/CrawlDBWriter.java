@@ -19,7 +19,6 @@
 package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.Charset;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -34,25 +33,16 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.SequenceFile.CompressionType;
-import org.apache.hadoop.io.compress.SnappyCodec;
-import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.SequenceFileInputFormat;
-import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.ComponentId;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyGroupingComparator;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyPartitioner;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.LinkKeyComparator;
 import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.util.ByteArrayUtils;
 import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.HttpHeaderInfoExtractor;
 import org.commoncrawl.util.JSONUtils;
-import org.commoncrawl.util.JobBuilder;
 import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.URLFPBloomFilter;
 import org.commoncrawl.util.URLUtils;
@@ -1105,6 +1095,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
           _topLevelJSONObject.add(TOPLEVEL_LINKSTATUS_PROPERTY, _linkSummaryRecord);
         }        
         
+        //System.out.println("Emitting Key:" + CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD, 0));
         // output top level record ... 
         output.collect(CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD, 0),new TextBytes(_topLevelJSONObject.toString()));
         // if there is link status available ...
@@ -1112,6 +1103,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
           reporter.incrCounter(Counters.EMITTED_SOURCEINPUTS_RECORD, 1);
           TextBytes sourceInputsText= new TextBytes();
           sourceInputsText.set(_sourceInputsBuffer.getData(),0,_sourceInputsBuffer.getLength());
+          //System.out.println("Emitting Key:" + CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_INCOMING_URLS_SAMPLE, 0));
           output.collect(CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_INCOMING_URLS_SAMPLE, 0),sourceInputsText);
           reporter.incrCounter(Counters.EMITTED_SOURCEINPUTS_DATA_BYTES_EMITTED, sourceInputsText.getLength());
         }

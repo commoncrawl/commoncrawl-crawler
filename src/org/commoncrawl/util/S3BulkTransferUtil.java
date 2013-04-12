@@ -23,9 +23,13 @@ import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -45,26 +49,28 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 
-/**
- *  @author rana
+/** 
+ * Utility used to transfer data from S3 down to colo in bulk
+ * 
+ * @author rana
+ *
  */
+public class S3BulkTransferUtil implements S3Downloader.Callback {
 
-public class EC2MetadataTransferUtil implements S3Downloader.Callback {
-
-  private static final Log LOG = LogFactory.getLog(EC2MetadataTransferUtil.class);
+  private static final Log LOG = LogFactory.getLog(S3BulkTransferUtil.class);
   
   S3Downloader _downloader;
-  private static final String s3AccessKeyId = "";
-  private static final String s3SecretKey = "";
 
   Configuration _conf;
   FileSystem    _fs;
   int _totalQueuedItemsCount;
   int _totalCompletedItemsCount = 0;
+  ConcurrentSkipListMap<String,Path> _pathMapping = new ConcurrentSkipListMap<String, Path>();
   
-  EC2MetadataTransferUtil(String bucketName, JsonArray pathList)throws IOException {
+  S3BulkTransferUtil(String bucketName, String s3AccessKeyId,String s3SecretKey, JsonArray pathList,final Path outputPath)throws IOException {
     _conf = new Configuration();
     _fs   = FileSystem.get(_conf);
     LOG.info("Initializing Downloader");
@@ -74,43 +80,43 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
     
     LOG.info("Got JSON Array with:" + pathList.size() + " elements");
     for (int i=0;i<pathList.size();++i){
-      LOG.info("Collection metadata files from path:" + pathList.get(i).toString());
-      List<S3ObjectSummary> metadataFiles = getMetadataPaths(s3AccessKeyId, s3SecretKey,bucketName,pathList.get(i).getAsString());
+      LOG.info("Collecting files from path:" + pathList.get(i).toString());
+      List<S3ObjectSummary> metadataFiles = getPaths(s3AccessKeyId, s3SecretKey,bucketName,pathList.get(i).getAsString());
       LOG.info("Got:" + metadataFiles.size() + " total files");
       for (S3ObjectSummary metadataFile : metadataFiles) {
         
-        Matcher segmentNameMatcher = metadataInfoPattern.matcher(metadataFile.getKey());
+        Path s3Path = new Path("/" + metadataFile.getKey());
+        Path finalPath = new Path(outputPath,s3Path.getName());
         
-        if (segmentNameMatcher.matches()) {
+        FileStatus fileStatus = null;
+        try { 
+          fileStatus = _fs.getFileStatus(finalPath);
+        }
+        catch (Exception e) { 
           
-          String segmentId = segmentNameMatcher.group(1);
-          String partExtension = segmentNameMatcher.group(2);
-          Path finalSegmentPath = new Path(finalSegmentOutputDir,segmentId);
-          Path finalPath = new Path(finalSegmentPath,"metadata-" + partExtension);
+        }
           
-          FileStatus fileStatus = _fs.getFileStatus(finalPath);
+        if (fileStatus != null && fileStatus.getLen() != metadataFile.getSize()) { 
+          LOG.error(
+              "SRC-DEST SIZE MISMATCH!! SRC:" + metadataFile 
+              + " SRC-SIZE:" + metadataFile.getSize()
+              + " DEST:" + finalPath 
+              + " DEST-SIZE:" + fileStatus.getLen());
           
-          if (fileStatus != null && fileStatus.getLen() != metadataFile.getSize()) { 
-            LOG.error(
-                "SRC-DEST SIZE MISMATCH!! SRC:" + metadataFile 
-                + " SRC-SIZE:" + metadataFile.getSize()
-                + " DEST:" + finalPath 
-                + " DEST-SIZE:" + fileStatus.getLen());
-            
-            // ok delete the destination 
-            _fs.delete(finalPath,false);
-            // null file status so that the item gets requeued ... 
-            fileStatus = null;
-          }
+          // ok delete the destination 
+          _fs.delete(finalPath,false);
+          // null file status so that the item gets requeued ... 
+          fileStatus = null;
+        }
           
-          if (fileStatus == null) { 
-            LOG.info("Queueing Item:" + metadataFile);
-            ++_totalQueuedItemsCount;
-            _downloader.fetchItem(metadataFile.getKey());
-          }
-          else {
-            LOG.info("Skipping Already Download Item:" + metadataFile + " Found at:" + finalPath);
-          }
+        if (fileStatus == null) { 
+          LOG.info("Queueing Item:" + metadataFile);
+          ++_totalQueuedItemsCount;
+          _pathMapping.put(metadataFile.getKey(),finalPath);
+          _downloader.fetchItem(metadataFile.getKey());
+        }
+        else {
+          LOG.info("Skipping Already Download Item:" + metadataFile + " Found at:" + finalPath);
         }
       }
     }
@@ -119,18 +125,15 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
   }
   
   
-  public static List<S3ObjectSummary> getMetadataPaths(String s3AccessKeyId,String s3SecretKey,String bucketName,String segmentPath) throws IOException  { 
+  public static List<S3ObjectSummary> getPaths(String s3AccessKeyId,String s3SecretKey,String bucketName,String segmentPath) throws IOException  { 
        
     AmazonS3Client s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AccessKeyId,s3SecretKey));
     
         
     
     ImmutableList.Builder<S3ObjectSummary> listBuilder = new ImmutableList.Builder<S3ObjectSummary>();
-    
-    String metadataFilterKey = segmentPath +"metadata-";
-    LOG.info("Prefix Search Key is:" + metadataFilterKey);
-    
-    ObjectListing response = s3Client.listObjects(new ListObjectsRequest().withBucketName(bucketName).withPrefix(metadataFilterKey));
+        
+    ObjectListing response = s3Client.listObjects(new ListObjectsRequest().withBucketName(bucketName).withPrefix(segmentPath));
 
     do {
       LOG.info("Response Key Count:" + response.getObjectSummaries().size());
@@ -179,9 +182,7 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
 
 
   static Path finalSegmentOutputDir = new Path("crawl/ec2Import/segment");
-  
-  Pattern metadataInfoPattern = Pattern.compile(".*/([0-9]*)/metadata-([0-9]+)");
-  
+    
   @Override
   public void downloadComplete(int itemId, String itemKey) {
     LOG.info("Received Download Complete Event for Key:" + itemKey);
@@ -198,24 +199,8 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
         downloadTuple.e1.flush();
         downloadTuple.e1.close();
         downloadTuple.e1 = null;
-        // extract segment name parts 
-        Matcher segmentNameMatcher = metadataInfoPattern.matcher(itemKey);
         
-        if (segmentNameMatcher.matches()) {
-          
-          String segmentId = segmentNameMatcher.group(1);
-          String partExtension = segmentNameMatcher.group(2);
-          // construct final path 
-          Path finalSegmentPath = new Path(finalSegmentOutputDir,segmentId);
-          _fs.mkdirs(finalSegmentPath);
-          Path finalPath = new Path(finalSegmentPath,"metadata-" + partExtension);
-          LOG.info("Moving Temp File:" + downloadTuple.e0 + " to:" + finalPath);
-          _fs.rename(downloadTuple.e0, finalPath);
-          downloadSuccessful = true;
-        }
-        else { 
-          LOG.error("Unable to match regular expression to itemKey:"+ itemKey);
-        }
+        downloadSuccessful = true;
       }
       catch (Exception e) { 
         LOG.error("Error completing download for item:" + itemKey 
@@ -248,7 +233,6 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
   public void downloadFailed(int itemId, String itemKey, String errorCode) {
     LOG.info("Received Download Failed Event for Key:" + itemKey);
     Pair<Path,FSDataOutputStream> downloadTuple = _pathToStreamMap.remove(itemKey);
-    boolean downloadSuccessful = false;
     
     if (downloadTuple == null) { 
       LOG.error("Excepected Download Tuple for Failed Download key:" + itemKey + " GOT NULL!");
@@ -279,22 +263,15 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
   public boolean downloadStarting(int itemId, String itemKey, long contentLength) {
     LOG.info("Received Download Start Event for Key:" + itemKey);
     
-    Matcher segmentNameMatcher = metadataInfoPattern.matcher(itemKey);
     boolean continueDownload = false;
+
+    Path outputFilePath = _pathMapping.get(itemKey);
     
-    if (segmentNameMatcher.matches()) {
-      
-      String segmentId = segmentNameMatcher.group(1);
-      String partExtension = segmentNameMatcher.group(2);
-      
-      Path tempOutputDir = new Path(_conf.get("mapred.temp.dir", "."));
-      Path tempSegmentDir = new Path(tempOutputDir,segmentId);
-      Path metadataFilePath = new Path(tempSegmentDir,"metadata-" + partExtension);
-      
+    if (outputFilePath != null) {       
       try {
-        _fs.mkdirs(tempSegmentDir);
-        Pair<Path,FSDataOutputStream> tupleOut = new Pair<Path, FSDataOutputStream>(metadataFilePath,_fs.create(metadataFilePath));
-        LOG.info("Created Stream for Key:"+ itemKey +" temp Path:" + metadataFilePath);
+        _fs.mkdirs(outputFilePath.getParent());
+        Pair<Path,FSDataOutputStream> tupleOut = new Pair<Path, FSDataOutputStream>(outputFilePath,_fs.create(outputFilePath));
+        LOG.info("Created Stream for Key:"+ itemKey +" temp Path:" + outputFilePath);
         _pathToStreamMap.put(itemKey, tupleOut);
         continueDownload = true;
       } catch (IOException e) {
@@ -307,18 +284,77 @@ public class EC2MetadataTransferUtil implements S3Downloader.Callback {
     return continueDownload;
   }
   
+  static Options options = new Options();
+  static { 
+    
+    options.addOption(
+        OptionBuilder.withArgName("awsKey").hasArg().withDescription("AWS Key").isRequired().create("awsKey"));
+    
+    options.addOption(
+        OptionBuilder.withArgName("awsSecret").hasArg().withDescription("AWS Secret").isRequired().create("awsSecret"));
+
+    options.addOption(
+        OptionBuilder.withArgName("bucket").hasArg().withDescription("S3 bucket name").isRequired().create("bucket"));
+
+    options.addOption(
+        OptionBuilder.withArgName("outputPath").hasArg().isRequired().withDescription("HDFS output path").create("outputPath"));
+    
+    options.addOption(
+        OptionBuilder.withArgName("path").hasArg().withDescription("S3 path prefix").create("path"));
+
+    options.addOption(
+        OptionBuilder.withArgName("paths").hasArg().withDescription("S3 paths as a JSON Array").create("paths"));
+
+  }
+  
+  static void printUsage() { 
+    HelpFormatter formatter = new HelpFormatter();
+    formatter.printHelp( "S3BulkTransferUtil", options );
+  }
+
+  
   public static void main(String[] args)throws IOException {
-    final String bucket = args[0];
-    String paths  = args[1];
     
-    System.out.println("Paths are:" + paths);
-    JsonParser parser = new JsonParser();
-    JsonReader reader  = new JsonReader(new StringReader(paths));
-    reader.setLenient(true);
-    final JsonArray  array  = parser.parse(reader).getAsJsonArray();
-    int pathCount = array.size();
-    
-    EC2MetadataTransferUtil util = new EC2MetadataTransferUtil(bucket, array);
+    CommandLineParser parser = new GnuParser();
+
+    try {
+      // parse the command line arguments
+      CommandLine cmdLine = parser.parse( options, args );
+      
+      String s3AccessKey = cmdLine.getOptionValue("awsKey");
+      String s3Secret    = cmdLine.getOptionValue("awsSecret");
+      String s3Bucket    = cmdLine.getOptionValue("bucket");
+      Path hdfsOutputPath = new Path(cmdLine.getOptionValue("outputPath")); 
+      JsonArray paths = new JsonArray();
+      
+      if (cmdLine.hasOption ("path")) { 
+        String values[] = cmdLine.getOptionValues("path");
+        for (String value : values) { 
+          paths.add( new JsonPrimitive(value));
+        }
+      }
+      if (cmdLine.hasOption("paths")) { 
+        JsonParser jsonParser = new JsonParser();
+        JsonReader reader  = new JsonReader(new StringReader(cmdLine.getOptionValue("paths")));
+        reader.setLenient(true);
+        JsonArray  array  = jsonParser.parse(reader).getAsJsonArray();
+        if (array != null) { 
+          paths.addAll(array);
+        }
+      }
+      
+      if (paths.size() == 0) { 
+        throw new IOException("No Input Paths Specified!");
+      }
+      
+      LOG.info("Bucket:" + s3Bucket + " Target Paths:" + paths.toString());
+      
+      S3BulkTransferUtil util = new S3BulkTransferUtil(s3Bucket,s3AccessKey,s3Secret,paths,hdfsOutputPath);
+    }
+    catch (Exception e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+      printUsage();
+    }
   }
   
   

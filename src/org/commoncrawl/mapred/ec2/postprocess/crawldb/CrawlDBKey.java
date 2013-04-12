@@ -22,9 +22,12 @@ import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Partitioner;
 import org.commoncrawl.protocol.URLFPV2;
@@ -223,13 +226,25 @@ public class CrawlDBKey {
     
     FlexBuffer scanArray1[] = allocateScanArray();
     FlexBuffer scanArray2[] = allocateScanArray();
+    DataInputBuffer inputBuffer = new DataInputBuffer();
     
     @Override
     public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
-      key1.set(b1, s1, l1);
-      key2.set(b2, s2, l2);
-      
-      return compare(key1,key2);
+      int keyLen;
+      try {
+        inputBuffer.reset(b1,s1,l1);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key1.set(b1,inputBuffer.getPosition(), keyLen);
+        inputBuffer.reset(b2,s2,l2);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key2.set(b2,inputBuffer.getPosition(), keyLen);
+        
+        System.out.println("Key1:" + key1 + " Key2:" + key2);
+        return compare(key1,key2);
+        
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
@@ -259,16 +274,28 @@ public class CrawlDBKey {
 
     TextBytes key1 = new TextBytes();
     TextBytes key2 = new TextBytes();
+    DataInputBuffer inputBuffer = new DataInputBuffer();
     
     FlexBuffer scanArray1[] = allocateScanArray();
     FlexBuffer scanArray2[] = allocateScanArray();
     
     @Override
     public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
-      key1.set(b1, s1, l1);
-      key2.set(b2, s2, l2);
       
-      return compare(key1,key2);
+      int keyLen;
+      try {
+        inputBuffer.reset(b1,s1,l1);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key1.set(b1,inputBuffer.getPosition(), keyLen);
+        inputBuffer.reset(b2,s2,l2);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key2.set(b2,inputBuffer.getPosition(), keyLen);
+        
+        return compare(key1,key2);
+        
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
@@ -276,51 +303,59 @@ public class CrawlDBKey {
 
       scanForComponents(o1, ':',scanArray1);
       scanForComponents(o2, ':',scanArray2);
-      
-      long domain1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.DOMAIN_HASH_COMPONENT_ID);
-      long domain2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.DOMAIN_HASH_COMPONENT_ID);
-      
-      int result = (domain1Key < domain2Key) ? -1 : (domain1Key > domain2Key) ? 1 : 0;
-      
-      if (result == 0) { 
 
-        long hash1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.URL_HASH_COMPONENT_ID);
-        long hash2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.URL_HASH_COMPONENT_ID);
-        
-        
-        result = (hash1Key < hash2Key) ? -1 : (hash1Key > hash2Key) ? 1 : 0;
-      }
-      
+      long rootdomain1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID);
+      long rootdomain2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID);
+
+      int result = (rootdomain1Key < rootdomain2Key) ? -1 : (rootdomain1Key > rootdomain2Key) ? 1 : 0;
+
       if (result == 0) { 
         
-        long type1 = getLongComponentFromComponentArray(scanArray1,ComponentId.TYPE_COMPONENT_ID);
-        long type2 = getLongComponentFromComponentArray(scanArray2,ComponentId.TYPE_COMPONENT_ID);
+        long domain1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.DOMAIN_HASH_COMPONENT_ID);
+        long domain2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.DOMAIN_HASH_COMPONENT_ID);
         
-        if (type1 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
-          result = -1;
-        }
-        else if (type1 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
-          result = 1;
-        }
-        else { 
-          result = (type1 < type2) ? -1 : (type1 > type2) ? 1 : 0;
-        }
-      
+        result = (domain1Key < domain2Key) ? -1 : (domain1Key > domain2Key) ? 1 : 0;
+        
         if (result == 0) { 
-          if (type1 == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) { 
-
-            long timestamp1 = getLongComponentFromComponentArray(scanArray1,ComponentId.EXTRA_DATA_COMPONENT_ID);
-            long timestamp2 = getLongComponentFromComponentArray(scanArray2,ComponentId.EXTRA_DATA_COMPONENT_ID);
-            
-            result = (timestamp1 < timestamp2) ? -1 : (timestamp1 > timestamp2) ? 1 : 0;
-            
+  
+          long hash1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.URL_HASH_COMPONENT_ID);
+          long hash2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.URL_HASH_COMPONENT_ID);
+          
+          
+          result = (hash1Key < hash2Key) ? -1 : (hash1Key > hash2Key) ? 1 : 0;
+        }
+        
+        if (result == 0) { 
+          
+          long type1 = getLongComponentFromComponentArray(scanArray1,ComponentId.TYPE_COMPONENT_ID);
+          long type2 = getLongComponentFromComponentArray(scanArray2,ComponentId.TYPE_COMPONENT_ID);
+          
+          if (type1 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
+            result = -1;
+          }
+          else if (type1 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
+            result = 1;
           }
           else { 
-            
-            FlexBuffer bytes1 = getByteArrayFromComponentArray(scanArray1, CrawlDBKey.ComponentId.EXTRA_DATA_COMPONENT_ID);
-            FlexBuffer bytes2 = getByteArrayFromComponentArray(scanArray2, CrawlDBKey.ComponentId.EXTRA_DATA_COMPONENT_ID);
-            
-            result = bytes1.compareTo(bytes2);
+            result = (type1 < type2) ? -1 : (type1 > type2) ? 1 : 0;
+          }
+        
+          if (result == 0) { 
+            if (type1 == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) { 
+  
+              long timestamp1 = getLongComponentFromComponentArray(scanArray1,ComponentId.EXTRA_DATA_COMPONENT_ID);
+              long timestamp2 = getLongComponentFromComponentArray(scanArray2,ComponentId.EXTRA_DATA_COMPONENT_ID);
+              
+              result = (timestamp1 < timestamp2) ? -1 : (timestamp1 > timestamp2) ? 1 : 0;
+              
+            }
+            else { 
+              
+              FlexBuffer bytes1 = getByteArrayFromComponentArray(scanArray1, CrawlDBKey.ComponentId.EXTRA_DATA_COMPONENT_ID);
+              FlexBuffer bytes2 = getByteArrayFromComponentArray(scanArray2, CrawlDBKey.ComponentId.EXTRA_DATA_COMPONENT_ID);
+              
+              result = bytes1.compareTo(bytes2);
+            }
           }
         }
       }
@@ -359,6 +394,26 @@ public class CrawlDBKey {
     Pair<Integer,Integer> scanResult = scanAndTerminateOn(data, offset, length, ':', componentId.ordinal() + 1);
     
     return new FlexBuffer(data, scanResult.e0, scanResult.e1 - scanResult.e0 + 1);
+  }
+  
+  
+  private static void compareKeys(RawComparator<TextBytes> comparator,TextBytes key1,TextBytes key2,int expectedResult) { 
+    Assert.assertEquals(comparator.compare(key1, key2),expectedResult);
+    DataOutputBuffer outputBuffer1 = new DataOutputBuffer();
+    DataOutputBuffer outputBuffer2 = new DataOutputBuffer();
+    try {
+      key1.write(outputBuffer1);
+      key2.write(outputBuffer2);
+      Assert.assertEquals(comparator.compare(outputBuffer1.getData(), 0, outputBuffer1.getLength(), outputBuffer2.getData(), 0, outputBuffer2.getLength()),expectedResult);
+      int offset1 = outputBuffer1.getLength();
+      int offset2 = outputBuffer2.getLength();
+      key1.write(outputBuffer1);
+      key2.write(outputBuffer2);
+      Assert.assertEquals(comparator.compare(outputBuffer1.getData(), offset1, outputBuffer1.getLength() - offset1, outputBuffer2.getData(), offset2, outputBuffer2.getLength() - offset2),expectedResult);
+    } catch (IOException e) {
+      e.printStackTrace();
+      throw new RuntimeException(e);
+    }
   }
   
   @Test
@@ -404,44 +459,44 @@ public class CrawlDBKey {
         CrawlDBKeyGroupingComparator gcomparator = new CrawlDBKeyGroupingComparator();
         
         System.out.println("Comparing Similar status Keys");
-        Assert.assertTrue(comparator.compare(statusKey1,statusKey2) == 0);
-        Assert.assertTrue(comparator.compare(statusKey2,statusKey1) == 0);
+        compareKeys(comparator,statusKey1,statusKey2,0);
+        compareKeys(comparator,statusKey2,statusKey1,0);
         System.out.println("Comparing Similar status Keys w/Grouping C");
-        Assert.assertTrue(gcomparator.compare(statusKey1,statusKey2) == 0);
-        Assert.assertTrue(gcomparator.compare(statusKey2,statusKey1) == 0);
+        compareKeys(gcomparator,statusKey1,statusKey2,0);
+        compareKeys(gcomparator,statusKey2,statusKey1,0);
         System.out.println("Comparing Similar status Keys with different timestamps");
-        Assert.assertTrue(comparator.compare(statusKey2,statusKey3) == -1);
-        Assert.assertTrue(comparator.compare(statusKey3,statusKey2) == 1);
+        compareKeys(comparator,statusKey2,statusKey3,-1);
+        compareKeys(comparator,statusKey3,statusKey2,1);
         System.out.println("Comparing Similar status Keys with different timestamps w/Grouping C");
-        Assert.assertTrue(gcomparator.compare(statusKey2,statusKey3) == 0);
-        Assert.assertTrue(gcomparator.compare(statusKey3,statusKey2) == 0);
+        compareKeys(gcomparator,statusKey2,statusKey3,0);
+        compareKeys(gcomparator,statusKey3,statusKey2,0);
         System.out.println("Comparing Status Key to Link Key");
-        Assert.assertTrue(comparator.compare(statusKey1,linkKey1) == -1);
-        Assert.assertTrue(comparator.compare(linkKey1,statusKey1) == 1);
+        compareKeys(comparator,statusKey1,linkKey1,-1);
+        compareKeys(comparator,linkKey1,statusKey1,1);
         System.out.println("Comparing Status Key to Link Key Grouping C");
-        Assert.assertTrue(gcomparator.compare(statusKey1,linkKey1) == 0);
-        Assert.assertTrue(gcomparator.compare(linkKey1,statusKey1) == 0);
+        compareKeys(gcomparator,statusKey1,linkKey1,0);
+        compareKeys(gcomparator,linkKey1,statusKey1,0);
         System.out.println("Comparing TWO Link Keys with same hash value");
-        Assert.assertTrue(comparator.compare(linkKey1,linkKey1) == 0);
-        Assert.assertTrue(comparator.compare(linkKey1,linkKey1) == 0);
+        compareKeys(comparator,linkKey1,linkKey1,0);
+        compareKeys(comparator,linkKey1,linkKey1,0);
         System.out.println("Comparing TWO Link Keys with same type but different hash values");
-        Assert.assertTrue(comparator.compare(linkKey2,linkKey3) == -1);
-        Assert.assertTrue(comparator.compare(linkKey3,linkKey2) == 1);
+        compareKeys(comparator,linkKey2,linkKey3,-1);
+        compareKeys(comparator,linkKey3,linkKey2,1);
         System.out.println("Comparing TWO Link Keys with same type but different hash values - Grouping  C");
-        Assert.assertTrue(gcomparator.compare(linkKey2,linkKey3) == -1);
-        Assert.assertTrue(gcomparator.compare(linkKey3,linkKey2) == 1);
+        compareKeys(gcomparator,linkKey2,linkKey3,-1);
+        compareKeys(gcomparator,linkKey3,linkKey2,1);
         System.out.println("Comparing TWO Link Keys with different types but same hash values");
-        Assert.assertTrue(comparator.compare(linkKey2,linkKey4) == -1);
-        Assert.assertTrue(comparator.compare(linkKey4,linkKey2) == 1);
+        compareKeys(comparator,linkKey2,linkKey4,-1);
+        compareKeys(comparator,linkKey4,linkKey2,1);
         System.out.println("Comparing TWO Link Keys with different types but same hash values - Grouping C ");
-        Assert.assertTrue(gcomparator.compare(linkKey2,linkKey4) == 0);
-        Assert.assertTrue(gcomparator.compare(linkKey4,linkKey2) == 0);
+        compareKeys(gcomparator,linkKey2,linkKey4,0);
+        compareKeys(gcomparator,linkKey4,linkKey2,0);
         System.out.println("Comparing TWO Link Keys with similar types but different hash values");
-        Assert.assertTrue(comparator.compare(linkKey4,linkKey5) == -1);
-        Assert.assertTrue(comparator.compare(linkKey5,linkKey4) == 1);
+        compareKeys(comparator,linkKey4,linkKey5,-1);
+        compareKeys(comparator,linkKey5,linkKey4,1);
         System.out.println("Comparing TWO Link Keys with similar types but different hash values - Grouping C");
-        Assert.assertTrue(gcomparator.compare(linkKey4,linkKey5) == -1);
-        Assert.assertTrue(gcomparator.compare(linkKey5,linkKey4) == 1);
+        compareKeys(gcomparator,linkKey4,linkKey5,-1);
+        compareKeys(gcomparator,linkKey5,linkKey4,1);
         
         
         TextBytes linkKeyTest   = generateLinkKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),CrawlDBKey.Type.KEY_TYPE_HTML_LINK,"");
