@@ -126,23 +126,19 @@ public final class CrawlEnvironment extends Environment {
   public static final String   HDFS_CrawlSegmentsFileName              = "crawlSegmentStats";
 
   // lists
-  public static final String   ROOT_SUPER_DOMAIN_PATH                  = "/lists/super_domain_list";
-  public static final String   ROOT_RANK_BOOST_LIST                    = "/lists/rank_boost_master_list";
-  public static final String   ROOT_RECRAWL_OVERRIDE_LIST              = "/lists/recrawl_boost_master_list";
-  public static final String   SPAM_DOMAIN_LIST                        = "/lists/spam_domain_list";
-  public static final String   BLOCKED_DOMAIN_LIST                     = "/lists/blocked_doman_list";
-  public static final String   TEMPORARILY_BLOCKED_DOMAIN_LIST         = "/lists/temporary_blocked_doman_list";
-  public static final String   IP_BLOCK_LIST                           = "/lists/ip_block_list";
-  public static final String   IP_ADDRESS_HINTS                        = "/lists/ip_address_hints";
-  public static final String   CRAWL_RATE_MOD_FILTER_PATH              = "/lists/crawl_rate_override";
-  public static final String   PROXY_CRAWL_RATE_MOD_FILTER_PATH        = "/lists/proxy/crawl_rate_override";
-  public static final String   PROXY_URL_BLOCK_LIST_FILTER_PATH        = "/lists/proxy/url_block_list";
-  public static final String   PATTERN_BLOCK_FILTER                    = "/lists/pattern-block-filter";
+  
+  public static final String   ROOT_SUPER_DOMAIN_PATH                  = "/lists/super_domain_list"; // (UNUSED IN PROD)
+  public static final String   BLOCKED_DOMAIN_LIST                     = "/lists/blocked_doman_list"; // (CRAWLER)
+  public static final String   TEMPORARILY_BLOCKED_DOMAIN_LIST         = "/lists/temporary_blocked_doman_list"; // (CRAWLER)
+  public static final String   IP_BLOCK_LIST                           = "/lists/ip_block_list"; // (CRAWLER)
 
-  public static final String   DNS_REWRITE_RULES                       = "/lists/dns_rewrite_rules";
-  public static final String   DNS_NOCACHE_RULES                       = "/lists/dns_nocache_rules";
+  public static final String   CRAWL_RATE_MOD_FILTER_PATH              = "/lists/crawl_rate_override"; // (CRAWLER)
+  public static final String   PROXY_CRAWL_RATE_MOD_FILTER_PATH        = "/lists/proxy/crawl_rate_override"; // CCPROXY
+  public static final String   PROXY_URL_BLOCK_LIST_FILTER_PATH        = "/lists/proxy/url_block_list"; // CCPROXY
 
-  public static final String   TOP_100K_LIST                           = "/lists/top_100K_domains";
+  public static final String   DNS_REWRITE_RULES                       = "/lists/dns_rewrite_rules"; // (CRAWLER,DNSSERVICE)
+  public static final String   DNS_NOCACHE_RULES                       = "/lists/dns_nocache_rules"; // (DNSSERVICE)
+
 
   /** local paths **/
   public static final String   SegmentLocalDirectory                   = "segments";
@@ -175,7 +171,7 @@ public final class CrawlEnvironment extends Environment {
   public static final String   CRAWLDB_DB                              = "crawldb_state.db";
   public static final int      DEFAULT_DATABASE_RPC_PORT               = 8030;
   public static final int      DEFAULT_DATABASE_HTTP_PORT              = 8031;
-  public static final String   DATABASE_WEBAPP_NAME                    = "database";
+  public static final String   CRAWLMASTER_WEBAPP_NAME                 = "crawlmaster";
   // query master specific defaults ...
   public static final String   QMASTER_DB                              = "qmaster_state.db";
   public static final int      DEFAULT_QUERY_MASTER_RPC_PORT           = 8040;
