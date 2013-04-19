@@ -20,6 +20,7 @@ package org.commoncrawl.util;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -28,26 +29,33 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.PriorityQueue;
+import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.Vector;
-import java.util.zip.CRC32;
+
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
+import org.apache.hadoop.io.SequenceFile.ValueBytes;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.SequenceFile.ValueBytes;
+import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
@@ -57,12 +65,18 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.KeyAndValueData;
+import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.RawRecordValue;
 import org.commoncrawl.util.Tuples.Pair;
-import org.commoncrawl.util.URLUtils.URLFPV2RawComparator;
+import org.junit.Assert;
+import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import static org.mockito.Mockito.*;
+import com.google.common.collect.*;
 
 
 /**
@@ -89,7 +103,7 @@ public class MultiFileMergeUtils {
     public long getLength() { return 0L; }
     public String[] getLocations() { return new String[0]; }
   }
-  
+
   public static class MultiFileMergePartitioner extends org.apache.hadoop.mapreduce.Partitioner<IntWritable, Text> implements Partitioner<IntWritable, Text> {
 
     @Override
@@ -101,7 +115,7 @@ public class MultiFileMergeUtils {
     } 
   }
 
-  
+
   public static class MultiFileMergeInputFormat extends org.apache.hadoop.mapreduce.InputFormat<IntWritable, Text> implements InputFormat<IntWritable,Text>{
 
 
@@ -122,17 +136,17 @@ public class MultiFileMergeUtils {
 
         // get job affinity mask 
         String nodeAffinityMask = NodeAffinityMaskBuilder.getNodeAffinityMask(job);
-        
+
         if (nodeAffinityMask != null) { 
           // ok build a mapping 
           Map<Integer,String> rootAffinityMap = NodeAffinityMaskBuilder.parseAffinityMask(nodeAffinityMask);
           // ok validate that all input paths have a matching mapping 
           for (int i=0;i<paths.length;++i) { 
-  
+
             Path nextPath = paths[i];
-  
+
             String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs,nextPath,rootAffinityMap);
-  
+
             if (nodeAffinityMask.compareTo(nextPathAffinityMask) != 0) { 
               LOG.error("Input Path:" + paths[i] + " had an incompatible NodeAffinityMask with root path.");
               LOG.error("Root Path:" + paths[0]);
@@ -149,7 +163,7 @@ public class MultiFileMergeUtils {
         for (Path path : paths) { 
           FileSystem pathFS = FileSystem.get(path.toUri(),job);
           FileStatus parts[] = pathFS.globStatus(new Path(path,"part-*"));
-          
+
           for (FileStatus part : parts) { 
             pathList.add(part.getPath());
           }
@@ -207,7 +221,7 @@ public class MultiFileMergeUtils {
     @Override
     public org.apache.hadoop.mapreduce.RecordReader<IntWritable, Text> createRecordReader(
         org.apache.hadoop.mapreduce.InputSplit split, TaskAttemptContext context)
-        throws IOException, InterruptedException {
+            throws IOException, InterruptedException {
       // ok step 1. get input paths 
       Path paths[] = org.apache.hadoop.mapreduce.lib.input.FileInputFormat.getInputPaths(context);
       if (paths.length == 0) { 
@@ -254,16 +268,16 @@ public class MultiFileMergeUtils {
           private int position = 0;
           IntWritable keyOut = new IntWritable();
           Text valueOut = new Text();
-          
+
 
           @Override
           public IntWritable getCurrentKey() throws IOException,
-              InterruptedException {
+          InterruptedException {
             return keyOut;
           }
           @Override
           public Text getCurrentValue() throws IOException,
-              InterruptedException {
+          InterruptedException {
             return valueOut;
           }
           @Override
@@ -271,7 +285,7 @@ public class MultiFileMergeUtils {
               TaskAttemptContext context) throws IOException,
               InterruptedException {
             // TODO Auto-generated method stub
-            
+
           }
           @Override
           public boolean nextKeyValue() throws IOException,InterruptedException {
@@ -303,7 +317,7 @@ public class MultiFileMergeUtils {
 
           @Override
           public void close() throws IOException {
-            
+
           }
 
           @Override
@@ -333,14 +347,15 @@ public class MultiFileMergeUtils {
     public static final String MULTIFILE_COMPARATOR_CLASS = "mutlifile.compaarator.class";
     public static final String MULTIFILE_KEY_CLASS 				= "mutlifile.key.class";
 
-    @SuppressWarnings("unchecked")
-    InputSource _inputs[] = null;
-    int _validStreams = 0;
+    @SuppressWarnings("rawtypes")
+    PriorityQueue<InputSource> _inputs = new PriorityQueue<InputSource>(1); 
+    
+    
     Configuration _conf;
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("rawtypes")
     Comparator _comparator;
     RawComparator<Writable> _rawComparator;
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("rawtypes")
     Class _keyClass;
     KeyClassType _keyObject;
     KeyAndValueData<KeyClassType> _keyAndValueData = new KeyAndValueData<KeyClassType>();
@@ -350,7 +365,6 @@ public class MultiFileMergeUtils {
       conf.setClass(MULTIFILE_KEY_CLASS, theClass, Writable.class);
     }
 
-    @SuppressWarnings("unchecked")
     public static void setComparatorClass(Configuration conf,Class<? extends RawComparator<Writable>> theClass) { 
       conf.setClass(MULTIFILE_COMPARATOR_CLASS, theClass, Comparator.class);
     }
@@ -358,7 +372,7 @@ public class MultiFileMergeUtils {
     public static class RawRecordValue {
 
       public Path source;
-      
+
       public DataOutputBuffer key  = new DataOutputBuffer();
       public DataOutputBuffer data = new DataOutputBuffer();
     }
@@ -369,14 +383,14 @@ public class MultiFileMergeUtils {
       public ArrayList<RawRecordValue> _values = new ArrayList<RawRecordValue>();
     }
 
-    public MultiFileInputReader(FileSystem fs,Vector<Path> inputPaths,Configuration conf) throws IOException { 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    public MultiFileInputReader(FileSystem fs,List<Path> inputPaths,Configuration conf) throws IOException { 
 
       _conf = conf;
-      _inputs = new InputSource[inputPaths.size()];  		
       Class comparatorClass = conf.getClass(MULTIFILE_COMPARATOR_CLASS, null); 
 
       LOG.info("Constructing comparator of type:" + comparatorClass.getName());
-      _comparator = (RawComparator<Writable>)ReflectionUtils.newInstance(comparatorClass, conf);
+      _comparator = (Comparator) ReflectionUtils.newInstance(comparatorClass, conf);
       LOG.info("Construced comparator of type:" + comparatorClass.getName());
 
       if (_comparator instanceof RawComparator) { 
@@ -391,76 +405,72 @@ public class MultiFileMergeUtils {
 
       for (Path path : inputPaths) {
         LOG.info("Adding Stream at Path:" + path);
-        _inputs[_validStreams] = new InputSource(fs, _conf, path,(_rawComparator == null) ? _keyClass : null);
+        InputSource inputSource = new InputSource(fs, _conf, path,(_rawComparator == null) ? _keyClass : null);
+        
         // advance to first item 
-        if (_inputs[_validStreams].next() == false) {
-          LOG.error("Stream At Index:" + _validStreams + " contains zero entries!");
-          _inputs[_validStreams].close();
+        if (inputSource.next() == false) {
+          LOG.error("Stream At Path:" + path  + " contains zero entries!");
+          inputSource.close();
         }
         else {
           LOG.info("Stream at Path:" + path + " is VALID");
-          _validStreams++;
+          _inputs.add(inputSource);
         }
       }
-      // lastly sort streams
-      LOG.info("Doing Initial Sort on Streams");
-      sortStreams();
       LOG.info("Finished With Initial Sort");
     }
 
     public class RawValueIterator implements Iterator<RawRecordValue>, Iterable<RawRecordValue> {
       int _streamIdx = 0;
       RawRecordValue _currentValue = null;
-      
+
       RawValueIterator(RawRecordValue initialValue) { 
         _currentValue = initialValue;
       }
 
       @Override
       public boolean hasNext() {
-        if (_currentValue != null) { 
-          return true;
-        }
-        else { 
-          // ok enter a loop and collect all sources for current target ... 
-          for (;_streamIdx<_validStreams;) { 
-            if (!_inputs[_streamIdx].isValid()) { 
-              // skip invalid streams 
-              _streamIdx++;
-            }
-            else {
-              // ok now compare against next item to see if there is a match 
-              int result = (_rawComparator != null) ? 
-                  _rawComparator.compare(_keyAndValueData._keyData.getData(),0,_keyAndValueData._keyData.getLength(),
-                      _inputs[_streamIdx]._keyData.getData(),0,_inputs[_streamIdx]._keyData.getLength())
-                      :
-                        _comparator.compare(_keyAndValueData._keyObject,_inputs[_streamIdx]._keyObject);
-
-              if (result != 0) {
-                //LOG.info("Input:" + _inputs[streamIdx]._path + " did not match. skipping");
-                // advance to next stream - values don't match 
-                _streamIdx++;
-              }
-              else { 
-
-                //LOG.info("Input:" + _inputs[streamIdx]._path + " did match. adding. previous count:" + _keyAndValueData._values.size());
-                // grab this value  
-                _currentValue = _inputs[_streamIdx]._value;
-
-                // advance current stream ... 
-                try {
-                  _inputs[_streamIdx].next();
-                  return true;
-                } catch (IOException e) {
-                  LOG.error(CCStringUtils.stringifyException(e));
-                  throw new RuntimeException(e);
+        if (_currentValue == null) { 
+          // peek at the top most item in the queue
+          InputSource nextSource = _inputs.peek();
+          if (nextSource != null) { 
+            // ok now compare against next item to see if there is a match 
+            int result = (_rawComparator != null) ? 
+                _rawComparator.compare(_keyAndValueData._keyData.getData(),0,_keyAndValueData._keyData.getLength(),
+                    nextSource._keyData.getData(),0,nextSource._keyData.getLength())
+                    :
+                      _comparator.compare(_keyAndValueData._keyObject,nextSource._keyObject);
+                
+            if (result == 0) { 
+              // save the current value ... 
+              _currentValue = nextSource._value;
+              // pop source ... 
+              _inputs.remove();
+              // advance it (potentially) 
+              try  {
+                if (!nextSource.next()) {
+                  // if no more data .. gracefully close the source ... 
+                  nextSource.close();
+                }
+                // otherwise resinsert in priority queue 
+                else { 
+                  _inputs.add(nextSource);
                 }
               }
-            }            
+              catch (IOException e) { 
+                LOG.error(CCStringUtils.stringifyException(e));
+                try { 
+                  nextSource.close();
+                }
+                catch (Exception e2) { 
+                  
+                }
+                return false;
+              }
+            }
           }
         }
-        
-        return false;
+        return _currentValue != null;
       }
 
       @Override
@@ -480,150 +490,136 @@ public class MultiFileMergeUtils {
         return this;
       }
     }
-    
+
     public Pair<KeyAndValueData<KeyClassType>,Iterable<RawRecordValue>> getNextItemIterator() throws IOException { 
-      
+
       int newValidStreamCount=0;
+
+      // pop the top most item in the queue
+      InputSource nextSource = _inputs.poll();
       
-      for (int currStreamIdx=0;currStreamIdx<_validStreams;++currStreamIdx) { 
-        if (_inputs[currStreamIdx].isValid()) { 
-          _inputs[newValidStreamCount++] = _inputs[currStreamIdx];
-        }
-        else {
-          // close the stream ... 
-          _inputs[currStreamIdx].close();
-          // null it out ... 
-          _inputs[currStreamIdx] = null;
-        }
-      }
-      // resset valid stream count 
-      _validStreams = newValidStreamCount;
 
-      // ok now sort streams ...
-      if (_validStreams != 0) {
-        //LOG.info("Resorting Streams");
-        sortStreams();
-      }
-      
-      if (_validStreams != 0) { 
-        //reset value array 
-        _keyAndValueData._values.clear();
-
-        // get key object if available ... 
-        if (_inputs[0]._keyObject != null) { 
-          _keyAndValueData._keyObject =(KeyClassType) _inputs[0]._keyObject; 
-        }
-        else { 
-          _keyObjectReader.reset(_inputs[0]._keyData.getData(), _inputs[0]._keyData.getLength());
-          _keyObject.readFields(_keyObjectReader);
-          _keyAndValueData._keyObject = (KeyClassType)_keyObject;
-        }
-        // and also grab key data from first input source
-        _keyAndValueData._keyData = _inputs[0].detachKeyData();
-
-        //LOG.info("readNextTarget - target is:" + target.target.getDomainHash() + ":" + target.target.getUrlHash());
-        //LOG.info("readNextTarget - source is:" + _inputs[0].last().source.getDomainHash() + ":" + _inputs[0].last().source.getUrlHash());
-
-        // save the initial value 
-        RawRecordValue initialValue = _inputs[0]._value;
+      // if data available ... 
+      if (nextSource != null) { 
         
-        // add the first item to the list 
-        _keyAndValueData._values.add(_inputs[0]._value);
+        try { 
+          //reset value array 
+          _keyAndValueData._values.clear();
+  
+          // set key object ref if source has a key object ...  
+          if (nextSource._keyObject != null) { 
+            _keyAndValueData._keyObject =(KeyClassType) nextSource.detachKeyObject(); 
+          }
+          // otherwise ... deserialize from raw ... 
+          else { 
+            _keyObjectReader.reset(nextSource._keyData.getData(), nextSource._keyData.getLength());
+            _keyObject.readFields(_keyObjectReader);
+            _keyAndValueData._keyObject = (KeyClassType)_keyObject;
+          }
+          // and also grab key data from first input source
+          _keyAndValueData._keyData = nextSource.detachKeyData();
+  
+          //LOG.info("readNextTarget - target is:" + target.target.getDomainHash() + ":" + target.target.getUrlHash());
+          //LOG.info("readNextTarget - source is:" + _inputs[0].last().source.getDomainHash() + ":" + _inputs[0].last().source.getUrlHash());
+  
+          // save the initial value 
+          RawRecordValue initialValue = nextSource._value;
+  
+          // add the first item to the list 
+          _keyAndValueData._values.add(initialValue);
+          
+          //LOG.info("Using Input:" + _inputs[0]._path + " as primary key");
 
-        //              /LOG.info("Using Input:" + _inputs[0]._path + " as primary key");
+          // advance input zero 
+          if (!nextSource.next()) {
+            // if no more data .. gracefully close the source ... 
+            nextSource.close();
+          }
+          // otherwise resinsert in priority queue 
+          else { 
+            _inputs.add(nextSource);
+          }
 
-        // advance input zero 
-        _inputs[0].next();
-        
-        return new Pair<KeyAndValueData<KeyClassType>, Iterable<RawRecordValue>>(_keyAndValueData,new RawValueIterator(initialValue));
+          // return tuple ... 
+          return new Pair<KeyAndValueData<KeyClassType>, Iterable<RawRecordValue>>(_keyAndValueData,new RawValueIterator(initialValue));
+        }
+        catch (IOException e) { 
+          LOG.error(CCStringUtils.stringifyException(e));
+          
+          try {
+            nextSource.close(); 
+          }
+          catch (Exception e2) { 
+            
+          }
+          
+          throw e;
+        }
       }
       return null;
     }
+
     
     // collect next valid target and all related sources 
     public KeyAndValueData<KeyClassType> readNextItem() throws IOException {
 
-      if (_validStreams != 0) { 
-        //reset value array 
-        _keyAndValueData._values.clear();
-
-        // get key object if available ... 
-        if (_inputs[0]._keyObject != null) { 
-          _keyAndValueData._keyObject =(KeyClassType) _inputs[0]._keyObject; 
-        }
-        else { 
-          _keyObjectReader.reset(_inputs[0]._keyData.getData(), _inputs[0]._keyData.getLength());
-          _keyObject.readFields(_keyObjectReader);
-          _keyAndValueData._keyObject = (KeyClassType)_keyObject;
-        }
-        // and also grab key data from first input source
-        _keyAndValueData._keyData = _inputs[0].detachKeyData();
-
-        //LOG.info("readNextTarget - target is:" + target.target.getDomainHash() + ":" + target.target.getUrlHash());
-        //LOG.info("readNextTarget - source is:" + _inputs[0].last().source.getDomainHash() + ":" + _inputs[0].last().source.getUrlHash());
-
-        // add the first item to the list 
-        _keyAndValueData._values.add(_inputs[0]._value);
-
-        //  			/LOG.info("Using Input:" + _inputs[0]._path + " as primary key");
-
-        // advance input zero 
-        _inputs[0].next();
-
-        // ok enter a loop and collect all sources for current target ... 
-        for (int streamIdx=0;streamIdx<_validStreams;) { 
-          if (!_inputs[streamIdx].isValid()) { 
-            // skip invalid streams 
-            streamIdx++;
+      // pop the top most item in the queue
+      InputSource nextSource = _inputs.poll();
+      
+      if (nextSource != null) { 
+        try { 
+          //reset value array 
+          _keyAndValueData._values.clear();
+  
+          // set key object ref if source has a key object ...  
+          if (nextSource._keyObject != null) { 
+            _keyAndValueData._keyObject =(KeyClassType) nextSource.detachKeyObject(); 
           }
-          else {
-            // ok now compare against next item to see if there is a match 
-            int result = (_rawComparator != null) ? 
-                _rawComparator.compare(_keyAndValueData._keyData.getData(),0,_keyAndValueData._keyData.getLength(),
-                    _inputs[streamIdx]._keyData.getData(),0,_inputs[streamIdx]._keyData.getLength())
-                    :
-                      _comparator.compare(_keyAndValueData._keyObject,_inputs[streamIdx]._keyObject);
+          // otherwise ... deserialize from raw ... 
+          else { 
+            _keyObjectReader.reset(nextSource._keyData.getData(), nextSource._keyData.getLength());
+            _keyObject.readFields(_keyObjectReader);
+            _keyAndValueData._keyObject = (KeyClassType)_keyObject;
+          }
+          // and also grab key data from first input source
+          _keyAndValueData._keyData = nextSource.detachKeyData();
 
-                if (result != 0) {
-                  //LOG.info("Input:" + _inputs[streamIdx]._path + " did not match. skipping");
-                  // advance to next stream - values don't match 
-                  streamIdx++;
-                }
-                else { 
+          //LOG.info("readNextTarget - target is:" + target.target.getDomainHash() + ":" + target.target.getUrlHash());
+          //LOG.info("readNextTarget - source is:" + _inputs[0].last().source.getDomainHash() + ":" + _inputs[0].last().source.getUrlHash());
 
-                  //LOG.info("Input:" + _inputs[streamIdx]._path + " did match. adding. previous count:" + _keyAndValueData._values.size());
-                  // grab this value  
-                  _keyAndValueData._values.add(_inputs[streamIdx]._value);
+          // save the initial value 
+          RawRecordValue initialValue = nextSource._value;
 
-                  // advance current stream ... 
-                  _inputs[streamIdx].next();
-                }
+          //LOG.info("Using Input:" + _inputs[0]._path + " as primary key");
+          // advance input zero 
+          if (!nextSource.next()) {
+            // if no more data .. gracefully close the source ... 
+            nextSource.close();
+          }
+          // otherwise resinsert in priority queue 
+          else { 
+            _inputs.add(nextSource);
+          }
+          nextSource = null;
+          // create an interator ... 
+          RawValueIterator iterator = new RawValueIterator(initialValue);
+          // iterator ...
+          while (iterator.hasNext()) { 
+            // add the first item to the list 
+            _keyAndValueData._values.add(iterator.next());
           }
         }
-
-        //LOG.info("Consolidating Streams");
-        // ok now collect remaining valid streams 
-        int newValidStreamCount=0;
-        for (int currStreamIdx=0;currStreamIdx<_validStreams;++currStreamIdx) { 
-          if (_inputs[currStreamIdx].isValid()) { 
-            _inputs[newValidStreamCount++] = _inputs[currStreamIdx];
+        catch (IOException e) {
+          LOG.error(CCStringUtils.stringifyException(e));
+          if (nextSource != null) { 
+            try {
+              nextSource.close();
+            }
+            catch (Exception e2) { 
+            }
           }
-          else {
-            // close the stream ... 
-            _inputs[currStreamIdx].close();
-            // null it out ... 
-            _inputs[currStreamIdx] = null;
-          }
+          throw e;
         }
-        // resset valid stream count 
-        _validStreams = newValidStreamCount;
-
-        // ok now sort streams ...
-        if (_validStreams != 0) {
-          //LOG.info("Resorting Streams");
-          sortStreams();
-        }
-
         return _keyAndValueData;
       }
       else { 
@@ -631,38 +627,19 @@ public class MultiFileMergeUtils {
       }
     }
 
-    public void close() { 
-      for (int i=0;i<_validStreams;++i) { 
-        _inputs[i].close();
-        _inputs[i] = null;
-      }
-      _validStreams = 0;
-    }
-
-    private final void sortStreams() { 
-
-      if (_rawComparator != null) { 
-        Arrays.sort(_inputs,0,_validStreams,new Comparator<InputSource>() {
-
-          @Override
-          public int compare(InputSource o1, InputSource o2) {
-            return _rawComparator.compare(o1._keyData.getData(), 0, o1._keyData.getLength(), o2._keyData.getData(), 0, o2._keyData.getLength());
-          }
-        });
-      }
-      else { 
-        Arrays.sort(_inputs,0,_validStreams,new Comparator<InputSource>() {
-
-          @Override
-          public int compare(InputSource o1, InputSource o2) {
-            return _comparator.compare(o1._keyObject, o2._keyObject);
-          }
-        });
-
+    public void close() {
+      InputSource nextSource = null;
+      while ((nextSource = _inputs.poll()) != null) { 
+        try { 
+          nextSource.close();
+        }
+        catch (Exception e) { 
+          LOG.error(CCStringUtils.stringifyException(e));
+        }
       }
     }
 
-    public static class InputSource<KeyClassType extends Writable> {
+    public class InputSource<KeyClassType extends Writable> implements Comparable<InputSource> {
 
       boolean 					  eos = false;
       Path 								_path;
@@ -670,7 +647,7 @@ public class MultiFileMergeUtils {
       DataOutputBuffer    _keyData = null;
       DataInputBuffer 	  _keyDataReader = new DataInputBuffer();
       Class				  _keyClass;
-      Writable			  _keyObject;
+      private KeyClassType			  _keyObject;
       RawRecordValue 	  _value;
       ValueBytes       	  _valueBytes = null;
 
@@ -707,11 +684,11 @@ public class MultiFileMergeUtils {
             if (_reader.nextRawValue(_valueBytes) != 0) { 
               _valueBytes.writeUncompressedBytes(_value.data);
             }
-          }
-          // now if key object is present ... 
-          if (_keyObject != null) { 
-            _keyDataReader.reset(_keyData.getData(), _keyData.getLength());
-            _keyObject.readFields(_keyDataReader);
+            // now if key object is present ... 
+            if (_keyObject != null) { 
+              _keyDataReader.reset(_keyData.getData(), _keyData.getLength());
+              _keyObject.readFields(_keyDataReader);
+            }
           }
         }
         return !eos;
@@ -721,145 +698,211 @@ public class MultiFileMergeUtils {
         return !eos;
       }
 
+      public KeyClassType detachKeyObject() { 
+        KeyClassType keyObjectOut = _keyObject;
+        _keyObject = (KeyClassType)ReflectionUtils.newInstance(_keyClass, _conf);
+        return keyObjectOut;
+      }
+      
       public DataOutputBuffer detachKeyData() { 
         DataOutputBuffer temp = _keyData;
         _keyData = new DataOutputBuffer();
         return temp;
       }
+
+      @SuppressWarnings({ "rawtypes", "unchecked" })
+      @Override
+      public int compareTo(InputSource other) {
+        int result;
+        if (_rawComparator != null) { 
+          result = _rawComparator.compare(
+              this._keyData.getData(),0,this._keyData.getLength(),
+              other._keyData.getData(),0,other._keyData.getLength());
+        }
+        else { 
+          result = _comparator.compare(this._keyObject, other._keyObject);
+        }
+        return result;
+      }
     }
 
   }
 
+  // Test data: The first item in the tuple is the key
+  // the second is a unique sequence number
 
-  public static void main(String[] args) {
+  // There are two data sets. They should be sorted, and 
+  // each item should have a unique sequence number. 
 
-    Path testPath = new Path(args[0]);
+  // We will write the two datasets to Seq files and then 
+  // run them through the merger. Then we will verify that 
+  // the keys are still in sequence, and that we got the right 
+  // number of unique tuples per unique key.
 
-    LOG.info("Initializing Hadoop Config");
+  ImmutableList<Pair<Integer,Integer>> dataSet1 
+  = new ImmutableList.Builder<Pair<Integer,Integer>>()
+
+  .add(new Pair<Integer,Integer>(1,1))
+  .add(new Pair<Integer,Integer>(1,2))
+  .add(new Pair<Integer,Integer>(2,3))
+  .add(new Pair<Integer,Integer>(2,4))
+  .add(new Pair<Integer,Integer>(2,5))
+  .add(new Pair<Integer,Integer>(4,6))
+  .add(new Pair<Integer,Integer>(4,7))
+
+  .build();  
+
+  ImmutableList<Pair<Integer,Integer>> dataSet2 
+  = new ImmutableList.Builder<Pair<Integer,Integer>>()
+
+  .add(new Pair<Integer,Integer>(1,8))
+  .add(new Pair<Integer,Integer>(2,9))
+  .add(new Pair<Integer,Integer>(3,10))
+  .add(new Pair<Integer,Integer>(3,11))
+  .add(new Pair<Integer,Integer>(4,12))
+  .add(new Pair<Integer,Integer>(5,13))
+
+  .build();  
+
+  static void writeTestFile(FileSystem fs,Configuration conf,Path fileName,ImmutableList<Pair<Integer,Integer>> dataSet)throws IOException { 
+    SequenceFile.Writer writer = SequenceFile.createWriter(fs, conf, fileName, IntWritable.class, IntWritable.class,CompressionType.NONE);
+    for (Pair<Integer,Integer> datum : dataSet) { 
+      writer.append(new IntWritable(datum.e0), new IntWritable(datum.e1));
+    }
+    writer.close();
+  }
+
+  public static class NonRawComparator implements Comparator<IntWritable> {
+
+    @Override
+    public int compare(IntWritable arg0, IntWritable arg1) {
+      int thisValue = arg0.get();
+      int thatValue = arg1.get();
+      
+      return (thisValue<thatValue ? -1 : (thisValue==thatValue ? 0 : 1));
+    } 
+    
+  }
+  
+  @Test
+  public void testMerge() throws Exception {
 
     Configuration conf = new Configuration();
+    FileSystem fsMock = mock(FileSystem.class);
+    final DataOutputBuffer stream1Buffer = new DataOutputBuffer();
+    final DataOutputBuffer stream2Buffer = new DataOutputBuffer();
+    final DataOutputBuffer stream3Buffer = new DataOutputBuffer();
+    // the two mock input paths 
+    Path mockPath1 = new Path("/mockPath1");
+    Path mockPath2 = new Path("/mockPath2");
+    // the mock output path ... 
+    Path outputPath = new Path("/outputPath");
+    // hook file system 
+    when(fsMock.create(eq(mockPath1),anyBoolean(),anyInt(),anyShort(),anyLong(),(Progressable)any())).thenReturn(new FSDataOutputStream(stream1Buffer,null));
+    when(fsMock.create(eq(mockPath2),anyBoolean(),anyInt(),anyShort(),anyLong(),(Progressable)any())).thenReturn(new FSDataOutputStream(stream2Buffer,null));
+    when(fsMock.create(eq(outputPath),anyBoolean(),anyInt(),anyShort(),anyLong(),(Progressable)any())).thenReturn(new FSDataOutputStream(stream3Buffer,null));
+    when(fsMock.getConf()).thenReturn(conf);
+    // write test data in seq file format 
+    writeTestFile(fsMock, conf, mockPath1, dataSet1);
+    writeTestFile(fsMock, conf, mockPath2, dataSet2);
+    // hook fs to return the mocked seq files 
+    when(fsMock.getLength(eq(mockPath1))).thenReturn((long)stream1Buffer.getLength());
+    when(fsMock.getLength(eq(mockPath2))).thenReturn((long)stream2Buffer.getLength());
+    
+    final List<FSDataInputStream> allocatedStreams = Lists.newArrayList();
+    
+    // spy on input stream to verify close 
+    when(fsMock.open(eq(mockPath1),anyInt())).thenAnswer(new Answer<FSDataInputStream>() {
 
-    conf.addResource("nutch-default.xml");
-    conf.addResource("nutch-site.xml");
-    conf.addResource("mapred-site.xml");
-    conf.addResource("hdfs-site.xml");
-    conf.addResource("commoncrawl-default.xml");
-    conf.addResource("commoncrawl-site.xml");
-
-    conf.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS,URLFPV2RawComparator.class,RawComparator.class);
-    conf.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS,URLFPV2.class,WritableComparable.class);
-
-    CrawlEnvironment.setHadoopConfig(conf);
-    CrawlEnvironment.setDefaultHadoopFSURI("hdfs://ccn01:9000/");
-
-    try { 
-      FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
-
-
-      Vector<Path> paths = new Vector<Path>();
-
-      paths.add(new Path(testPath,"part-00000"));
-      // paths.add(new Path(testPath,"part-00000"));
-      paths.add(new Path(testPath,"part-00001"));
-
-      TreeSet<URLFPV2> directReadSet = new TreeSet<URLFPV2>();
-      TreeSet<URLFPV2> multiFileReadSet = new TreeSet<URLFPV2>();
-
-      MultiFileInputReader<URLFPV2> inputReader = new MultiFileInputReader<URLFPV2>(fs, paths, conf);
-
-      KeyAndValueData<URLFPV2> keyValueData = null;
-      int multiFileKeyCount = 0;
-      while ((keyValueData = inputReader.readNextItem()) != null) { 
-        LOG.info("Got Key Domain:" + keyValueData._keyObject.getDomainHash() + " URLHash:" + keyValueData._keyObject.getUrlHash() + " Item Count:" + keyValueData._values.size() 
-            + " Path[0]:" + keyValueData._values.get(0).source);
-
-        if (keyValueData._values.size() > 1) { 
-          LOG.error("Got more than one item");
-          for (int i=0;i<keyValueData._values.size();++i) {
-            CRC32 crc = new CRC32();
-            crc.update(keyValueData._keyData.getData(),0,keyValueData._keyData.getLength());
-            LOG.error("Item at[" + i + "] Path:" + keyValueData._values.get(i).source + " CRC:" + crc.getValue()); 
-          }
-        }
-        if (multiFileKeyCount++ < 1000)
-          multiFileReadSet.add((URLFPV2) keyValueData._keyObject.clone());
+      @Override
+      public FSDataInputStream answer(InvocationOnMock invocation)throws Throwable {
+        FSDataInputStream stream = new FSDataInputStream(
+            new FSByteBufferInputStream(ByteBuffer.wrap(stream1Buffer.getData(),0,stream1Buffer.getLength())));
+        
+        stream = spy(stream);
+        allocatedStreams.add(stream);
+        return stream;
       }
+    });
+    
+    when(fsMock.open(eq(mockPath2),anyInt())).thenAnswer(new Answer<FSDataInputStream>() {
+
+      @Override
+      public FSDataInputStream answer(InvocationOnMock invocation)throws Throwable {
+        FSDataInputStream stream = new FSDataInputStream(
+            new FSByteBufferInputStream(ByteBuffer.wrap(stream2Buffer.getData(),0,stream2Buffer.getLength())));
+        
+        stream = spy(stream);
+        allocatedStreams.add(stream);
+        return stream;
+      }
+    });
+      
+    // two passes... one using raw comparator, one using simple Comparator
+    // (code paths for two scenarios are different, so we need to validate both)
+    for (int pass=0;pass<2;++pass) { 
+
+      // setup merger ... 
+      if (pass == 0) { 
+        System.out.println("******Using Raw Comparator");
+        conf.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, IntWritable.Comparator.class,Comparator.class);
+      }
+      else { 
+        System.out.println("******Using Non-Raw Comparator");
+        conf.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, NonRawComparator.class,Comparator.class);
+      }
+      conf.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS,IntWritable.class,WritableComparable.class);
+      
+      // instantiate merger... 
+      MultiFileInputReader inputReader = new MultiFileInputReader<Writable>(
+          fsMock, 
+          new ImmutableList.Builder<Path>().add(mockPath1).add(mockPath2).build(),
+          conf);
+  
+      // create multimap to merged data 
+      TreeMultimap<Integer, Integer> mergedDataMap = TreeMultimap.create();
+      // iterate 
+      KeyAndValueData<IntWritable> kvData;
+      DataInputBuffer inputBuffer = new DataInputBuffer();
+      IntWritable valueTemp = new IntWritable();
+      int lastKey = Integer.MIN_VALUE;
+      while ((kvData= inputReader.readNextItem()) != null) {
+        // check to keys are coming in order ...  
+        Assert.assertTrue(kvData._keyObject.get() > lastKey);
+  
+        System.out.println("key:"+ kvData._keyObject.get());
+        // iterate all merged values for specified key ... 
+        for (RawRecordValue value : kvData._values) { 
+          inputBuffer.reset(value.data.getData(),value.data.getLength());
+          valueTemp.readFields(inputBuffer);
+          // collect sequence numbers by key  
+          mergedDataMap.put(kvData._keyObject.get(), valueTemp.get());
+          System.out.println("value:"+ valueTemp);
+        }
+      }
+      
+      // close merger ... 
       inputReader.close();
-
-      addFirstNFPItemsToSet(fs,new Path(testPath,"part-00000"),conf,directReadSet,1000);
-      addFirstNFPItemsToSet(fs,new Path(testPath,"part-00001"),conf,directReadSet,1000);
-
-      Iterator<URLFPV2> directReadIterator = directReadSet.iterator();
-      Iterator<URLFPV2> multiFileReadIterator = multiFileReadSet.iterator();
-
-      for (int i=0;i<1000;++i) { 
-        URLFPV2 directReadFP = directReadIterator.next();
-        URLFPV2 multiFileReadFP = multiFileReadIterator.next();
-
-        if (directReadFP.compareTo(multiFileReadFP) != 0) { 
-          LOG.info("Mismatch at Index:" + i);
-        }
+      
+      // validate all input streams were closed ... 
+      for (FSDataInputStream allocatedStream : allocatedStreams) { 
+        verify(allocatedStream).close();
       }
-
-    }
-    catch (IOException e) { 
-      LOG.error(CCStringUtils.stringifyException(e));
-    } catch (CloneNotSupportedException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
-
-  }
-
-  static void scanToItemThenDisplayNext(FileSystem fs,Path path,Configuration conf, URLFPV2 targetItem) throws IOException { 
-    DataOutputBuffer rawKey = new DataOutputBuffer();
-    DataInputBuffer  keyDataStream = new DataInputBuffer();
-
-    SequenceFile.Reader reader = new SequenceFile.Reader(fs, path, conf);
-    ValueBytes valueBytes = reader.createValueBytes();
-
-    int i=0;
-    while (reader.nextRawKey(rawKey) != -1) { 
-      URLFPV2 keyObject = new URLFPV2();
-      keyDataStream.reset(rawKey.getData(),0,rawKey.getLength());
-      keyObject.readFields(keyDataStream);
-      rawKey.reset();
-      reader.nextRawValue(valueBytes);
-
-      if (keyObject.compareTo(targetItem) == 0) {
-
-        reader.nextRawKey(rawKey);
-        URLFPV2 nextKeyObject = new URLFPV2();
-        keyDataStream.reset(rawKey.getData(),0,rawKey.getLength());
-        nextKeyObject.readFields(keyDataStream);
-        LOG.info("Target Domain:" + targetItem.getDomainHash() + " FP:" + targetItem.getUrlHash() + " NextDomain:" + nextKeyObject.getDomainHash() + " NextHash:" + nextKeyObject.getUrlHash());
-        break;
+      
+      // create a source data map ... 
+      TreeMultimap<Integer, Integer> sourceDataMap = TreeMultimap.create();
+      // populate it ... 
+      for (Pair<Integer,Integer> tuple : dataSet1)
+        sourceDataMap.put(tuple.e0, tuple.e1);
+      for (Pair<Integer,Integer> tuple : dataSet2)
+        sourceDataMap.put(tuple.e0, tuple.e1);
+      // validate source and dest maps equate
+      if (!sourceDataMap.equals(mergedDataMap)) { 
+        System.out.println("Source And Dest Maps Mismatched!");
+        System.out.println("Source Map:" + sourceDataMap);
+        System.out.println("Dest Map:" + mergedDataMap);
+        Assert.assertTrue(sourceDataMap.equals(mergedDataMap));
       }
     }
-    reader.close();
   }
-
-  static void addFirstNFPItemsToSet(FileSystem fs,Path path,Configuration conf,Set<URLFPV2> outputSet,int nItems) throws IOException { 
-    DataOutputBuffer rawKey = new DataOutputBuffer();
-    DataInputBuffer  keyDataStream = new DataInputBuffer();
-
-    SequenceFile.Reader reader = new SequenceFile.Reader(fs, path, conf);
-    ValueBytes valueBytes = reader.createValueBytes();
-
-    int i=0;
-    while (reader.nextRawKey(rawKey) != -1) { 
-      URLFPV2 keyObject = new URLFPV2();
-      keyDataStream.reset(rawKey.getData(),0,rawKey.getLength());
-      keyObject.readFields(keyDataStream);
-      outputSet.add(keyObject);
-      rawKey.reset();
-      reader.nextRawValue(valueBytes);
-
-      if (++i == nItems) { 
-        break;
-      }
-    }
-    reader.close();
-  }
-
 }

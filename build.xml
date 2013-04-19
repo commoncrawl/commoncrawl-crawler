@@ -231,6 +231,13 @@
       </jsp-compile>
 
       <jsp-compile
+                  uriroot="${webapps.dir}/crawlmaster"
+                  outputdir="${build.src}"
+                  package="org.commoncrawl.service.crawlmaster"
+                  webxml="${build.webapps}/crawlmaster/WEB-INF/web.xml">
+      </jsp-compile>
+
+      <jsp-compile
                   uriroot="${webapps.dir}/dservice"
                   outputdir="${build.src}"
                   package="org.commoncrawl.service.directory"
@@ -382,7 +389,7 @@
           <include name="*" />
         </zipfileset>
         <zipfileset dir="${lib.dir}" prefix="lib" >
-          <include name="*.jar" />
+          <include name="*" />
         </zipfileset>
         <zipfileset dir="${build.lib.dir}" prefix="lib" >
           <include name="*.jar" />
@@ -483,6 +490,7 @@
 		<dependency groupId="com.google.visualization" artifactId="visualization-datasource" version="1.1.1" />
 		<dependency groupId="xerces" artifactId="xercesImpl" version="2.9.1"/>
         <dependency groupId="xml-apis" artifactId="xml-apis" version="1.3.04"/>
+        <dependency groupId="org.mockito" artifactId="mockito-all" version="1.9.5"/>
 
 	  </artifact:pom>
 
