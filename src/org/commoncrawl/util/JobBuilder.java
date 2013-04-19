@@ -269,6 +269,11 @@ public class JobBuilder {
     return this;
   }
 
+  public JobBuilder maxReduceTaskFailures(int percent)throws IOException { 
+    _jobConf.setMaxReduceTaskFailuresPercent(percent);
+    return this;
+  }
+
   public JobBuilder setAffinity(Path affinityPath)throws IOException {
     if (affinityPath != null) { 
       // set node affinity ...
