@@ -18,6 +18,7 @@
 
 package org.commoncrawl.util;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -285,6 +286,17 @@ public final class TextBytes extends BinaryComparableWithOffset implements
     bytes.set(utf8, start, len);
     // reset string cache ...
     cachedUTF8 = null;
+  }
+  
+  /** 
+   * Set TextBytes equal to then encoded contents of another TextBytes instance
+   *  
+   * @param inputBuffer
+   * @throws IOException
+   */
+  public void setFromRawTextBytes(DataInputBuffer inputBuffer) throws IOException { 
+    int length = WritableUtils.readVInt(inputBuffer);
+    set(inputBuffer.getData(),inputBuffer.getPosition(),length);
   }
 
   /**
