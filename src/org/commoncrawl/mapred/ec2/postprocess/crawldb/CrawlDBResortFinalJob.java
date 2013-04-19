@@ -117,13 +117,14 @@ public class CrawlDBResortFinalJob implements Reducer<IntWritable, Text ,TextByt
   }    
 
   
+  @SuppressWarnings("unchecked")
   @Override
   public void reduce(IntWritable key, final Iterator<Text> values,final OutputCollector<TextBytes, TextBytes> collector, final Reporter reporter)throws IOException {
     // we expect a single path per shard here ...
     
     
     // construct the CrawlDBWriter (merging reducer instance we going to delegate to) 
-    final CrawlDBWriter crawlDBWriter = new CrawlDBWriter();
+    final CrawlDBMergingReducer crawlDBWriter = new CrawlDBMergingReducer();
     crawlDBWriter.configure(_conf);
     
     // construct a raw data spill writer (required by merger) that delegates to the merging reducer 
@@ -170,6 +171,7 @@ public class CrawlDBResortFinalJob implements Reducer<IntWritable, Text ,TextByt
     // spawn merge sorter
     // it will sort incoming data in chunks and then spill to temp
     // finally, it will merge sort all chunks and spill to final output (spillWriter)
+    @SuppressWarnings("rawtypes")
     MergeSortSpillWriter merger 
     = new MergeSortSpillWriter<TextBytes,TextBytes>(
         sortConf, 
@@ -187,12 +189,17 @@ public class CrawlDBResortFinalJob implements Reducer<IntWritable, Text ,TextByt
       Path inputPath = new Path(Iterators.getNext(values, null).toString());
       // read unsorted file and feed data to merger ... 
       SequenceFile.Reader reader = new SequenceFile.Reader(FileSystem.get(inputPath.toUri(),_conf), inputPath, _conf);
+      try { 
         TextBytes inputKey = new TextBytes();
         TextBytes inputValue = new TextBytes();
         
         while (reader.next(inputKey,inputValue)) { 
           merger.spillRecord(inputKey,inputValue);
         }
+      }
+      finally { 
+        reader.close();
+      }
     }
     finally { 
         merger.close();
