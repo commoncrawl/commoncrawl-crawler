@@ -104,6 +104,26 @@ public class CrawlDBKey {
     }
     return null;
   }
+
+  public static Pair<TextBytes,TextBytes> generateMinMaxKeysForDomain(long rootDomainId,long subDomainId) throws IOException { 
+    
+    String minKey =  
+      rootDomainId
+      +":"+((subDomainId == -1) ? Long.MIN_VALUE : subDomainId)
+      +":"+Long.MIN_VALUE
+      +":"+Long.MIN_VALUE
+      +":";
+
+    String maxKey =  
+        rootDomainId
+        +":"+((subDomainId == -1) ? Long.MAX_VALUE : subDomainId)
+        +":"+Long.MAX_VALUE
+        +":"+Long.MAX_VALUE
+        +":";
+    
+    return new Pair<TextBytes,TextBytes>(new TextBytes(minKey),new TextBytes(maxKey));
+  }
+
   
   public static TextBytes generateCrawlStatusKey(Text url,long timestamp) throws IOException { 
     URLFPV2 fp = URLUtils.getURLFPV2FromURL(url.toString());
@@ -373,11 +393,11 @@ public class CrawlDBKey {
     int offset  = key.getOffset();
     int length  = key.getLength();
     
-    long startTime = System.nanoTime();
+    //long startTime = System.nanoTime();
     Pair<Integer,Integer> scanResult = scanAndTerminateOn(data, offset, length, ':', componentId.ordinal() + 1);
     
     long result = ByteArrayUtils.parseLong(data, scanResult.e0, scanResult.e1 - scanResult.e0 + 1, 10);
-    long endTime = System.nanoTime();
+    //long endTime = System.nanoTime();
     
     return result;
   }
