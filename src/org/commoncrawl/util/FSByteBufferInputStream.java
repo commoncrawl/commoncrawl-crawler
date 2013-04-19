@@ -18,8 +18,8 @@
 
 package org.commoncrawl.util;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import org.apache.hadoop.fs.PositionedReadable;
@@ -32,13 +32,12 @@ import org.apache.hadoop.fs.Seekable;
  * @author rana
  * 
  */
-public class FSByteBufferInputStream extends BufferedInputStream implements
-    Seekable, PositionedReadable {
+public class FSByteBufferInputStream extends InputStream implements Seekable, PositionedReadable {
 
   ByteBuffer _source;
-
+  ByteBufferInputStream _sourceStream;
   public FSByteBufferInputStream(ByteBuffer in) {
-    super(new ByteBufferInputStream(in), in.limit());
+    _sourceStream = new ByteBufferInputStream(in);
     _source = in;
 
   }
@@ -56,27 +55,10 @@ public class FSByteBufferInputStream extends BufferedInputStream implements
   }
 
   public void seek(long pos) throws IOException {
-    if (pos < 0) {
-      return;
-    }
-    // optimize: check if the pos is in the buffer
-    long end = _source.position();
-    long start = end - count;
-    if (pos >= start && pos < end) {
-      this.pos = (int) (pos - start);
-      return;
-    }
-
-    // invalidate buffer
-    this.pos = 0;
-    this.count = 0;
-
     _source.position((int) pos);
   }
 
   public boolean seekToNewSource(long targetPos) throws IOException {
-    pos = 0;
-    count = 0;
     _source.position((int) targetPos);
     return true;
   }
@@ -104,5 +86,25 @@ public class FSByteBufferInputStream extends BufferedInputStream implements
     _source.position((int) position);
     _source.get(buffer);
     _source.reset();
+  }
+
+  @Override
+  public int read() throws IOException {
+    if (_source.remaining() == 0) 
+      return -1;
+    else 
+      return _source.get();
+  }
+  
+  @Override
+  public int read(byte[] b, int off, int len) throws IOException {
+    int amtToRead = Math.min(_source.remaining(),len);
+    if (amtToRead == 0) { 
+      return -1;
+    }
+    else {
+      _source.get(b, off, amtToRead);
+      return amtToRead;
+    }
   }
 }
