@@ -35,8 +35,6 @@ import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyPartitioner;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.LinkKeyComparator;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.QueueItem;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.LinkGraphDataEmitterJob.QueueTask;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.JobBuilder;
 import org.commoncrawl.util.MultiFileMergeUtils;
@@ -236,7 +234,7 @@ public class CrawlDBMergeJob {
     .mapperKeyValue(TextBytes.class, TextBytes.class)
     .outputKeyValue(TextBytes.class, TextBytes.class)
     .outputFormat(SequenceFileOutputFormat.class)
-    .reducer(CrawlDBWriter.class,true)
+    .reducer(CrawlDBMergingReducer.class,true)
     .partition(CrawlDBKeyPartitioner.class)
     .sort(LinkKeyComparator.class)
     .numReducers(CrawlDBCommon.NUM_SHARDS)
@@ -303,7 +301,7 @@ public class CrawlDBMergeJob {
     .mapperKeyValue(IntWritable.class, Text.class)
     .outputKeyValue(TextBytes.class, TextBytes.class)
     .outputFormat(SequenceFileOutputFormat.class)
-    .reducer(CrawlDBFinalMerge.class,false)
+    .reducer(CrawlDBMergeSortReducer.class,false)
     .partition(MultiFileMergeUtils.MultiFileMergePartitioner.class)
     .numReducers(CrawlDBCommon.NUM_SHARDS)
     .speculativeExecution(true)

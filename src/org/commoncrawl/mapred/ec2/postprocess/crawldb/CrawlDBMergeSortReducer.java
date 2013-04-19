@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -23,20 +25,17 @@ import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.util.Progressable;
-import org.commoncrawl.util.ByteArrayUtils;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.MockReporter;
-import org.commoncrawl.util.S3SeekableResilientInputStream;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.KeyAndValueData;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.RawRecordValue;
+import org.commoncrawl.util.S3SeekableResilientInputStream;
 import org.commoncrawl.util.TextBytes;
 import org.commoncrawl.util.Tuples.Pair;
 
@@ -54,9 +53,9 @@ import com.google.common.collect.Lists;
  * @author rana
  *
  */
-public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,TextBytes> {
+public class CrawlDBMergeSortReducer implements Reducer<IntWritable, Text ,TextBytes,TextBytes> {
 
-  static final Log LOG = LogFactory.getLog(CrawlDBFinalMerge.class);
+  static final Log LOG = LogFactory.getLog(CrawlDBMergeSortReducer.class);
   
   JobConf _conf;
   AmazonS3Client _s3Client;
@@ -116,28 +115,8 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
     } 
   }
     
-  public void reduce(IntWritable key, Iterator<Text> values,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
-    // collect all incoming paths first
-    Vector<Path> incomingPaths = new Vector<Path>();
-    
-    while(values.hasNext()){ 
-      String path = values.next().toString();
-      LOG.info("Found Incoming Path:" + path);
-      incomingPaths.add(new Path(path));
-    }
-
-
-    // set up merge attributes
-    Configuration localMergeConfig = new Configuration(_conf);
-    // we don't want to use a grouping comparator because the we are using the reducer code from the intermediate 
-    // merge 
-    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS,CrawlDBKey.LinkKeyComparator.class, RawComparator.class);
-    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS,TextBytes.class, WritableComparable.class);
-    
-    // spawn merger
-    // Skip using s3n fs, as it seems to have a limitation on the number of parallel s3 streams it can open :-(
-    // Hence the hacked FileSystem that uses the CC S3ReslientInputStream
-    MultiFileInputReader<TextBytes> multiFileInputReader = new MultiFileInputReader<TextBytes>(new FileSystem() {
+  private FileSystem getS3NFileSystem()throws IOException {
+    return new FileSystem() {
 
       @Override
       public URI getUri() {
@@ -223,10 +202,60 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
         return null;
       } 
       
-    }, incomingPaths, localMergeConfig);
+    };    
+  }
+  public void reduce(IntWritable key, Iterator<Text> values,OutputCollector<TextBytes, TextBytes> output, Reporter reporter) throws IOException {
+    // collect all incoming paths first
+    Vector<Path> incomingPaths = new Vector<Path>();
+    
+    Set<String> fsType = new HashSet<String>();
+    
+    while(values.hasNext()){ 
+      String path = values.next().toString();
+      LOG.info("Found Incoming Path:" + path);
+      incomingPaths.add(new Path(path));
+      // convert to uri ... 
+      URI uri = new Path(path).toUri();
+      // get scheme if present ... 
+      String scheme = uri.getScheme();
+      if (scheme == null || scheme.length() == 0) { 
+        fsType.add("default");
+      }
+      else { 
+        fsType.add(scheme);
+      }
+    }
+    
+    if (fsType.size() != 1) { 
+      throw new IOException("Only One Input Scheme at a time supported!");
+    }
+    
+    boolean isS3N = fsType.contains("s3n");
+
+
+    // set up merge attributes
+    Configuration localMergeConfig = new Configuration(_conf);
+    // we don't want to use a grouping comparator because the we are using the reducer code from the intermediate 
+    // merge 
+    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS,CrawlDBKey.LinkKeyComparator.class, RawComparator.class);
+    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS,TextBytes.class, WritableComparable.class);
+    
+    // spawn merger
+
+    // pick filesystem based on path ... 
+    FileSystem fs = null;
+    if (!isS3N) { 
+      fs = FileSystem.get(incomingPaths.get(0).toUri(),_conf);
+    }
+    else { 
+      // use our custom s3n stub 
+      fs = getS3NFileSystem();
+    }
+    LOG.info("FileSystem is:" + fs.toString());
+    MultiFileInputReader<TextBytes> multiFileInputReader = new MultiFileInputReader<TextBytes>(fs, incomingPaths, localMergeConfig);
 
     // create crawl db writer, which is the actual reducer we want to use ...  
-    CrawlDBWriter crawlDBWriter = new CrawlDBWriter();
+    CrawlDBMergingReducer crawlDBWriter = new CrawlDBMergingReducer();
     crawlDBWriter.configure(_conf);
     
     RawValueIterator rawValueIterator = new RawValueIterator();
@@ -268,7 +297,7 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
       for (String entry : response.getCommonPrefixes()) { 
         try { 
           Path s3nPath =new Path("s3n","aws-publicdatasets","/"+entry);
-          long timestamp = Long.parseLong(s3nPath.getName());
+          //long timestamp = Long.parseLong(s3nPath.getName());
           listOut.add(s3nPath);
         }
         catch (Exception e) { 
@@ -312,7 +341,7 @@ public class CrawlDBFinalMerge implements Reducer<IntWritable, Text ,TextBytes,T
         break;
     }
     
-    CrawlDBFinalMerge finalMerge = new CrawlDBFinalMerge();
+    CrawlDBMergeSortReducer finalMerge = new CrawlDBMergeSortReducer();
     
     JobConf conf = new JobConf();
 

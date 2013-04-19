@@ -40,7 +40,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.ibm.icu.util.StringTokenizer;
 
-public class CrawlDBWriterTests extends CrawlDBWriter {
+public class CrawlDBMergingReducerTests extends CrawlDBMergingReducer {
   @Test
   public void testSourceInputOutputWriters()throws IOException { 
     _sourceInputsBuffer = new DataOutputBuffer(16348*4);
@@ -151,17 +151,17 @@ public class CrawlDBWriterTests extends CrawlDBWriter {
   private static final String EXTRA_PROPERTY_REDIRECT_SOURCE = "redirectSource";
   private static final String EXTRA_PROPERTY_LINK_SOURCE = "linkSource";
   private static final String CANNED_CRAWL_URL_1 = "http://cannedone.com/";
-  private static final String CANNED_URL_1_HOST = "cannedone.com";
+  //private static final String CANNED_URL_1_HOST = "cannedone.com";
   private static final String CANNED_CRAWL_URL_2 = "http://cannedtwo.com/";
-  private static final String CANNED_URL_2_HOST = "cannedtwo.com";
+  //private static final String CANNED_URL_2_HOST = "cannedtwo.com";
   private static final String CANNED_CRAWL_URL_3 = "http://cannedthree.com/";
   private static final String CANNED_URL_3_HOST = "cannedthree.com";
   private static final String CANNED_CRAWL_URL_4 = "http://cannedfour.com/";
-  private static final String CANNED_URL_4_HOST = "cannedfour.com";
+  //private static final String CANNED_URL_4_HOST = "cannedfour.com";
   private static final String CANNED_CRAWL_URL_5 = "http://cannedfive.com/";
-  private static final String CANNED_URL_5_HOST = "cannedfive.com";
+  //private static final String CANNED_URL_5_HOST = "cannedfive.com";
 
-  private static final long   CANNED_TIMESTAMP_0 = 123456700L;
+  //private static final long   CANNED_TIMESTAMP_0 = 123456700L;
   private static final long   CANNED_TIMESTAMP_1 = 123456789L;
   private static final long   CANNED_TIMESTAMP_2 = 123456799L;
   private static final long   CANNED_TIMESTAMP_3 = 123466799L;

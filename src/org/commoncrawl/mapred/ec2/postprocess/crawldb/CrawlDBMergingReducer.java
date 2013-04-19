@@ -59,9 +59,9 @@ import com.google.gson.JsonParser;
  * @author rana
  *
  */
-public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextBytes ,TextBytes,TextBytes> {
+public class CrawlDBMergingReducer extends JSONUtils implements Reducer<TextBytes, TextBytes ,TextBytes,TextBytes> {
 
-  static final Log LOG = LogFactory.getLog(CrawlDBWriter.class);
+  static final Log LOG = LogFactory.getLog(CrawlDBMergingReducer.class);
 
   // The crawldb job emits data in the form a JSON data structure
   // The top level JSON object contains optionally, a link_status object, a summary object 
@@ -75,6 +75,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   public static final String TOPLEVEL_LINKSTATUS_PROPERTY = "link_status";
   public static final String TOPLEVEL_SUMMARYRECORD_PROPRETY = "crawl_status";
   public static final String TOPLEVEL_SOURCE_URL_PROPRETY = "source_url";
+  public static final String TOPLEVEL_BLEKKO_METADATA_PROPERTY = "blekko";
   
   public static final String RSS_MIN_PUBDATE_PROPERTY = "minPubDate";
   public static final String RSS_MAX_PUBDATE_PROPERTY = "maxPubDate";
@@ -127,7 +128,10 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   public static final String LINKSTATUS_TYPEANDRELS_PROPERTY = "typeAndRels";
 
   
-  
+  public static final String BLEKKO_METADATA_TIMESTAMP_PROPERTY = "timestmap";
+  public static final String BLEKKO_METADATA_RANK = "rank";
+  public static final String BLEKKO_METADATA_RANK_10 = "rank10";
+  public static final String BLEKKO_METADATA_STATUS = "status";
   
   ///////////////////////////////////////////////////////////////////////////
   // EC2 PATHS 
@@ -148,8 +152,8 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   static final int DEFAULT_EXT_SOURCE_SAMPLE_BUFFER_PAD_AMOUNT = 16384;
   static final int MAX_EXTERNALLY_REFERENCED_URLS = 100;
   
-  private int OUTGOING_URLS_BUFFER_SIZE = DEFAULT_OUTGOING_URLS_BUFFER_SIZE;
-  private int OUTGOING_URLS_BUFFER_PAD_AMOUNT =DEFAULT_OUTGOING_URLS_BUFFER_PAD_AMOUNT;
+  //private int OUTGOING_URLS_BUFFER_SIZE = DEFAULT_OUTGOING_URLS_BUFFER_SIZE;
+  //private int OUTGOING_URLS_BUFFER_PAD_AMOUNT =DEFAULT_OUTGOING_URLS_BUFFER_PAD_AMOUNT;
   private int EXT_SOURCE_SAMPLE_BUFFER_SIZE = DEFAULT_EXT_SOURCE_SAMPLE_BUFFER_SIZE;
   private int EXT_SOURCE_SAMPLE_BUFFER_PAD_AMOUNT = DEFAULT_EXT_SOURCE_SAMPLE_BUFFER_PAD_AMOUNT;
   
@@ -204,9 +208,9 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
     NO_SOURCE_URL_FOR_CRAWL_STATUS,
     OUTPUT_KEY_FROM_INTERNAL_LINK,
     OUTPUT_KEY_FROM_EXTERNAL_LINK, GOT_HTTP_200_CRAWL_STATUS, GOT_REDIRECT_CRAWL_STATUS, BAD_REDIRECT_URL, GOT_MERGED_RECORD, MERGED_OBJECT_FIRST_OBJECT, ADOPTED_SOURCE_SUMMARY_RECORD, MERGED_SOURCE_SUMMARY_RECORD_INTO_DEST, ADOPTED_SOURCE_LINKSUMMARY_RECORD, MERGED_SOURCE_LINKSUMMARY_RECORD_INTO_DEST, ALLOCATED_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_EXISTING_TOP_LEVEL_OBJECT_IN_FLUSH, ENCOUNTERED_SUMMARY_RECORD_IN_FLUSH, ENCOUNTERED_LINKSUMMARY_RECORD_IN_FLUSH, EMITTED_SOURCEINPUTS_RECORD, GOT_NULL_REDIRECT_URL, INTERDOMAIN_LINKS_LTEQ_100, INTERDOMAIN_LINKS_LTEQ_1000, INTERDOMAIN_LINKS_GT_1000, EMITTED_SOURCEINPUTS_DATA_BYTES_EMITTED,
-    INPUT_RECORD_COUNT
+    INPUT_RECORD_COUNT, ADOPTED_NEW_BLEKKO_METADATA_RECORD, BLEKKO_METADATA_WITH_NO_SOURCE_CC_RECORD, MERGE_RECORD_HAS_BLEKKO_METADATA, EMITTED_RECORD_WITH_BLEKKO_METADATA, BLEKKO_RECORD_ALREADY_IN_DATABASE
     
-  }
+  , BLEKKO_CRAWLED_CC_CRAWLED, BLEKKO_NOT_CRAWLED_CC_CRAWLED}
   
   ///////////////////////////////////////////////////////////////////////////
   // Data Members 
@@ -251,6 +255,8 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
   JobConf _conf;
   // file system 
   FileSystem _fs;
+  // partition id 
+  int _partitionId;
   //SequenceFile.Writer _redirectWriter = null;
   // input buffer used to collect referencing urls  
   DataOutputBuffer _sourceInputsBuffer; 
@@ -350,7 +356,7 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
     _conf = job;
     try {
       _fs = FileSystem.get(_conf);
-      int partitionId = _conf.getInt("mapred.task.partition", 0);
+      _partitionId = _conf.getInt("mapred.task.partition", 0);
     } catch (IOException e) {
       e.printStackTrace();
     }
@@ -532,6 +538,25 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
     }
   }
   
+  void mergeBlekkoMetadata(JsonObject newBlekkoMetadata,JsonObject existingTopLevelObj,Reporter reporter) { 
+    if (newBlekkoMetadata != null) { 
+      if (!existingTopLevelObj.has(TOPLEVEL_BLEKKO_METADATA_PROPERTY)) { 
+        existingTopLevelObj.add(TOPLEVEL_BLEKKO_METADATA_PROPERTY,newBlekkoMetadata);
+      }
+      else {
+        JsonObject existingBlkkoMetadata = existingTopLevelObj.getAsJsonObject(TOPLEVEL_BLEKKO_METADATA_PROPERTY);
+        
+        long existingTimestamp = existingBlkkoMetadata.get(BLEKKO_METADATA_TIMESTAMP_PROPERTY).getAsLong();
+        long newTimestamp = newBlekkoMetadata.get(BLEKKO_METADATA_TIMESTAMP_PROPERTY).getAsLong(); 
+        
+        if (newTimestamp > existingTimestamp){ 
+          existingTopLevelObj.add(TOPLEVEL_BLEKKO_METADATA_PROPERTY, newBlekkoMetadata);
+          reporter.incrCounter(Counters.ADOPTED_NEW_BLEKKO_METADATA_RECORD, 1);
+        }
+      }
+    }
+  }
+  
   void mergeLinkRecords(JsonObject sourceRecord,JsonObject topLevelJSONObject,Reporter reporter) {
     JsonElement destRecord = topLevelJSONObject.get(TOPLEVEL_LINKSTATUS_PROPERTY);
     if (destRecord == null) {
@@ -610,7 +635,10 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
    * @throws IOException
    */
   void processMergedRecord(JsonObject jsonObject,URLFPV2 destFP,Reporter reporter)throws IOException { 
-    if (_topLevelJSONObject == null) { 
+    if (jsonObject.has(TOPLEVEL_BLEKKO_METADATA_PROPERTY)) { 
+      reporter.incrCounter(Counters.MERGE_RECORD_HAS_BLEKKO_METADATA, 1);
+    }
+    if (_topLevelJSONObject == null) {
       reporter.incrCounter(Counters.MERGED_OBJECT_FIRST_OBJECT, 1);
       _topLevelJSONObject = jsonObject;
       _summaryRecord = jsonObject.getAsJsonObject(TOPLEVEL_SUMMARYRECORD_PROPRETY);
@@ -619,15 +647,22 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
         // read in type and rels collection ...
         safeJsonArrayToStringCollection(_linkSummaryRecord,LINKSTATUS_TYPEANDRELS_PROPERTY, _types);
       }
-      
       // and ext hrefs ..
       if (_summaryRecord != null) { 
         safeJsonArrayToStringCollection(_summaryRecord, SUMMARYRECORD_EXTERNALLY_REFERENCED_URLS,_extHrefs);
+      }
+      
+      // special blekko import stats 
+      if (_topLevelJSONObject.has(TOPLEVEL_BLEKKO_METADATA_PROPERTY)) { 
+        if (_summaryRecord == null && _linkSummaryRecord == null) { 
+          reporter.incrCounter(Counters.BLEKKO_METADATA_WITH_NO_SOURCE_CC_RECORD, 1);
+        }
       }
     }
     else { 
       mergeSummaryRecords(jsonObject.getAsJsonObject(TOPLEVEL_SUMMARYRECORD_PROPRETY),_topLevelJSONObject,reporter);
       mergeLinkRecords(jsonObject.getAsJsonObject(TOPLEVEL_LINKSTATUS_PROPERTY),_topLevelJSONObject,reporter);
+      mergeBlekkoMetadata(jsonObject.getAsJsonObject(TOPLEVEL_BLEKKO_METADATA_PROPERTY),_topLevelJSONObject,reporter);
     }
   }
   
@@ -1096,6 +1131,28 @@ public class CrawlDBWriter extends JSONUtils implements Reducer<TextBytes, TextB
         }        
         
         //System.out.println("Emitting Key:" + CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD, 0));
+        
+        if (_topLevelJSONObject.has(TOPLEVEL_BLEKKO_METADATA_PROPERTY)) {
+          JsonObject blekkoMetadata = _topLevelJSONObject.getAsJsonObject(TOPLEVEL_BLEKKO_METADATA_PROPERTY);
+          reporter.incrCounter(Counters.EMITTED_RECORD_WITH_BLEKKO_METADATA, 1);
+          if (_linkSummaryRecord != null || _summaryRecord != null ) { 
+            reporter.incrCounter(Counters.BLEKKO_RECORD_ALREADY_IN_DATABASE, 1);
+            if (_summaryRecord != null) { 
+              if (_summaryRecord.has(SUMMARYRECORD_ATTEMPT_COUNT_PROPERTY) 
+                  && _summaryRecord.get(SUMMARYRECORD_ATTEMPT_COUNT_PROPERTY).getAsInt() != 0) { 
+                
+                String status = blekkoMetadata.get(BLEKKO_METADATA_STATUS).getAsString();
+                if (status.equalsIgnoreCase("crawled")) { 
+                  reporter.incrCounter(Counters.BLEKKO_CRAWLED_CC_CRAWLED, 1);
+                }
+                else { 
+                  reporter.incrCounter(Counters.BLEKKO_NOT_CRAWLED_CC_CRAWLED, 1);
+                }
+              }
+            }
+          }
+        }
+        
         // output top level record ... 
         output.collect(CrawlDBKey.generateKey(_currentKey, CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD, 0),new TextBytes(_topLevelJSONObject.toString()));
         // if there is link status available ...
