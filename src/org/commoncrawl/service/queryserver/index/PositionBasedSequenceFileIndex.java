@@ -39,11 +39,11 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.SequenceFile.ValueBytes;
 import org.commoncrawl.hadoop.mergeutils.MergeSortSpillWriter;
-import org.commoncrawl.hadoop.mergeutils.SequenceFileIndexWriter;
 import org.commoncrawl.service.queryserver.ClientQueryInfo;
 import org.commoncrawl.service.queryserver.query.QueryResult;
 import org.commoncrawl.service.queryserver.query.QueryResultRecord;
 import org.commoncrawl.util.CCStringUtils;
+import org.commoncrawl.util.SequenceFileIndexWriter;
 
 /**
  * Creates an index into a sequence file

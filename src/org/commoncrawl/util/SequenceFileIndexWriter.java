@@ -16,7 +16,7 @@
  *
  **/
 
-package org.commoncrawl.hadoop.mergeutils;
+package org.commoncrawl.util;
 
 import java.io.IOException;
 

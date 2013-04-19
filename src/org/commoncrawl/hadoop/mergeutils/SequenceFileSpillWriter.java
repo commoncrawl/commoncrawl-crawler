@@ -39,6 +39,7 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
+import org.commoncrawl.util.SequenceFileIndexWriter;
 
 /**
  * 
@@ -49,6 +50,7 @@ import org.apache.hadoop.util.StringUtils;
  * @param <KeyType>
  * @param <ValueType>
  */
+@SuppressWarnings("rawtypes")
 public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueType extends Writable> implements
     RawDataSpillWriter<KeyType, ValueType> {
 
@@ -63,22 +65,28 @@ public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueTy
 
   private static final Log LOG = LogFactory.getLog(SequenceFileSpillWriter.class);
 
-  private static final int BUFFER_QUEUE_CAPACITY = 100;
+  private static final int DEFAULT_BUFFER_QUEUE_CAPACITY = 100;
   private SequenceFileIndexWriter<KeyType, ValueType> _indexWriter = null;
   private SequenceFile.Writer writer = null;
   private long _recordCount = 0;
   private FSDataOutputStream _outputStream;
   private ByteBuffer _activeBuffer = null;
   private Thread _writerThread = null;
+  @SuppressWarnings("unused")
   private IOException _writerException = null;
 
   private int _spillBufferSize = -1;
+  private int _spillBufferQueueSize = DEFAULT_BUFFER_QUEUE_CAPACITY;
   // default buffer size
   public static final int DEFAULT_SPILL_BUFFER_SIZE = 1000000;
 
-  // the number of index items we can store in ram
+  // the size of our spill buffer 
   public static final String SPILL_WRITER_BUFFER_SIZE_PARAM = "commoncrawl.spillwriter.buffer.size";
-
+  // the size of the spill buffer queue
+  public static final String SPILL_WRITER_BUFFER_QUEUE_SIZE_PARAM = "commoncrawl.spillwriter.buffer.queue.size";
+  // the codec to use 
+  public static final String SPILL_WRITER_COMPRESSION_CODEC = "commoncrawl.spillwriter.codec";
+  
   private static OutputStream newOutputStream(final ByteBuffer buf) {
     return new OutputStream() {
 
@@ -94,23 +102,38 @@ public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueTy
     };
   }
 
-  private LinkedBlockingQueue<QueuedBufferItem> _bufferQueue = new LinkedBlockingQueue<QueuedBufferItem>(
-      BUFFER_QUEUE_CAPACITY);
+  private LinkedBlockingQueue<QueuedBufferItem> _bufferQueue;
 
+  /**
+   * 
+   * @param fileSystem
+   * @param conf
+   * @param outputFilePath
+   * @param keyClass
+   * @param valueClass
+   * @param optionalIndexWriter
+   * @param compress
+   * @throws IOException
+   */
+  @SuppressWarnings("unchecked")
   public SequenceFileSpillWriter(FileSystem fileSystem, Configuration conf, Path outputFilePath,
       Class<KeyType> keyClass, Class<ValueType> valueClass,
       SequenceFileIndexWriter<KeyType, ValueType> optionalIndexWriter, boolean compress) throws IOException {
 
     _indexWriter = optionalIndexWriter;
     _spillBufferSize = conf.getInt(SPILL_WRITER_BUFFER_SIZE_PARAM, DEFAULT_SPILL_BUFFER_SIZE);
+    _spillBufferQueueSize = conf.getInt(SPILL_WRITER_BUFFER_QUEUE_SIZE_PARAM, DEFAULT_BUFFER_QUEUE_CAPACITY);
     _outputStream = fileSystem.create(outputFilePath);
 
     // allocate buffer ...
     _activeBuffer = ByteBuffer.allocate(_spillBufferSize);
+    // allocate queue 
+    _bufferQueue = new LinkedBlockingQueue<SequenceFileSpillWriter.QueuedBufferItem>(_spillBufferQueueSize);
 
     if (compress) {
-      Class codecClass = conf.getClass("mapred.output.compression.codec", DefaultCodec.class);
-      CompressionCodec codec = (CompressionCodec) ReflectionUtils.newInstance(codecClass, conf);
+      Class defaultCodecClass = conf.getClass("mapred.output.compression.codec", DefaultCodec.class);
+      Class compressionCodec = conf.getClass(SPILL_WRITER_COMPRESSION_CODEC,defaultCodecClass);
+      CompressionCodec codec = (CompressionCodec) ReflectionUtils.newInstance(compressionCodec, conf);
 
       writer = SequenceFile.createWriter(conf, _outputStream, keyClass, valueClass, CompressionType.BLOCK, codec);
     } else {
@@ -130,8 +153,6 @@ public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueTy
           try {
             queuedBufferItem = _bufferQueue.take();
           } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
           }
           if (queuedBufferItem._buffer == null) {
             // LOG.info("Writer Thread received empty buffer item. Exiting");
@@ -146,8 +167,9 @@ public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueTy
             // get byte pointer
             byte[] bufferAsBytes = theBuffer.array();
 
+            @SuppressWarnings("unused")
             int itemsWritten = 0;
-            long timeStart = System.currentTimeMillis();
+            //long timeStart = System.currentTimeMillis();
 
             while (theBuffer.remaining() != 0) {
 
