@@ -183,7 +183,7 @@ public class LinkGraphDataEmitterJob {
     Set<Long> segmentsToProcess = Sets.difference(validSegments, mergedSegments);
     LOG.info("There are: " + segmentsToProcess.size() + " Segments that need to be merged");
     // ok we are ready to go .. 
-    int iteration = 0;
+    //int iteration = 0;
     for (long segmentId : segmentsToProcess) {  
       LOG.info("Queueing Segment:" + segmentId +" for Merge");
       queue(fs,conf,segmentId);
