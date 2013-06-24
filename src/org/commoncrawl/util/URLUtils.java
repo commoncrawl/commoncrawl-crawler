@@ -51,7 +51,7 @@ public class URLUtils {
                                                                  .getLog(URLUtils.class);
 
   /** session id normalizer **/
-  private static SessionIDURLNormalizer _sessionIdNormalizer = new SessionIDURLNormalizer();
+  public static SessionIDURLNormalizer sessionIdNormalizer = new SessionIDURLNormalizer();
 
   /**
    * canonicalize url
@@ -132,7 +132,7 @@ public class URLUtils {
     String canonicalizedURL = urlOut.toString();
 
     // phase 2 - remove common session id patterns
-    canonicalizedURL = _sessionIdNormalizer.normalize(canonicalizedURL, "");
+    canonicalizedURL = sessionIdNormalizer.normalize(canonicalizedURL, "");
     
     // phase 3 - stir back in ref if #!
     if (urlObject.getRef().length() != 0 && urlObject.getRef().charAt(0) == '!') { 
