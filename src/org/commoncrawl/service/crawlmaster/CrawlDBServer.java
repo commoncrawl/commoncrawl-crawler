@@ -32,7 +32,6 @@ import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
-import org.commoncrawl.db.RecordStore;
 import org.commoncrawl.db.RecordStore.RecordStoreException;
 import org.commoncrawl.mapred.CrawlDBSegment;
 import org.commoncrawl.mapred.CrawlDBState;
@@ -52,8 +51,8 @@ import org.commoncrawl.rpc.base.shared.RPCException;
 import org.commoncrawl.server.AsyncWebServerRequest;
 import org.commoncrawl.server.CommonCrawlServer;
 import org.commoncrawl.util.CCStringUtils;
-import org.commoncrawl.util.S3Uploader.BulkUploader;
-import org.commoncrawl.util.S3Uploader.BulkUploader.UploadCandidate;
+import org.commoncrawl.util.S3BulkUploader;
+import org.commoncrawl.util.S3BulkUploader.UploadCandidate;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
@@ -148,7 +147,7 @@ public class CrawlDBServer extends CommonCrawlServer  implements CrawlDBService 
   private boolean                _disableUpdater = true;
   private boolean                _enableS3Uploader = false;
   
-  private BulkUploader         _uploader = null;
+  private S3BulkUploader         _uploader = null;
   private String               _s3AccessKey;
   private String               _s3Secret;
   public  String               _s3Bucket;
@@ -617,8 +616,8 @@ public class CrawlDBServer extends CommonCrawlServer  implements CrawlDBService 
           
           if (_enableS3Uploader && _uploader == null) { 
             try {
-              Path arcFileInTransitPath  = new Path(CrawlEnvironment.HDFS_CrawlDBBaseDir  + "/arc_files_in_transit");
-              Path arcFileSourcePath  = new Path(CrawlEnvironment.HDFS_CrawlDBBaseDir  + "/arc_files_out");
+              Path arcFileInTransitPath  = new Path(CrawlEnvironment.CC_ROOT_DIR  + "/arc_files_in_transit");
+              Path arcFileSourcePath  = new Path(CrawlEnvironment.CC_ROOT_DIR  + "/arc_files_out");
               
               if (_s3AccessKey == null || _s3Secret == null || _s3Bucket == null) { 
                 throw new IOException("Invalid S3 AccessKey/Secert/Bucket");
@@ -1046,10 +1045,10 @@ public class CrawlDBServer extends CommonCrawlServer  implements CrawlDBService 
        }
      }
      
-     _uploader = new BulkUploader(
+     _uploader = new S3BulkUploader(
          _eventLoop,CrawlEnvironment.getDefaultFileSystem(),
            
-         new BulkUploader.Callback() {
+         new S3BulkUploader.Callback() {
            
            public UploadCandidate getNextUploadCandidate() {
              
@@ -1578,8 +1577,6 @@ public class CrawlDBServer extends CommonCrawlServer  implements CrawlDBService 
   public void queryLongValue(
       AsyncContext<LongQueryParam, LongQueryParam> rpcContext)
       throws RPCException {
-    
   }
-
  
 }

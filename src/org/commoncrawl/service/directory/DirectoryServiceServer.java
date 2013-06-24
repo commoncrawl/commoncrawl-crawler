@@ -22,6 +22,7 @@ import java.io.CharArrayReader;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
@@ -65,15 +66,16 @@ public class DirectoryServiceServer
 
   
   private static final String SYSTEM_DATA_ROOT = "sys";
-  private static final String SYSTEM_DATA_ROOT_PATH =  CrawlEnvironment.HDFS_CrawlDBBaseDir + "/" + CrawlEnvironment.DIRECTORY_SERVICE_HDFS_ROOT + "/sys";
+  private static final String SYSTEM_DATA_ROOT_PATH =  CrawlEnvironment.DIRECTORY_SERVICE_HDFS_ROOT + "/sys";
 
   private static final String USER_DATA_ROOT = "user";
-  private static final String USER_DATA_ROOT_PATH =  CrawlEnvironment.HDFS_CrawlDBBaseDir + "/" + CrawlEnvironment.DIRECTORY_SERVICE_HDFS_ROOT + "/user";
+  private static final String USER_DATA_ROOT_PATH =  CrawlEnvironment.DIRECTORY_SERVICE_HDFS_ROOT + "/user";
   
   private static final String IN_MEMORYPATHS_FILE = "/InMemoryPaths.txt";
   
   private FileSystem _fileSystem = null;
   private File _tempFileDir = null;
+  private Path _baseStoragePath;
   
   private Vector<Pattern> memoryOnlyPaths = new Vector<Pattern>();
 
@@ -125,9 +127,7 @@ public class DirectoryServiceServer
   @Override
   protected boolean initServer() {
     
-    try { 
-      _fileSystem = CrawlEnvironment.getDefaultFileSystem();
-      
+    try {       
       // load system files 
       loadSystemPaths();
       
@@ -155,7 +155,26 @@ public class DirectoryServiceServer
 
   @Override
   protected boolean parseArguements(String[] argv) {
-    return true;
+    for(int i=0; i < argv.length;++i) {
+      if (argv[i].equalsIgnoreCase("--fileSystem")) { 
+        try {
+          _fileSystem = FileSystem.get(new URI(argv[++i]),getConfig());
+        } catch (Exception e) {
+          LOG.error(CCStringUtils.stringifyException(e));
+        }
+      }
+      else if (argv[i].equalsIgnoreCase("--storageBase")) {
+        _baseStoragePath = new Path(argv[++i]);
+      }
+    }
+    
+    if (_fileSystem != null && _baseStoragePath != null) { 
+      return true;
+    }
+    else { 
+      System.out.println("--fileSystem and --storageBase are required parameters!");
+      return false;
+    }
   }
   
   @Override
@@ -183,8 +202,7 @@ public class DirectoryServiceServer
 
   @Override
   protected String getDefaultDataDir() {
-    // TODO Auto-generated method stub
-    return null;
+    return "./data";
   }
 
 
@@ -282,8 +300,8 @@ public class DirectoryServiceServer
     }
   }
 
-  private static final Path buildFullUserItemPath(String itemName,long versionNumber) { 
-    return new Path(USER_DATA_ROOT_PATH + itemName + "$" + Long.toString(versionNumber));
+  private final Path buildFullUserItemPath(String itemName,long versionNumber) { 
+    return buildAbsolutePath(new Path(USER_DATA_ROOT_PATH + itemName + "$" + Long.toString(versionNumber)));
   }
 
 
@@ -374,12 +392,16 @@ public class DirectoryServiceServer
     }
   }
 
+  private Path buildAbsolutePath(Path relativeRootPath){ 
+    return new Path(_baseStoragePath,relativeRootPath);
+  }
+  
   private void loadSystemPaths() throws IOException { 
-    loadItems(new Path(SYSTEM_DATA_ROOT_PATH),new Path(SYSTEM_DATA_ROOT_PATH),_systemItems,false);
+    loadItems(buildAbsolutePath(new Path(SYSTEM_DATA_ROOT_PATH)),buildAbsolutePath(new Path(SYSTEM_DATA_ROOT_PATH)),_systemItems,false);
   }
   
   private void loadUserItems() throws IOException {
-    loadItems(new Path(USER_DATA_ROOT_PATH),new Path(USER_DATA_ROOT_PATH),_userItems,true);    
+    loadItems(buildAbsolutePath(new Path(USER_DATA_ROOT_PATH)),buildAbsolutePath(new Path(USER_DATA_ROOT_PATH)),_userItems,true);    
   }
   
   private void loadItems(Path itemRootPath,Path currentPath,Map<String,DirectoryServiceItem> map,boolean hasVersioning) throws IOException {

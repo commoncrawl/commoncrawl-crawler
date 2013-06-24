@@ -121,7 +121,6 @@ implements DNSService,
   static final String  GOOD_NAMES_CACHE_CHECKPOINT_FILE = "dnsServiceGoodNamesCheckpoint.log";
   static final String  BAD_NAMES_CACHE_CHECKPOINT_FILE  = "dnsServiceBadNamesCheckpoint.log";
   
-  FileSystem   _fileSystem = null;
   CustomLogger _DNSSuccessLog;
   CustomLogger _DNSFailureLog;
   CustomLogger _DNSFailureDetailLog;
@@ -187,7 +186,6 @@ implements DNSService,
   @Override
   protected boolean initServer() {
     try { 
-      _fileSystem = CrawlEnvironment.getDefaultFileSystem();
       _DNSSuccessLog = new CustomLogger("DNSSuccessLog");
       _DNSFailureLog = new CustomLogger("DNSFailureLog");
       _DNSFailureDetailLog = new CustomLogger("DNSFailureDetailLog");
