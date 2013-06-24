@@ -34,6 +34,7 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -220,7 +221,7 @@ public class ProxyServlet2 extends HttpServlet
   }
 
   @Override
-  public boolean read(NIOBufferList dataBuffer) throws IOException {
+  public boolean read(NIOHttpConnection source,NIOBufferList dataBuffer) throws IOException {
     if (_uploadBuffer != null) { 
       dataBuffer.write(_uploadBuffer, 0, _uploadBuffer.length);
       _uploadBuffer = null;
@@ -231,6 +232,13 @@ public class ProxyServlet2 extends HttpServlet
   public boolean waitForCompletion() { 
     _blockingSemaphore.acquireUninterruptibly();
     return !_connectionFailed;
+  }
+
+  @Override
+  public void finsihedWriting(NIOHttpConnection sourceConnection,
+      ByteBuffer thisBuffer) throws IOException {
+    // TODO Auto-generated method stub
+    
   }
  }
 

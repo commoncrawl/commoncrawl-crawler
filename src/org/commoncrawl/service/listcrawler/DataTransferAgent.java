@@ -258,7 +258,7 @@ public class DataTransferAgent {
           int bytesTransferred = 0;
           
           @Override
-          public boolean read(NIOBufferList dataBuffer) throws IOException {
+          public boolean read(NIOHttpConnection connection,NIOBufferList dataBuffer) throws IOException {
             if (eof.get()) 
               return true;
             //LOG.info("Connect read callback triggered");
@@ -282,6 +282,13 @@ public class DataTransferAgent {
               }
             }
             return false;
+          }
+
+          @Override
+          public void finsihedWriting(NIOHttpConnection sourceConnection,
+              ByteBuffer thisBuffer) throws IOException {
+            // TODO Auto-generated method stub
+            
           } 
         });
         
