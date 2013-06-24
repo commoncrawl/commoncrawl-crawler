@@ -17,6 +17,7 @@
  **/
 package org.commoncrawl.hadoop.mergeutils;
 
+import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -52,7 +53,7 @@ import org.commoncrawl.util.SequenceFileIndexWriter;
  */
 @SuppressWarnings("rawtypes")
 public class SequenceFileSpillWriter<KeyType extends WritableComparable, ValueType extends Writable> implements
-    RawDataSpillWriter<KeyType, ValueType> {
+    RawDataSpillWriter<KeyType, ValueType> , Closeable {
 
   private static class QueuedBufferItem {
 
