@@ -9,6 +9,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
+import static org.mockito.Mockito.mock;
+
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -31,7 +33,6 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 import org.commoncrawl.util.CCStringUtils;
-import org.commoncrawl.util.MockReporter;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.KeyAndValueData;
 import org.commoncrawl.util.MultiFileMergeUtils.MultiFileInputReader.RawRecordValue;
@@ -362,7 +363,7 @@ public class CrawlDBMergeSortReducer implements Reducer<IntWritable, Text ,TextB
         lastValue = domainHash;
         System.out.println("OutputKey:"+ key.toString());
       }
-    },new MockReporter());
+    },mock(Reporter.class));
         
   }
 }
