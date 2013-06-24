@@ -23,7 +23,6 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTask;
-import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTaskAsStep;
 
 /**
  * 
@@ -31,7 +30,7 @@ import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTaskAsStep;
  * @author rana
  * 
  */
-public class GenPostFrequencyStep extends CrawlPipelineTaskAsStep {
+public class GenPostFrequencyStep extends CrawlPipelineTask {
 
   public static final String OUTPUT_DIR_NAME = "postFreqCalcultor";
 

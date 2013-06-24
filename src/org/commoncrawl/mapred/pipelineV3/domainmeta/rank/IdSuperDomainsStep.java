@@ -195,11 +195,15 @@ public class IdSuperDomainsStep extends CrawlPipelineStep {
 
     JobConf job = new JobBuilder(getDescription() + " Phase 1", getConf())
 
-        .input(
-            makeUniqueOutputDirPath(_task.getOutputDirForStep(DedupedDomainLinksStep.OUTPUT_DIR_NAME),
-                getTaskIdentityId())).inputIsSeqFile().mapperKeyValue(TextBytes.class, TextBytes.class).reducer(
-            Stage1Reducer.class, false).outputKeyValue(TextBytes.class, TextBytes.class).numReducers(
-            CrawlEnvironment.NUM_DB_SHARDS / 2).output(tempOutput).outputIsSeqFile().build();
+      .input(makeUniqueOutputDirPath(_task.getOutputDirForStep(DedupedDomainLinksStep.OUTPUT_DIR_NAME),getTaskIdentityId()))
+      .inputIsSeqFile()
+      .mapperKeyValue(TextBytes.class, TextBytes.class)
+      .reducer(Stage1Reducer.class, false)
+      .outputKeyValue(TextBytes.class, TextBytes.class)
+      .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+      .output(tempOutput)
+      .outputIsSeqFile()
+      .build();
 
     JobClient.runJob(job);
 
@@ -207,16 +211,28 @@ public class IdSuperDomainsStep extends CrawlPipelineStep {
 
     job = new JobBuilder(getDescription() + " Phase 2", getConf())
 
-    .input(tempOutput).inputIsSeqFile().mapperKeyValue(TextBytes.class, TextBytes.class).reducer(Stage2Reducer.class,
-        false).outputKeyValue(IntWritable.class, TextBytes.class).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
-        .output(tempOutput2).outputIsSeqFile().build();
+    .input(tempOutput)
+    .inputIsSeqFile()
+    .mapperKeyValue(TextBytes.class, TextBytes.class)
+    .reducer(Stage2Reducer.class,false)
+    .outputKeyValue(IntWritable.class, TextBytes.class)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+    .output(tempOutput2)
+    .outputIsSeqFile()
+    .build();
 
     JobClient.runJob(job);
 
     job = new JobBuilder(getDescription() + " Phase 3", getConf())
 
-    .input(tempOutput2).inputIsSeqFile().keyValue(IntWritable.class, TextBytes.class).numReducers(1).output(
-        outputPathLocation).outputIsSeqFile().jarByClass(IdSuperDomainsStep.class).build();
+    .input(tempOutput2)
+    .inputIsSeqFile()
+    .keyValue(IntWritable.class, TextBytes.class)
+    .numReducers(1)
+    .output(outputPathLocation)
+    .outputIsSeqFile()
+    .jarByClass(IdSuperDomainsStep.class)
+    .build();
 
     JobClient.runJob(job);
   }

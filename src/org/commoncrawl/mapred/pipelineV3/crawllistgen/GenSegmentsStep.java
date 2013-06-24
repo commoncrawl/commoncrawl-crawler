@@ -51,13 +51,9 @@ public class GenSegmentsStep extends CrawlPipelineStep {
   @Override
   public void runStep(Path outputPathLocation) throws IOException {
 
-    Path tempPath = JobBuilder.tempDir(getConf(), OUTPUT_DIR_NAME);
+    Path bundlePath = getOutputDirForStep(NewGenBundlesStep.class);
 
-    Path bundlePath = getOutputDirForStep(GenBundlesStep.class);
-
-    Segmenter.generateCrawlSegments(getTaskIdentityId(), CrawlEnvironment.CRAWLERS, bundlePath, tempPath);
-
-    getFileSystem().rename(tempPath, outputPathLocation);
+    Segmenter.generateCrawlSegments(getTaskIdentityId(), CrawlEnvironment.getCrawlerNames(), bundlePath, outputPathLocation);
 
   }
 

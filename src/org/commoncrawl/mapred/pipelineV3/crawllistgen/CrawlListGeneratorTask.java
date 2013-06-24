@@ -36,6 +36,8 @@ public class CrawlListGeneratorTask extends CrawlPipelineTask {
 
   private static final Log LOG = LogFactory.getLog(CrawlListGeneratorTask.class);
 
+  public static final String OUTPUT_DIR_NAME = "crawlListGen";
+  
   public static final int NUM_SHARDS = 20 * 20;
 
   public static final int KEY_TYPE_CRAWLSTATS = 1;
@@ -50,16 +52,16 @@ public class CrawlListGeneratorTask extends CrawlPipelineTask {
 
   public static final int KEY_TYPE_CRAWLDATA = 20;
 
-  public static void main(String[] args) throws Exception {
-    CrawlListGeneratorTask task = new CrawlListGeneratorTask();
-    task.run(args);
-  }
+  public CrawlListGeneratorTask(CrawlPipelineTask task) throws IOException {
+    super(task, "Crawl List Generator Task",OUTPUT_DIR_NAME);
 
-  public CrawlListGeneratorTask() throws IOException {
-    super(null, new Configuration(), "Crawl List Generator Task");
-
-    addTaskDependency(DomainMetadataTask.class);
-
+    addStep(new ShardRootDomainClassificationStep(this));
+    addStep(new ShardSubDomainMetadataStep(this));
+    addStep(new NewPartitionUrlsStep(this));
+    addStep(new PartitionWikipediaUrlsStep(this));
+    addStep(new NewGenBundlesStep(this));
+    addStep(new GenSegmentsStep(this));
+    /*
     addStep(new PartitionCrawlDBStep(this));
     addStep(new GenHomepageUrlsStep(this));
     addStep(new GenBlogPlatformUrlsStep(this));
@@ -69,6 +71,7 @@ public class CrawlListGeneratorTask extends CrawlPipelineTask {
     addStep(new GenBundlesStep(this));
     addStep(new GenSegmentsStep(this));
     addStep(new MoveSegmentsStep(this));
+    */
   }
 
   @Override
@@ -77,13 +80,8 @@ public class CrawlListGeneratorTask extends CrawlPipelineTask {
   }
 
   @Override
-  public Path getTaskIdentityBasePath() throws IOException {
-    return new Path("crawl/ec2Import/mergedDB");
-  }
-
-  @Override
-  public Path getTaskOutputBaseDir() {
-    return new Path("crawl/ec2Import/crawlListGen");
+  protected boolean promoteFinalStepOutput() {
+    return false;
   }
 
 }

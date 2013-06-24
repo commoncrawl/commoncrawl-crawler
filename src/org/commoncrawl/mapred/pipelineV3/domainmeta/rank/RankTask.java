@@ -23,14 +23,14 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTask;
-import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTaskAsStep;
+import org.commoncrawl.mapred.pipelineV3.domainmeta.DomainMetadataTask;
 
 /**
  * 
  * @author rana
  *
  */
-public class RankTask extends CrawlPipelineTaskAsStep {
+public class RankTask extends CrawlPipelineTask {
 
   public static final String OUTPUT_DIR_NAME = "domainGraph";
 
@@ -44,13 +44,17 @@ public class RankTask extends CrawlPipelineTaskAsStep {
     addStep(new IdSuperDomainsStep(this));
     addStep(new GenSuperDomainListStep(this));
     addStep(new GenDomainRankStep(this));
-    addStep(new JoinQuantcastAndDomainRankStep(this));
+    //addStep(new JoinQuantcastAndDomainRankStep(this));
 
   }
 
   @Override
   public Log getLogger() {
     return LOG;
+  }
+  
+  public DomainMetadataTask getDomainMetadataTask() { 
+    return (DomainMetadataTask) getTask();
   }
 
   @Override

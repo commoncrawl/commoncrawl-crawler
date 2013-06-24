@@ -73,11 +73,17 @@ public class CrawlDBStatsCollectorStep extends CrawlPipelineStep {
 
     Path superDomainListPath = new Path(getOutputDirForStep(GenSuperDomainListStep.class), "part-00000");
 
-    JobConf job = new JobBuilder(getPipelineStepName() + " - Phase 1", getConf()).inputIsSeqFile().inputs(paths)
-        .mapperKeyValue(TextBytes.class, TextBytes.class).outputKeyValue(TextBytes.class, TextBytes.class).mapper(
-            StatsAggregationMapper.class).reducer(StatsAggregationReducer.class, false).numReducers(
-            CrawlEnvironment.NUM_DB_SHARDS / 2).outputIsSeqFile().output(outputPathLocation).set(
-            CrawlStatsCollectorTask.SUPER_DOMAIN_FILE_PATH, superDomainListPath.toString()).build();
+    JobConf job = new JobBuilder(getPipelineStepName() + " - Phase 1", getConf())
+    .inputIsSeqFile()
+    .inputs(paths)
+    .mapper(StatsAggregationMapper.class)
+    .mapperKeyValue(TextBytes.class, TextBytes.class)
+    .reducer(StatsAggregationReducer.class, false)
+    .outputKeyValue(TextBytes.class, TextBytes.class)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+    .outputIsSeqFile().output(outputPathLocation)
+    .set(CrawlStatsCollectorTask.SUPER_DOMAIN_FILE_PATH, superDomainListPath.toString())
+    .build();
 
     LOG.info("Running Step 1");
     JobClient.runJob(job);

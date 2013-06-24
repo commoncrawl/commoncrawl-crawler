@@ -117,7 +117,7 @@ public class JoinValue implements Writable {
     }
   }
 
-  public TextBytes getTag() { return _tag; }
+  public String    getTag() { return _tag.toString(); }
   public int       getType() { return _type; }
   
   public boolean   isTextType() { return _type == TEXT_TYPE_JOIN_VALUE; }

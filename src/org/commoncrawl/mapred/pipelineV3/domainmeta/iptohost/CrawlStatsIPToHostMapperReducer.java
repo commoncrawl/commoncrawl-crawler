@@ -68,43 +68,44 @@ public class CrawlStatsIPToHostMapperReducer implements Mapper<TextBytes, TextBy
   }
 
   @Override
-  public void map(TextBytes key, TextBytes value, OutputCollector<TextBytes, TextBytes> output, Reporter reporter)
+  public void map(TextBytes unused, TextBytes value, OutputCollector<TextBytes, TextBytes> output, Reporter reporter)
       throws IOException {
     try {
       JsonObject containerObj = parser.parse(value.toString()).getAsJsonObject();
-      GoogleURL urlObject = new GoogleURL(key.toString());
-      if (urlObject.isValid()) {
-        String sourceRootDomain = URLUtils.extractRootDomainName(urlObject.getHost());
-        if (sourceRootDomain != null) {
-
-          JsonObject crawlStatus = containerObj.getAsJsonObject("crawl_status");
-          if (crawlStatus != null) {
-            reporter.incrCounter(Counters.GOT_CRAWL_STATUS, 1);
-            if (crawlStatus.has("http_result")) {
-              int httpResult = crawlStatus.get("http_result").getAsInt();
-              reporter.incrCounter(Counters.GOT_HTTP_RESULT, 1);
-              if (httpResult == 200) {
-                reporter.incrCounter(Counters.RESULT_WAS_HTTP_200, 1);
-                JsonArray crawlStatsArray = crawlStatus.getAsJsonArray("crawl_stats");
-                if (crawlStatsArray != null && crawlStatsArray.size() != 0) {
-                  reporter.incrCounter(Counters.GOT_CRAWL_STATS_ARRAY, 1);
-                  JsonObject crawlStats = crawlStatsArray.get(0).getAsJsonObject();
-                  if (crawlStats != null) {
-                    reporter.incrCounter(Counters.GOT_CRAWL_STATS_OBJECT, 1);
-                    String serverIP = crawlStats.get("server_ip").getAsString();
-                    // create a unique string from root domain to ip mapping
-                    String uniqueStr = serverIP + "->" + sourceRootDomain;
-                    // hack a fingerprint of the string ...
-                    fp.setDomainHash(FPGenerator.std64.fp(uniqueStr));
-                    fp.setUrlHash(fp.getDomainHash());
-                    // and use the bloom filter to skip if already emitted ...
-                    if (!bloomFilter.isPresent(fp)) {
-                      // output tuple
-                      output.collect(new TextBytes(serverIP), new TextBytes(sourceRootDomain));
-                      // add hacked fp into BF
-                      bloomFilter.add(fp);
-                    } else {
-                      reporter.incrCounter(Counters.SKIPPED_ALREADY_EMITTED_TUPLE, 1);
+      if (containerObj.has("source_url")) { 
+        GoogleURL urlObject = new GoogleURL(containerObj.get("source_url").getAsString());
+        if (urlObject.isValid()) {
+          String sourceRootDomain = URLUtils.extractRootDomainName(urlObject.getHost());
+          if (sourceRootDomain != null) {
+            JsonObject crawlStatus = containerObj.getAsJsonObject("crawl_status");
+            if (crawlStatus != null) {
+              reporter.incrCounter(Counters.GOT_CRAWL_STATUS, 1);
+              if (crawlStatus.has("http_result")) {
+                int httpResult = crawlStatus.get("http_result").getAsInt();
+                reporter.incrCounter(Counters.GOT_HTTP_RESULT, 1);
+                if (httpResult == 200) {
+                  reporter.incrCounter(Counters.RESULT_WAS_HTTP_200, 1);
+                  JsonArray crawlStatsArray = crawlStatus.getAsJsonArray("crawl_stats");
+                  if (crawlStatsArray != null && crawlStatsArray.size() != 0) {
+                    reporter.incrCounter(Counters.GOT_CRAWL_STATS_ARRAY, 1);
+                    JsonObject crawlStats = crawlStatsArray.get(0).getAsJsonObject();
+                    if (crawlStats != null) {
+                      reporter.incrCounter(Counters.GOT_CRAWL_STATS_OBJECT, 1);
+                      String serverIP = crawlStats.get("server_ip").getAsString();
+                      // create a unique string from root domain to ip mapping
+                      String uniqueStr = serverIP + "->" + sourceRootDomain;
+                      // hack a fingerprint of the string ...
+                      fp.setDomainHash(FPGenerator.std64.fp(uniqueStr));
+                      fp.setUrlHash(fp.getDomainHash());
+                      // and use the bloom filter to skip if already emitted ...
+                      if (!bloomFilter.isPresent(fp)) {
+                        // output tuple
+                        output.collect(new TextBytes(serverIP), new TextBytes(sourceRootDomain));
+                        // add hacked fp into BF
+                        bloomFilter.add(fp);
+                      } else {
+                        reporter.incrCounter(Counters.SKIPPED_ALREADY_EMITTED_TUPLE, 1);
+                      }
                     }
                   }
                 }

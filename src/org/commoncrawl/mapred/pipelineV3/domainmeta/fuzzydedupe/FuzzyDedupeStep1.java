@@ -65,15 +65,19 @@ public class FuzzyDedupeStep1 extends CrawlPipelineStep {
     ImmutableList<Path> paths = new ImmutableList.Builder<Path>().addAll(
         ((DomainMetadataTask) getTask()).getRestrictedMergeDBDataPaths()).build();
 
-    JobConf job = new JobBuilder(getPipelineStepName() + " - Phase 1", getConf()).inputIsSeqFile().inputs(paths)
-        .mapperKeyValue(LongWritable.class, DeduperValue.class).outputKeyValue(TextBytes.class, TextBytes.class)
-        .mapper(Stage1Mapper.class).reducer(Stage1Reducer.class, false).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+    JobConf job = new JobBuilder(getPipelineStepName() + " - Phase 1", getConf())
+        .inputIsSeqFile()
+        .inputs(paths)
+        .mapperKeyValue(LongWritable.class, DeduperValue.class)
+        .outputKeyValue(TextBytes.class, TextBytes.class)
+        .mapper(Stage1Mapper.class)
+        .reducer(Stage1Reducer.class, false)
+        .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
         .outputIsSeqFile().output(outputPathLocation).build();
 
     LOG.info("Running Step 1");
     JobClient.runJob(job);
     LOG.info("Done Running Step 1");
-
   }
 
 }

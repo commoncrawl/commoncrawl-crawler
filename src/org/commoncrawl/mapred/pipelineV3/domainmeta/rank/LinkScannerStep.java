@@ -45,11 +45,15 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBCommon;
 import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey;
-import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyGroupingComparator;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey.CrawlDBKeyGroupByURLComparator;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineStep;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTask;
+import org.commoncrawl.mapred.pipelineV3.domainmeta.DomainMetadataTask;
 import org.commoncrawl.protocol.URLFPV2;
+import org.commoncrawl.util.ByteArrayUtils;
+import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.FlexBuffer;
 import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.JobBuilder;
@@ -91,7 +95,7 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
     GOT_LINK_FOR_ITEM_WITH_STATUS, FAILED_TO_GET_SOURCE_HREF, GOT_CRAWL_STATUS_NO_LINK, GOT_CRAWL_STATUS_WITH_LINK,
     GOT_EXTERNAL_DOMAIN_SOURCE, NO_SOURCE_URL_FOR_CRAWL_STATUS, OUTPUT_KEY_FROM_INTERNAL_LINK,
     OUTPUT_KEY_FROM_EXTERNAL_LINK, FOUND_HTML_LINKS, FOUND_FEED_LINKS, HAD_OUTLINK_DATA, HAD_NO_OUTLINK_DATA
-  }
+  , FOUND_LINK_RECORD_BUT_NO_MERGE_RECORD, EXCEPTION_IN_MERGE, BAD_SOURCE_URL, NO_SOURCE_URL_IN_MERGE_RECORD}
 
   public static final String OUTPUT_DIR_NAME = "linkScannerOutput";
 
@@ -110,35 +114,7 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
     return host;
   }
 
-  private URLFPBloomFilter emittedTuplesFilter = new URLFPBloomFilter(NUM_ELEMENTS, NUM_HASH_FUNCTIONS, NUM_BITS);
-  static final Path internalMergedSegmentPath = new Path("crawl/ec2Import/mergedSegment");
-
-  static List<Path> filterMergeCandidtes(FileSystem fs, Configuration conf, long latestMergeDBTimestamp)
-      throws IOException {
-    ArrayList<Path> list = new ArrayList<Path>();
-    FileStatus candidates[] = fs.globStatus(new Path(internalMergedSegmentPath, "[0-9]*"));
-
-    for (FileStatus candidate : candidates) {
-      long candidateTimestamp = Long.parseLong(candidate.getPath().getName());
-      if (candidateTimestamp > latestMergeDBTimestamp) {
-        list.add(candidate.getPath());
-      }
-    }
-    return list;
-  }
-
   JsonParser parser = new JsonParser();
-
-  String outputKeyString = null;
-  boolean outputKeyFromInternalLink = false;
-
-  GoogleURL outputKeyURLObj = null;
-
-  long latestLinkDataTime = -1L;
-  TextBytes sourceDomain = new TextBytes();
-  ArrayList<String> outlinks = new ArrayList<String>();
-  TreeSet<Long> discoveredLinks = new TreeSet<Long>();
-  JsonObject toJsonObject = new JsonObject();
   JsonObject fromJsonObject = new JsonObject();
   URLFPV2 bloomKey = new URLFPV2();
   JobConf _jobConf;
@@ -168,12 +144,9 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
   }
 
   @Override
-  public void reduce(IntWritable key, Iterator<Text> values, OutputCollector<TextBytes, TextBytes> output,
-      Reporter reporter) throws IOException {
+  public void reduce(IntWritable key, Iterator<Text> values, OutputCollector<TextBytes, TextBytes> output,Reporter reporter) throws IOException {
     // collect all incoming paths first
     Vector<Path> incomingPaths = new Vector<Path>();
-
-    FlexBuffer scanArray[] = CrawlDBKey.allocateScanArray();
 
     while (values.hasNext()) {
       String path = values.next().toString();
@@ -184,95 +157,126 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
     // set up merge attributes
     Configuration localMergeConfig = new Configuration(_jobConf);
 
-    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, CrawlDBKeyGroupingComparator.class,
+    localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_COMPARATOR_CLASS, CrawlDBKeyGroupByURLComparator.class,
         RawComparator.class);
     localMergeConfig.setClass(MultiFileInputReader.MULTIFILE_KEY_CLASS, TextBytes.class, WritableComparable.class);
 
+    FileSystem fs = FileSystem.get(incomingPaths.get(0).toUri(),_jobConf);
+    
     // ok now spawn merger
-    MultiFileInputReader<TextBytes> multiFileInputReader = new MultiFileInputReader<TextBytes>(
-        FileSystem.get(_jobConf), incomingPaths, localMergeConfig);
+    MultiFileInputReader<TextBytes> multiFileInputReader 
+      = new MultiFileInputReader<TextBytes>(fs, incomingPaths, localMergeConfig);
 
-    TextBytes keyBytes = new TextBytes();
-    TextBytes valueBytes = new TextBytes();
-    DataInputBuffer inputBuffer = new DataInputBuffer();
-    TextBytes valueOut = new TextBytes();
-    TextBytes keyOut = new TextBytes();
-
-    Pair<KeyAndValueData<TextBytes>, Iterable<RawRecordValue>> nextItem = null;
-
-    // pick up source fp from key ...
-    URLFPV2 fpSource = new URLFPV2();
-
-    while ((nextItem = multiFileInputReader.getNextItemIterator()) != null) {
-
-      outputKeyString = null;
-      outputKeyFromInternalLink = false;
-      outputKeyURLObj = null;
-      latestLinkDataTime = -1L;
-      outlinks.clear();
-      discoveredLinks.clear();
-
-      // scan key components
-      CrawlDBKey.scanForComponents(nextItem.e0._keyObject, ':', scanArray);
-
-      // setup fingerprint ...
-      fpSource.setRootDomainHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
-          CrawlDBKey.ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID));
-      fpSource.setDomainHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
-          CrawlDBKey.ComponentId.DOMAIN_HASH_COMPONENT_ID));
-      fpSource.setUrlHash(CrawlDBKey.getLongComponentFromComponentArray(scanArray,
-          CrawlDBKey.ComponentId.URL_HASH_COMPONENT_ID));
-
-      for (RawRecordValue rawValue : nextItem.e1) {
-
-        inputBuffer.reset(rawValue.key.getData(), 0, rawValue.key.getLength());
-        int length = WritableUtils.readVInt(inputBuffer);
-        keyBytes.set(rawValue.key.getData(), inputBuffer.getPosition(), length);
-        inputBuffer.reset(rawValue.data.getData(), 0, rawValue.data.getLength());
-        length = WritableUtils.readVInt(inputBuffer);
-        valueBytes.set(rawValue.data.getData(), inputBuffer.getPosition(), length);
-
-        long linkType = CrawlDBKey.getLongComponentFromKey(keyBytes, CrawlDBKey.ComponentId.TYPE_COMPONENT_ID);
-
-        if (linkType == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) {
-          try {
-            JsonObject object = parser.parse(valueBytes.toString()).getAsJsonObject();
-            if (object != null) {
-              updateCrawlStatsFromJSONObject(object, fpSource, reporter);
+    try { 
+      DataInputBuffer mergeDataBuffer = new DataInputBuffer();
+      @SuppressWarnings("resource")
+      DataInputBuffer linkDataBuffer = new DataInputBuffer();
+      boolean foundMergeRecord = false;
+      boolean foundLinksRecord = false;
+      TextBytes mergeBytes = new TextBytes();
+      TextBytes keyBytes = new TextBytes();
+      TextBytes valueBytes = new TextBytes();
+      DataInputBuffer keyInputBuffer = new DataInputBuffer();
+      TextBytes outputValueBytes = new TextBytes();
+  
+      Pair<KeyAndValueData<TextBytes>, Iterable<RawRecordValue>> nextItem = null;
+  
+      while ((nextItem = multiFileInputReader.getNextItemIterator()) != null) {
+  
+        foundMergeRecord = false;
+        foundLinksRecord = false;
+  
+        // walk records 
+        for (RawRecordValue rawValue : nextItem.e1) {
+          // init key buffer 
+          keyInputBuffer.reset(rawValue.key.getData(),0,rawValue.key.getLength());
+          keyBytes.setFromRawTextBytes(keyInputBuffer);
+          // scan key components
+          long recordType = CrawlDBKey.getLongComponentFromKey(keyBytes, CrawlDBKey.ComponentId.TYPE_COMPONENT_ID);
+          
+          if (recordType == CrawlDBKey.Type.KEY_TYPE_INCOMING_URLS_SAMPLE.ordinal()) { 
+            foundLinksRecord = true;
+            linkDataBuffer.reset(rawValue.data.getData(), rawValue.data.getLength());
+          }
+          else if (recordType == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
+            foundMergeRecord = true;
+            mergeDataBuffer.reset(rawValue.data.getData(),rawValue.data.getLength());
+          }
+          
+          if (foundLinksRecord && foundMergeRecord) {
+            mergeBytes.setFromRawTextBytes(mergeDataBuffer);
+            try { 
+              JsonObject mergeRecord = parser.parse(mergeBytes.toString()).getAsJsonObject();
+              if (mergeRecord.has(CrawlDBCommon.TOPLEVEL_SOURCE_URL_PROPRETY)) { 
+                String sourceURL = mergeRecord.get(CrawlDBCommon.TOPLEVEL_SOURCE_URL_PROPRETY).getAsString();
+                GoogleURL sourceURLObj = new GoogleURL(sourceURL);
+                
+                if (sourceURLObj.isValid()) {
+                  
+                  // set key bytes ... 
+                  keyBytes.set(stripWWW(sourceURLObj.getHost()));
+                  
+                  int curpos = 0;
+                  int endpos = linkDataBuffer.getLength();
+                  
+                  byte lfPattern[] = { 0xA };
+                  byte tabPattern[] = { 0x9 };
+                  
+                  while (curpos != endpos) { 
+                    int tabIndex = ByteArrayUtils.indexOf(linkDataBuffer.getData(), curpos, endpos - curpos, tabPattern);
+                    if (tabIndex == -1) { 
+                      break;
+                    }
+                    else { 
+                      int lfIndex = ByteArrayUtils.indexOf(linkDataBuffer.getData(), tabIndex + 1, endpos - (tabIndex + 1), lfPattern);
+                      if (lfIndex == -1) { 
+                        break;
+                      }
+                      else {
+                        // skip the source domain hash 
+                        //long sourceDomainHash = ByteArrayUtils.parseLong(inputData.getBytes(),curpos, tabIndex-curpos, 10);
+                        
+                        // get source url  
+                        valueBytes.set(linkDataBuffer.getData(),tabIndex + 1,lfIndex - (tabIndex + 1));
+                        // convert to url object 
+                        GoogleURL urlObject = new GoogleURL(valueBytes.toString());
+                        if (urlObject.isValid()) { 
+                          String hostName = stripWWW(urlObject.getHost());
+                          // now emit a from tuple ...
+                          fromJsonObject.addProperty("from", hostName);
+                          outputValueBytes.set(fromJsonObject.toString());
+                          // emit tuple 
+                          output.collect(keyBytes, outputValueBytes);
+                        }
+                        
+                        curpos = lfIndex + 1;
+                      }
+                    }
+                  }                
+                }
+                else { 
+                  reporter.incrCounter(Counters.BAD_SOURCE_URL, 1);
+                }
+              }
+              else { 
+                reporter.incrCounter(Counters.NO_SOURCE_URL_IN_MERGE_RECORD, 1);
+              }
             }
-          } catch (Exception e) {
-            LOG.error("Error Parsing JSON:" + valueBytes.toString());
-            throw new IOException(e);
+            catch (Exception e) { 
+              reporter.incrCounter(Counters.EXCEPTION_IN_MERGE, 1);
+              LOG.error(CCStringUtils.stringifyException(e));
+            }
+            
+          }
+          else if (foundLinksRecord && !foundMergeRecord) { 
+            // record the anomaly ... 
+            reporter.incrCounter(Counters.FOUND_LINK_RECORD_BUT_NO_MERGE_RECORD, 1);
           }
         }
-        reporter.progress();
       }
-      // ok now see if we have anything to emit ...
-      if (discoveredLinks.size() != 0) {
-        reporter.incrCounter(Counters.HAD_OUTLINK_DATA, 1);
-        for (String outlink : outlinks) {
-          // emit a to tuple
-          toJsonObject.addProperty("to", outlink);
-          valueBytes.set(toJsonObject.toString());
-          output.collect(sourceDomain, valueBytes);
-          // now emit a from tuple ...
-          fromJsonObject.addProperty("from", sourceDomain.toString());
-          keyBytes.set(outlink);
-          valueBytes.set(fromJsonObject.toString());
-          output.collect(keyBytes, valueBytes);
-        }
-
-        bloomKey.setDomainHash(fpSource.getDomainHash());
-
-        for (long destDomainFP : discoveredLinks) {
-          // set the bloom filter key ...
-          bloomKey.setUrlHash(destDomainFP);
-          // add it to the bloom filter
-          emittedTuplesFilter.add(bloomKey);
-        }
-      } else {
-        reporter.incrCounter(Counters.HAD_NO_OUTLINK_DATA, 1);
-      }
+    }
+    finally { 
+      multiFileInputReader.close();
     }
   }
 
@@ -280,155 +284,28 @@ public class LinkScannerStep extends CrawlPipelineStep implements Reducer<IntWri
   public void runStep(Path outputPathLocation) throws IOException {
     LOG.info("Task Identity Path is:" + getTaskIdentityPath());
     LOG.info("Temp Path is:" + outputPathLocation);
-
-    ImmutableList<Path> paths = new ImmutableList.Builder<Path>().addAll(
-        filterMergeCandidtes(getFileSystem(), getConf(), 0)).build();
-
-    // establish an affinity path ...
-    Path affinityPath = paths.get(0);
+    
+    DomainMetadataTask rootTask = (DomainMetadataTask) getRootTask();
+    
+    ImmutableList<Path> paths = new ImmutableList.Builder<Path>().addAll(rootTask.getRestrictedMergeDBDataPaths()).build();
 
     JobConf jobConf = new JobBuilder("Link Scanner Job", getConf())
 
-    .inputs(paths).inputFormat(MultiFileMergeInputFormat.class).mapperKeyValue(IntWritable.class, Text.class)
-        .outputKeyValue(TextBytes.class, TextBytes.class).outputFormat(SequenceFileOutputFormat.class).reducer(
-            LinkScannerStep.class, false).partition(MultiFileMergePartitioner.class).numReducers(
-            CrawlEnvironment.NUM_DB_SHARDS).speculativeExecution(false).output(outputPathLocation)
-        .setAffinityNoBalancing(affinityPath, ImmutableSet.of("ccd001.commoncrawl.org", "ccd006.commoncrawl.org"))
-        .compressMapOutput(false).compressor(CompressionType.BLOCK, SnappyCodec.class)
-
-        .build();
+    .inputs(paths)
+    .inputFormat(MultiFileMergeInputFormat.class)
+    .mapperKeyValue(IntWritable.class, Text.class)
+    .outputKeyValue(TextBytes.class, TextBytes.class)
+    .outputFormat(SequenceFileOutputFormat.class)
+    .reducer(LinkScannerStep.class, false)
+    .partition(MultiFileMergePartitioner.class)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+    .speculativeExecution(false)
+    .output(outputPathLocation)
+    .compressMapOutput(false).compressor(CompressionType.BLOCK, SnappyCodec.class)
+    .build();
 
     LOG.info("Starting JOB");
     JobClient.runJob(jobConf);
     LOG.info("Finsihed JOB");
   }
-
-  void updateCrawlStatsFromJSONObject(JsonObject jsonObject, URLFPV2 fpSource, Reporter reporter) throws IOException {
-
-    JsonElement sourceHREFElement = jsonObject.get("source_url");
-
-    if (sourceHREFElement != null) {
-      if (outputKeyString == null || !outputKeyFromInternalLink) {
-        outputKeyString = sourceHREFElement.getAsString();
-        outputKeyURLObj = new GoogleURL(sourceHREFElement.getAsString());
-      }
-      String disposition = jsonObject.get("disposition").getAsString();
-      long attemptTime = jsonObject.get("attempt_time").getAsLong();
-
-      if (latestLinkDataTime == -1 || attemptTime > latestLinkDataTime) {
-
-        if (disposition.equals("SUCCESS")) {
-
-          int httpResult = jsonObject.get("http_result").getAsInt();
-
-          if (httpResult == 200) {
-            outputKeyFromInternalLink = true;
-          }
-
-          if (httpResult == 200) {
-
-            JsonElement parsedAs = jsonObject.get("parsed_as");
-
-            if (parsedAs != null) {
-
-              String parsedAsString = parsedAs.getAsString();
-
-              // if html ...
-              if (parsedAsString.equals("html")) {
-                JsonObject content = jsonObject.get("content").getAsJsonObject();
-                if (content != null) {
-                  JsonArray links = content.getAsJsonArray("links");
-                  if (links != null) {
-                    reporter.incrCounter(Counters.FOUND_HTML_LINKS, 1);
-                    if (updateLinkStatsFromLinksArray(links, content, fpSource, reporter)) {
-                      latestLinkDataTime = attemptTime;
-                    }
-                  }
-                }
-              } else if (parsedAsString.equals("feed")) {
-                JsonObject content = jsonObject.get("content").getAsJsonObject();
-                if (content != null) {
-                  JsonArray items = content.getAsJsonArray("items");
-                  if (items != null) {
-                    for (JsonElement item : items) {
-                      JsonObject linkContent = item.getAsJsonObject().getAsJsonObject("content");
-                      if (linkContent != null) {
-                        JsonArray links = linkContent.getAsJsonArray("links");
-                        if (links != null) {
-                          reporter.incrCounter(Counters.FOUND_FEED_LINKS, 1);
-                          if (updateLinkStatsFromLinksArray(links, content, fpSource, reporter)) {
-                            latestLinkDataTime = attemptTime;
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-      }
-    } else {
-      reporter.incrCounter(Counters.NO_SOURCE_URL_FOR_CRAWL_STATUS, 1);
-    }
-  }
-
-  boolean updateLinkStatsFromLinksArray(JsonArray links, JsonObject content, URLFPV2 fpSource, Reporter reporter) {
-
-    if (links == null) {
-      reporter.incrCounter(Counters.NULL_LINKS_ARRAY, 1);
-    } else {
-      // ok clear existing data ...
-      discoveredLinks.clear();
-      outlinks.clear();
-
-      sourceDomain.set(stripWWW(outputKeyURLObj.getHost()));
-      // walk links ...
-      for (JsonElement link : links) {
-        JsonObject linkObj = link.getAsJsonObject();
-        if (linkObj != null && linkObj.has("href")) {
-          JsonElement rel = linkObj.get("rel");
-          if (rel == null || rel.getAsString().indexOf("nofollow") == -1) {
-            String href = linkObj.get("href").getAsString();
-            GoogleURL destURLObject = new GoogleURL(href);
-            if (destURLObject.isValid()) {
-              URLFPV2 linkFP = URLUtils.getURLFPV2FromURLObject(destURLObject);
-              if (linkFP != null) {
-                if (linkFP.getRootDomainHash() != fpSource.getRootDomainHash()
-                    || linkFP.getDomainHash() != fpSource.getDomainHash()) {
-                  // ok create our fake bloom key (hack) ...
-                  // we set domain hash to be source domain's domain hash
-                  bloomKey.setDomainHash(fpSource.getDomainHash());
-                  // and url hash to dest domains domain hash
-                  bloomKey.setUrlHash(linkFP.getDomainHash());
-                  // the bloom filter is global to the reducer, so doing a check
-                  // against it before emitting a tuple allows us to limit the
-                  // number
-                  // of redundant tuples produced by the reducer (a serious
-                  // problem)
-                  if (!emittedTuplesFilter.isPresent(bloomKey)) {
-                    // one more level of check before we emit a tuple ...
-                    if (!discoveredLinks.contains(linkFP.getDomainHash())) {
-                      // add to discovered links ...
-                      discoveredLinks.add(linkFP.getDomainHash());
-                      // populate the tuple and add it
-                      outlinks.add(stripWWW(destURLObject.getHost()));
-
-                      // we don't add to the bloomfilter until we commit (write)
-                      // this data ...
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      return true;
-    }
-    return false;
-  }
-
 }

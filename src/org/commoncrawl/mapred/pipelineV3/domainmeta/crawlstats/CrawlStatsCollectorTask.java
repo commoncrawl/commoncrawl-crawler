@@ -23,14 +23,13 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTask;
-import org.commoncrawl.mapred.pipelineV3.CrawlPipelineTaskAsStep;
 
 /**
  * 
  * @author rana
  *
  */
-public class CrawlStatsCollectorTask extends CrawlPipelineTaskAsStep {
+public class CrawlStatsCollectorTask extends CrawlPipelineTask{
 
   public static final String OUTPUT_DIR_NAME = "crawlStats";
 
@@ -40,17 +39,24 @@ public class CrawlStatsCollectorTask extends CrawlPipelineTaskAsStep {
 
   public CrawlStatsCollectorTask(CrawlPipelineTask task) throws IOException {
     super(task, "Crawl Stats Collector", OUTPUT_DIR_NAME);
-
-    addStep(new CrawlDBStatsCollectorStep(this));
-    addStep(new CrawlDBRedirectStatsCollectorStep(this));
-    addStep(new WWWPrefixStatsCollectorStep(this));
-    addStep(new WWWPrefixStatsWriterStep(this));
-    addStep(new DNSFailuresCollectorStep(this));
-    addStep(new DNSAndCrawlStatsJoinStep(this));
-    addStep(new RankAndCrawlStatsJoinStep(this));
-    addStep(new NonSuperSubdomainCollectorStep(this));
-    addStep(new JoinSubDomainsAndCrawlStatsStep(this));
-    addStep(new JoinIPAddressAndCrawlStatsStep(this));
+    
+    addStep(new NewCrawlStatsCollectorStep(this));
+    addStep(new MergeNewDomainStatsStep(this));
+    addStep(new TypeAndRelStatsCollectorStep(this));
+    addStep(new JoinDomainMetadataStep(this));
+    addStep(new CollectSubDomainStatsStep(this));
+    addStep(new WriteAggregatedDomainStatsFileStep(this));
+    addStep(new ClassifyDomains(this));
+    //addStep(new CrawlDBStatsCollectorStep(this));
+    //addStep(new CrawlDBRedirectStatsCollectorStep(this));
+    //addStep(new WWWPrefixStatsCollectorStep(this));
+    //addStep(new WWWPrefixStatsWriterStep(this));
+    //addStep(new DNSFailuresCollectorStep(this));
+    //addStep(new DNSAndCrawlStatsJoinStep(this));
+    //addStep(new RankAndCrawlStatsJoinStep(this));
+    //addStep(new NonSuperSubdomainCollectorStep(this));
+    //addStep(new JoinSubDomainsAndCrawlStatsStep(this));
+    //addStep(new JoinIPAddressAndCrawlStatsStep(this));
   }
 
   @Override
@@ -60,7 +66,7 @@ public class CrawlStatsCollectorTask extends CrawlPipelineTaskAsStep {
 
   @Override
   protected boolean promoteFinalStepOutput() {
-    return true;
+    return false;
   }
 
 }

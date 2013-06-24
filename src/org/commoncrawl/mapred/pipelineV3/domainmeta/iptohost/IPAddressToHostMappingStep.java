@@ -62,10 +62,18 @@ public class IPAddressToHostMappingStep extends CrawlPipelineStep {
     ImmutableList<Path> paths = new ImmutableList.Builder<Path>().addAll(
         ((DomainMetadataTask) getTask()).getRestrictedMergeDBDataPaths()).build();
 
-    JobConf job = new JobBuilder(getPipelineStepName(), getConf()).inputIsSeqFile().inputs(paths).mapperKeyValue(
-        TextBytes.class, TextBytes.class).outputKeyValue(TextBytes.class, TextBytes.class).mapper(
-        CrawlStatsIPToHostMapperReducer.class).reducer(CrawlStatsIPToHostMapperReducer.class, false).numReducers(
-        CrawlEnvironment.NUM_DB_SHARDS / 2).outputIsSeqFile().output(outputPathLocation).reuseJVM(1000).build();
+    JobConf job = new JobBuilder(getPipelineStepName(), getConf())
+      .inputIsSeqFile()
+      .inputs(paths)
+      .mapperKeyValue(TextBytes.class, TextBytes.class)
+      .outputKeyValue(TextBytes.class, TextBytes.class)
+      .mapper(CrawlStatsIPToHostMapperReducer.class)
+      .reducer(CrawlStatsIPToHostMapperReducer.class, false)
+      .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+      .outputIsSeqFile()
+      .output(outputPathLocation)
+      .reuseJVM(1000)
+      .build();
 
     LOG.info("Running Step 1");
     JobClient.runJob(job);

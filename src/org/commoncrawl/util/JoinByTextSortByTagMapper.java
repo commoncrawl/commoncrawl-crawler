@@ -42,7 +42,7 @@ public class JoinByTextSortByTagMapper extends JoinMapper {
   @Override
   public WritableComparable mapKey(WritableComparable key,JoinValue value)throws IOException { 
     
-    makeCompositeKey(compositeBuffer, (TextBytes)key, value.getTag(), keyOut);
+    makeCompositeKey(compositeBuffer, (TextBytes)key, value._tag, keyOut);
     
     return keyOut;
   }

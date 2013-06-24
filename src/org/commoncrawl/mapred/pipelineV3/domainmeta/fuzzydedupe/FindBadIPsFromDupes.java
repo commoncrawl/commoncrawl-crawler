@@ -63,10 +63,15 @@ public class FindBadIPsFromDupes extends CrawlPipelineStep {
 
     Path stage1Temp = JobBuilder.tempDir(getConf(), "badIPS1");
 
-    JobConf job = new JobBuilder(getPipelineStepName() + "-Stage1", getConf()).inputIsSeqFile().inputs(paths)
-        .mapperKeyValue(TextBytes.class, TextBytes.class).outputKeyValue(TextBytes.class, TextBytes.class).reducer(
-            FindBadIPsReducer.class, false).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2).outputIsSeqFile().output(
-            stage1Temp).build();
+    JobConf job = new JobBuilder(getPipelineStepName() + "-Stage1", getConf())
+      .inputIsSeqFile()
+      .inputs(paths)
+      .mapperKeyValue(TextBytes.class, TextBytes.class)
+      .outputKeyValue(TextBytes.class, TextBytes.class)
+      .reducer(FindBadIPsReducer.class, false)
+      .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+      .outputIsSeqFile().output(stage1Temp)
+      .build();
 
     LOG.info("Running " + getDescription() + "-Stage 1");
     JobClient.runJob(job);
@@ -74,9 +79,13 @@ public class FindBadIPsFromDupes extends CrawlPipelineStep {
 
     JobConf identityJob = new JobBuilder(getPipelineStepName() + "-Stage2", getConf())
 
-    .inputIsSeqFile().input(stage1Temp).keyValue(TextBytes.class, TextBytes.class).numReducers(
-        CrawlEnvironment.NUM_DB_SHARDS / 2).jarByClass(FindBadIPsFromDupes.class).outputIsSeqFile().output(
-        outputPathLocation).build();
+    .inputIsSeqFile()
+    .input(stage1Temp)
+    .keyValue(TextBytes.class, TextBytes.class)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+    .jarByClass(FindBadIPsFromDupes.class)
+    .outputIsSeqFile().output(outputPathLocation)
+    .build();
 
     LOG.info("Running " + getDescription() + "-Stage 2");
     JobClient.runJob(identityJob);

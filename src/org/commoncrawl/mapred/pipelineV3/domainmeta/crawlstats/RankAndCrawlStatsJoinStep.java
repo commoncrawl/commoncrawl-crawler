@@ -162,25 +162,40 @@ public class RankAndCrawlStatsJoinStep extends CrawlPipelineStep {
 
   @Override
   public void runStep(Path outputPathLocation) throws IOException {
+    
     Path phase1Output = JobBuilder.tempDir(getConf(), OUTPUT_DIR_NAME + "-Phase1");
 
     // ok output crawl stats by root domain
     JobConf job = new JobBuilder(getDescription() + "-Phase1", getConf())
 
-    .input(getOutputDirForStep(DNSAndCrawlStatsJoinStep.class)).inputIsSeqFile().mapper(Phase1Mapper.class).keyValue(
-        TextBytes.class, TextBytes.class).output(phase1Output).outputIsSeqFile().numReducers(
-        CrawlEnvironment.NUM_DB_SHARDS / 2).build();
+    //.input(getOutputDirForStep(DNSAndCrawlStatsJoinStep.class))
+    .input(getOutputDirForStep(CrawlDBStatsCollectorStep.class))
+    .inputIsSeqFile()
+    .mapper(Phase1Mapper.class)
+    .keyValue(TextBytes.class, TextBytes.class)
+    .output(phase1Output).outputIsSeqFile()
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+    .build();
 
     JobClient.runJob(job);
 
-    ImmutableMap<Path, String> step2InputMapping = new ImmutableMap.Builder<Path, String>().put(phase1Output,
-        TAG_CRAWLSTATS).put(getOutputDirForStep(JoinQuantcastAndDomainRankStep.class), TAG_RANKDATA).build();
+    ImmutableMap<Path, String> step2InputMapping 
+      = new ImmutableMap.Builder<Path, String>()
+        .put(phase1Output,TAG_CRAWLSTATS)
+        .put(getOutputDirForStep(JoinQuantcastAndDomainRankStep.class), TAG_RANKDATA)
+        .build();
 
-    job = new JobBuilder(getDescription() + " - step 2", getConf()).inputIsSeqFile().inputs(
-        ImmutableList.copyOf(step2InputMapping.keySet())).mapperKeyValue(TextBytes.class, JoinValue.class)
-        .outputKeyValue(TextBytes.class, TextBytes.class).mapper(JoinByTextSortByTagMapper.class).reducer(
-            Phase2Reducer.class, false).partition(JoinByTextSortByTagMapper.Partitioner.class).numReducers(
-            CrawlEnvironment.NUM_DB_SHARDS / 2).outputIsSeqFile().output(outputPathLocation).build();
+    job = new JobBuilder(getDescription() + " - step 2", getConf())
+      .inputIsSeqFile()
+      .inputs(ImmutableList.copyOf(step2InputMapping.keySet()))
+      .mapper(JoinByTextSortByTagMapper.class)
+      .mapperKeyValue(TextBytes.class, JoinValue.class)
+      .outputKeyValue(TextBytes.class, TextBytes.class)
+      .reducer(Phase2Reducer.class, false)
+      .partition(JoinByTextSortByTagMapper.Partitioner.class)
+      .numReducers(CrawlEnvironment.NUM_DB_SHARDS).outputIsSeqFile()
+      .output(outputPathLocation)
+      .build();
 
     JoinMapper.setPathToTagMapping(step2InputMapping, job);
 

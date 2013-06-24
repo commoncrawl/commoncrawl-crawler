@@ -125,8 +125,12 @@ public class DedupedDomainLinksStep extends CrawlPipelineStep implements
     JobConf job = new JobBuilder(getDescription(), getConf())
 
     .input(makeUniqueOutputDirPath(_task.getOutputDirForStep(LinkScannerStep.OUTPUT_DIR_NAME), getTaskIdentityId()))
-        .inputIsSeqFile().keyValue(TextBytes.class, TextBytes.class).reducer(DedupedDomainLinksStep.class, false)
-        .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2).output(outputPathLocation).outputIsSeqFile().build();
+    .inputIsSeqFile()
+    .keyValue(TextBytes.class, TextBytes.class)
+    .reducer(DedupedDomainLinksStep.class, false)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+    .output(outputPathLocation).outputIsSeqFile()
+    .build();
 
     JobClient.runJob(job);
   }

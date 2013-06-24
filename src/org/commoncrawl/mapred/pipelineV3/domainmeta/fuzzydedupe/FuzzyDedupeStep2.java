@@ -62,9 +62,16 @@ public class FuzzyDedupeStep2 extends CrawlPipelineStep {
         makeUniqueOutputDirPath(_task.getOutputDirForStep(FuzzyDedupeStep1.OUTPUT_DIR_NAME), getTaskIdentityId()))
         .build();
 
-    JobConf job = new JobBuilder(getPipelineStepName(), getConf()).inputIsSeqFile().inputs(paths).mapperKeyValue(
-        TextBytes.class, TextBytes.class).outputKeyValue(TextBytes.class, TextBytes.class).reducer(Stage2Reducer.class,
-        false).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2).outputIsSeqFile().output(outputPathLocation).build();
+    JobConf job = new JobBuilder(getPipelineStepName(), getConf())
+      .inputIsSeqFile()
+      .inputs(paths)
+      .mapperKeyValue(TextBytes.class, TextBytes.class)
+      .outputKeyValue(TextBytes.class, TextBytes.class)
+      .reducer(Stage2Reducer.class,false)
+      .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+      .outputIsSeqFile()
+      .output(outputPathLocation)
+      .build();
 
     LOG.info("Running " + getDescription());
     JobClient.runJob(job);

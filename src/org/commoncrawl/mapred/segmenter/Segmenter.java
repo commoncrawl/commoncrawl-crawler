@@ -19,6 +19,7 @@
 package org.commoncrawl.mapred.segmenter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -47,31 +48,26 @@ public class Segmenter {
   public static final int      SEGMENT_SIZE_MAX= 500000;
   public  static final int      SEGMENT_URLS_PER_HOST = 200;  
   
-  public  static boolean generateCrawlSegments(long timestamp,String[] crawlerArray,Path bundleInputPath,Path finalOutputPath) { 
+  public  static boolean generateCrawlSegments(long timestamp,ArrayList<String> crawlerNames,Path bundleInputPath,Path finalOutputPath) { 
     try { 
 
       FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
       Configuration conf = CrawlEnvironment.getHadoopConfig();
-
-      final Path tempOutputDir 
-        = new Path(CrawlEnvironment.getHadoopConfig().get("mapred.temp.dir", ".") +  System.currentTimeMillis());      
 
       JobConf job = new JobConf(conf);
 
       // compute crawlers string ... 
       String crawlers = new String();
 
-      for (int i=0;i<crawlerArray.length;++i) { 
-        if (i != 0)
-          crawlers += ",";
-        crawlers += crawlerArray[i];
+      for (String crawler : crawlerNames) { 
+        crawlers += (crawler + ",");
       }
 
       LOG.info("Segment Generator:  crawlers:" + crawlers);
 
       job.set(CrawlEnvironment.PROPERTY_CRAWLERS, crawlers);
-      LOG.info("Crawler Count:" + crawlerArray.length);
-      job.setInt(CrawlEnvironment.PROPERTY_NUM_CRAWLERS, crawlerArray.length);
+      LOG.info("Crawler Count:" + crawlerNames.size());
+      job.setInt(CrawlEnvironment.PROPERTY_NUM_CRAWLERS, crawlerNames.size());
       LOG.info("Num Buckets Per Crawler:" + NUM_BUCKETS_PER_CRAWLER);
       job.setInt(CrawlEnvironment.PROPERTY_NUM_BUCKETS_PER_CRAWLER, NUM_BUCKETS_PER_CRAWLER);
       job.setJobName("Generate Segments");
@@ -81,7 +77,7 @@ public class Segmenter {
         FileInputFormat.addInputPath(job,candidate.getPath());
       }
       
-
+      job.setJarByClass(SegmentGeneratorBundleKey.class);
 
       // multi file merger 
       job.setInputFormat(SequenceFileInputFormat.class);
@@ -94,15 +90,13 @@ public class Segmenter {
       job.setOutputKeyClass(NullWritable.class);
       job.setOutputValueClass(NullWritable.class);
       job.setOutputFormat(SequenceFileOutputFormat.class);
-      FileOutputFormat.setOutputPath(job,tempOutputDir);
-      job.setNumTasksToExecutePerJvm(1000);
-      job.setNumReduceTasks(crawlerArray.length * NUM_BUCKETS_PER_CRAWLER);
+      FileOutputFormat.setOutputPath(job,finalOutputPath);
+      job.setNumReduceTasks(crawlerNames.size() * NUM_BUCKETS_PER_CRAWLER);
+      job.setReduceSpeculativeExecution(false);
 
-      LOG.info("Running  Segmenter OutputDir:" + tempOutputDir);
+      LOG.info("Running  Segmenter OutputDir:" + finalOutputPath);
       JobClient.runJob(job);
-      LOG.info("Finished Running Segmenter OutputDir:" + tempOutputDir + " Final Output Dir:" + finalOutputPath);
-      
-      fs.rename(tempOutputDir, finalOutputPath);
+      LOG.info("Finished Running Segmenter OutputDir:" + finalOutputPath);
       
       return true;
     }

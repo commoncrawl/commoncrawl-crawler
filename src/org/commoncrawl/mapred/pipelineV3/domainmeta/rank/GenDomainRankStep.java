@@ -180,10 +180,14 @@ public class GenDomainRankStep extends CrawlPipelineStep {
 
         .input(
             makeUniqueOutputDirPath(_task.getOutputDirForStep(DedupedDomainLinksStep.OUTPUT_DIR_NAME),
-                getTaskIdentityId())).inputIsSeqFile().mapperKeyValue(TextBytes.class, TextBytes.class).reducer(
-            GenerateRankReducer.class, false).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2).outputKeyValue(
-            TextBytes.class, DoubleWritable.class).output(outputPathLocation).outputIsSeqFile().set(
-            SUPER_DOMAIN_FILE_PATH, superDomainPath.toString())
+                getTaskIdentityId()))
+        .inputIsSeqFile()
+        .mapperKeyValue(TextBytes.class, TextBytes.class)
+        .reducer(GenerateRankReducer.class, false)
+        .numReducers(CrawlEnvironment.NUM_DB_SHARDS)
+        .outputKeyValue(TextBytes.class, DoubleWritable.class)
+        .output(outputPathLocation).outputIsSeqFile()
+        .set(SUPER_DOMAIN_FILE_PATH, superDomainPath.toString())
 
         .build();
 

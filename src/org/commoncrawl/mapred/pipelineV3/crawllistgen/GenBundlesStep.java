@@ -97,7 +97,7 @@ public class GenBundlesStep extends CrawlPipelineStep implements
     SKIPPING_DOMAIN_EXCEEDED_URL_COUNT_AND_LOW_DR, SKIPPING_BAD_DOMAIN_URL, SKIPPING_EVERYTHING_BUT_HOMEPAGE_URL,
     SKIPPING_QUERY_URL, NULL_FP_FOR_URL, SKIPPING_ALREADY_EMITTED_URL, FLUSHED_BLOOMFILTER, SKIPPING_BLOCKED_DOMAIN,
     LET_THROUGH_QUERY_URL, HIT_QUERY_CHECK_CONDITION, SKIPPING_INVALID_LENGTH_URL, TRANSITIONING_DOMAIN,
-    SPILLED_1_MILLION_SKIPPED_REST, SKIPPING_IP_ADDRESS
+    SPILLED_1_MILLION_SKIPPED_REST, SKIPPING_IP_ADDRESS, NO_SOURCE_URL_IN_JSON, INVALID_URL_OBJECT, INVALID_SCHEME
 
   }
 
@@ -551,15 +551,20 @@ public class GenBundlesStep extends CrawlPipelineStep implements
 
     JobConf jobConf = new JobBuilder("BundleWriter Step", getConf())
 
-    .inputs(pathList).inputFormat(MultiFileMergeInputFormat.class).mapperKeyValue(IntWritable.class, Text.class)
-        .outputKeyValue(SegmentGeneratorBundleKey.class, SegmentGeneratorItemBundle.class).outputFormat(
-            SequenceFileOutputFormat.class).reducer(GenBundlesStep.class, false).partition(
-            MultiFileMergePartitioner.class).numReducers(CrawlListGeneratorTask.NUM_SHARDS).speculativeExecution(false)
-        .output(outputPathLocation).setAffinityNoBalancing(getOutputDirForStep(PartitionCrawlDBStep.class),
-            ImmutableSet.of("ccd001.commoncrawl.org", "ccd006.commoncrawl.org")).compressMapOutput(false).compressor(
-            CompressionType.BLOCK, SnappyCodec.class)
-
-        .build();
+    .inputs(pathList)
+    .inputFormat(MultiFileMergeInputFormat.class)
+    .mapperKeyValue(IntWritable.class, Text.class)
+    .outputKeyValue(SegmentGeneratorBundleKey.class, SegmentGeneratorItemBundle.class)
+    .outputFormat(SequenceFileOutputFormat.class)
+    .reducer(GenBundlesStep.class, false)
+    .partition(MultiFileMergePartitioner.class)
+    .numReducers(CrawlListGeneratorTask.NUM_SHARDS)
+    .speculativeExecution(false)
+    .output(outputPathLocation)
+    .compressMapOutput(false)
+    .compressor(CompressionType.BLOCK, SnappyCodec.class)
+    
+    .build();
 
     LOG.info("Starting JOB");
     JobClient.runJob(jobConf);

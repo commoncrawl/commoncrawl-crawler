@@ -27,6 +27,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.commoncrawl.mapred.ec2.postprocess.crawldb.CrawlDBKey;
 import org.commoncrawl.mapred.ec2.postprocess.deduper.DeduperUtils.DeduperValue;
 import org.commoncrawl.protocol.URLFPV2;
 import org.commoncrawl.util.GoogleURL;
@@ -61,18 +62,31 @@ public class Stage1Mapper implements Mapper<TextBytes,TextBytes,LongWritable, De
     RESULT_WAS_HTTP_200,
     GOT_CRAWL_STATS_ARRAY,
     GOT_CRAWL_STATS_OBJECT
-  , GOT_CRAWL_STATUS_WITH_SIMHASH, GOT_CRAWL_STATUS_WITHOUT_SIMHASH, GOT_EXCEPTION_PARSING_OBJECT, GOT_NULL_FP, SKIPPING_ROBOTS, REJECTED_NO_MIME_TYPE_FOUND, REJECTED_BAD_MIME_TYPE, REJECTED_JS_OR_CSS_FILE_EXTENSION}
+  , GOT_CRAWL_STATUS_WITH_SIMHASH, GOT_CRAWL_STATUS_WITHOUT_SIMHASH, GOT_EXCEPTION_PARSING_OBJECT, GOT_NULL_FP, SKIPPING_ROBOTS, REJECTED_NO_MIME_TYPE_FOUND, REJECTED_BAD_MIME_TYPE, REJECTED_JS_OR_CSS_FILE_EXTENSION, SKIPPING_INVALID_RECORD_TYPE, GOT_MERGED_RECORD}
   
   @Override
-  public void map(TextBytes key, TextBytes value,OutputCollector<LongWritable, DeduperValue> output, Reporter reporter)throws IOException {
+  public void map(TextBytes recordKey, TextBytes value,OutputCollector<LongWritable, DeduperValue> output, Reporter reporter)throws IOException {
+    long recordType = CrawlDBKey.getLongComponentFromKey(recordKey, CrawlDBKey.ComponentId.TYPE_COMPONENT_ID);
+    if (recordType != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) {
+      reporter.incrCounter(Counters.SKIPPING_INVALID_RECORD_TYPE, 1);
+      return;
+    }
+    else { 
+      reporter.incrCounter(Counters.GOT_MERGED_RECORD, 1);
+    }
+    
     try {
-      String url = key.toString();
+      JsonObject containerObj = parser.parse(value.toString()).getAsJsonObject();
+      if (!containerObj.has("source_url")) { 
+        return;
+      }
+      String url = containerObj.get("source_url").getAsString();
       if (url.endsWith("robots.txt")) { 
         reporter.incrCounter(Counters.SKIPPING_ROBOTS, 1);
       }
       else {
-        JsonObject containerObj = parser.parse(value.toString()).getAsJsonObject();
-        GoogleURL urlObject = new GoogleURL(key.toString());
+        
+        GoogleURL urlObject = new GoogleURL(url);
         if (urlObject.isValid()) {
           String sourceRootDomain = URLUtils.extractRootDomainName(urlObject.getHost());
           if (sourceRootDomain != null){
@@ -143,7 +157,7 @@ public class Stage1Mapper implements Mapper<TextBytes,TextBytes,LongWritable, De
                             long simhashValue = selectedCrawlStatus.get("text_simhash").getAsLong();
                             
                             // emit it
-                            emitItem(key,simhashValue,serverIP,contentLength,reporter,output);
+                            emitItem(new TextBytes(url),simhashValue,serverIP,contentLength,reporter,output);
                           }
                           else { 
                             reporter.incrCounter(Counters.REJECTED_BAD_MIME_TYPE, 1);

@@ -97,9 +97,13 @@ public class DomainIPCollectorStep extends CrawlPipelineStep implements
   public void runStep(Path outputPathLocation) throws IOException {
     JobConf job = new JobBuilder(getDescription(), getConf())
 
-    .input(getOutputDirForStep(IPAddressToHostMappingStep.class)).inputIsSeqFile().mapper(InverseMapper.class).reducer(
-        DomainIPCollectorStep.class, false).numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2).output(outputPathLocation)
-        .outputIsSeqFile().keyValue(TextBytes.class, TextBytes.class).build();
+    .input(getOutputDirForStep(IPAddressToHostMappingStep.class))
+    .inputIsSeqFile()
+    .mapper(InverseMapper.class)
+    .reducer(DomainIPCollectorStep.class, false)
+    .numReducers(CrawlEnvironment.NUM_DB_SHARDS / 2)
+    .output(outputPathLocation)
+    .outputIsSeqFile().keyValue(TextBytes.class, TextBytes.class).build();
 
     JobClient.runJob(job);
   }

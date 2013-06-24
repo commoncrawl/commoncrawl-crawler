@@ -150,7 +150,7 @@ public class WWWPrefixStatsCollectorStep extends CrawlPipelineStep implements
 
     JobConf job = new JobBuilder("WWW Prefix Stats Collector", getConf())
 
-    .inputs(rootTask.getMergeDBDataPaths()).inputIsSeqFile().mapper(WWWPrefixStatsCollectorStep.class).mapperKeyValue(
+    .inputs(rootTask.getRestrictedMergeDBDataPaths()).inputIsSeqFile().mapper(WWWPrefixStatsCollectorStep.class).mapperKeyValue(
         TextBytes.class, IntWritable.class).reducer(WWWPrefixStatsCollectorStep.class, false).outputKeyValue(
         TextBytes.class, TextBytes.class).output(outputPathLocation).outputIsSeqFile().numReducers(
         CrawlEnvironment.NUM_DB_SHARDS / 2).build();

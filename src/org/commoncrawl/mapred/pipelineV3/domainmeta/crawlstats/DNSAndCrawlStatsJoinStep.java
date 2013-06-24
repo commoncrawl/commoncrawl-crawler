@@ -119,9 +119,11 @@ public class DNSAndCrawlStatsJoinStep extends CrawlPipelineStep implements
 
   @Override
   public void runStep(Path outputPathLocation) throws IOException {
-    ImmutableList<Path> inputs = new ImmutableList.Builder<Path>().add(
-        getOutputDirForStep(WWWPrefixStatsWriterStep.class)).add(getOutputDirForStep(DNSFailuresCollectorStep.class))
-        .build();
+    ImmutableList<Path> inputs 
+    = new ImmutableList.Builder<Path>()
+      .add(getOutputDirForStep(WWWPrefixStatsWriterStep.class))
+      .add(getOutputDirForStep(DNSFailuresCollectorStep.class))
+      .build();
 
     JobConf job = new JobBuilder(getDescription(), getConf())
 

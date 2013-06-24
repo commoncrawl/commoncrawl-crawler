@@ -153,17 +153,17 @@ public class PartitionCrawlDBStep extends CrawlPipelineStep implements
 
     Path superDomainListPath = new Path(getOutputDirForStep(GenSuperDomainListStep.class), "part-00000");
 
-    // Path superDomainListPath = new
-    // Path("crawl/ec2Import/domainMetadata/domainGraph/superDomainList/1334363621365","part-00000");
-
     DomainMetadataTask metadataTask = findTaskOfType(DomainMetadataTask.class);
 
     JobConf job = new JobBuilder(getDescription(), getConf())
 
-    .inputs(metadataTask.getMergeDBDataPaths()).inputIsSeqFile().mapper(PartitionCrawlDBStep.class).partition(
-        PartitionUtils.PartitionKeyPartitioner.class).keyValue(TextBytes.class, TextBytes.class).numReducers(
-        CrawlListGeneratorTask.NUM_SHARDS).output(outputPathLocation).outputIsSeqFile().set(SUPER_DOMAIN_FILE_PATH,
-        superDomainListPath.toString())
+    .inputs(metadataTask.getMergeDBDataPaths())
+    .inputIsSeqFile().mapper(PartitionCrawlDBStep.class)
+    .partition(PartitionUtils.PartitionKeyPartitioner.class)
+    .keyValue(TextBytes.class, TextBytes.class)
+    .numReducers(CrawlListGeneratorTask.NUM_SHARDS)
+    .output(outputPathLocation)
+    .outputIsSeqFile().set(SUPER_DOMAIN_FILE_PATH,superDomainListPath.toString())
 
     .build();
 
