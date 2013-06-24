@@ -24,10 +24,12 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -37,6 +39,9 @@ import javax.crypto.spec.SecretKeySpec;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.XMLReaderFactory;
 import org.xml.sax.SAXException;
+
+import com.amazonaws.services.s3.model.ResponseHeaderOverrides;
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -62,11 +67,24 @@ public class S3Utils {
     return makeCanonicalString(method, bucket, key, pathArgs, headers, null);
   }
 
+  
+  private static final Set<String> SIGNED_PARAMETERS = Sets.newHashSet(new String[] {
+      "acl", "torrent", "logging", "location", "policy", "requestPayment", "versioning",
+      "versions", "versionId", "notification", "uploadId", "uploads", "partNumber", "website", 
+      "delete", "lifecycle", "tagging", "cors",
+          ResponseHeaderOverrides.RESPONSE_HEADER_CACHE_CONTROL,
+          ResponseHeaderOverrides.RESPONSE_HEADER_CONTENT_DISPOSITION,
+          ResponseHeaderOverrides.RESPONSE_HEADER_CONTENT_ENCODING,
+          ResponseHeaderOverrides.RESPONSE_HEADER_CONTENT_LANGUAGE,
+          ResponseHeaderOverrides.RESPONSE_HEADER_CONTENT_TYPE,
+          ResponseHeaderOverrides.RESPONSE_HEADER_EXPIRES,
+  });
+
   /**
    * Calculate the canonical string. When expires is non-null, it will be used
    * instead of the Date header.
    */
-  static String makeCanonicalString(String method, String bucketName, String key, Map pathArgs, Map headers,
+  static String makeCanonicalString(String method, String bucketName, String key, Map<String,String> pathArgs, Map headers,
       String expires) {
     StringBuffer buf = new StringBuffer();
     buf.append(method + "\n");
@@ -133,17 +151,19 @@ public class S3Utils {
       buf.append(key);
     }
 
-    // if there is an acl, logging or torrent parameter
-    // add them to the string
-    if (pathArgs != null) {
-      if (pathArgs.containsKey("acl")) {
-        buf.append("?acl");
-      } else if (pathArgs.containsKey("torrent")) {
-        buf.append("?torrent");
-      } else if (pathArgs.containsKey("logging")) {
-        buf.append("?logging");
-      } else if (pathArgs.containsKey("location")) {
-        buf.append("?location");
+    String[] parameterNames = pathArgs.keySet().toArray(new String[pathArgs.keySet().size()]);
+    Arrays.sort(parameterNames);
+    char separator = '?';
+
+    for (String parameterName : parameterNames) {
+      if (SIGNED_PARAMETERS.contains(parameterName)) { 
+        buf.append(separator);
+        buf.append(parameterName);
+        String parameterValue = pathArgs.get(parameterName);
+        if (parameterValue != null) {
+            buf.append("=").append(parameterValue);
+        }
+        separator = '&';
       }
     }
 
