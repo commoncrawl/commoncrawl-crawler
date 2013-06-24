@@ -194,7 +194,7 @@ public class NIOSocketSelector {
                 // reset the selection key's ops.. otherwise, select keeps
                 // returning on an already connected socket (since we have
                 // registered for CONNECT)
-                System.out.println("Connected to:" + ((NIOClientSocket) theSocket).getSocketAddress());
+                // System.out.println("Connected to:" + ((NIOClientSocket) theSocket).getSocketAddress());
                 timeStart = System.currentTimeMillis();
                 ((NIOClientSocketListener) theSocket.getListener()).Connected((NIOClientSocket) theSocket);
                 if (timeUsageDetailOut != null) {
