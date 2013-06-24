@@ -46,7 +46,7 @@ public class SuperDomainList {
     
     LOG.info("Loading Super Domain File From:" + superDomainIdFile);
     
-    FileSystem fs = FileSystem.get(conf);
+    FileSystem fs = FileSystem.get(superDomainIdFile.toUri(),conf);
     
     TreeSet<Long> superDomainSet = new TreeSet<Long>();
     
