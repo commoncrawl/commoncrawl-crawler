@@ -33,7 +33,7 @@ public class NIOSocketFactory {
   static public NIOClientSocket createClientSocket(String protocol, InetSocketAddress localBindAddress,
       NIOClientSocketListener socketListener) throws IOException {
 
-    if (protocol.equalsIgnoreCase("http")) {
+    if (protocol.equalsIgnoreCase("http")||protocol.equalsIgnoreCase("https")) {
       return new NIOClientTCPSocket(localBindAddress, socketListener);
     }
     throw new IOException("Unsupported Protocol Type:" + protocol);
