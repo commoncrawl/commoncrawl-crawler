@@ -24,6 +24,7 @@ import org.apache.hadoop.mapred.Partitioner;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.mapred.SegmentGeneratorBundleKey;
 import org.commoncrawl.mapred.SegmentGeneratorItemBundle;
+import org.commoncrawl.util.MurmurHash;
 
 /**
  * 
@@ -35,8 +36,9 @@ public class BundleKeyPartitioner implements Partitioner<SegmentGeneratorBundleK
   static final Log LOG = LogFactory.getLog(BundleKeyPartitioner.class);
       
   public int getPartition(SegmentGeneratorBundleKey key,SegmentGeneratorItemBundle value, int numPartitions) {
+    int hashCode = MurmurHash.hashLong(key.getDomainFP(),0);
     // calculate local index based host fp % number of buckets per crawler
-    int localIndex = (int)(Math.random() * bucketsPerCrawler);
+    int localIndex = (int)((hashCode & Integer.MAX_VALUE) % bucketsPerCrawler);
     // partition by crawler id + number buckets per crawler
     return (key.getCrawlerId() * bucketsPerCrawler) + localIndex;
   }
