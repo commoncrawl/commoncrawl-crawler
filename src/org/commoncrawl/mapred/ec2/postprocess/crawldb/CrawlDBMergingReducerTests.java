@@ -30,6 +30,7 @@ import org.commoncrawl.util.URLFPBloomFilter;
 import org.commoncrawl.util.URLUtils;
 import org.commoncrawl.util.Tuples.Pair;
 import org.junit.Test;
+import static org.commoncrawl.util.JSONUtils.*;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
