@@ -57,7 +57,7 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
   AtomicReference<Condition>     _writeEvent = new AtomicReference<Condition>(_writeLock.newCondition());
   AtomicBoolean _eofCondition = new AtomicBoolean();
   AtomicReference<NIOHttpConnection> pausedConnection = new AtomicReference<NIOHttpConnection>();
-  int MAX_BUFFER_SIZE = 1048576;
+  int MAX_BUFFER_SIZE = 1048576 * 5;
 
   
   /** 
@@ -133,7 +133,7 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
 
         @Override
         public void execute() {
-          System.out.println("*** RESUMING DOWNLOADS ***");
+          //System.out.println("*** RESUMING DOWNLOADS ***");
           try {
             connection.enableReads();
           } catch (IOException e) {
