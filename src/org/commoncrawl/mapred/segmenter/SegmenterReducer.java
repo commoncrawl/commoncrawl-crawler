@@ -73,8 +73,8 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
   int crawlerIndex = -1;
   int bucketIndex = -1;
   String crawlerName = null;
-  Writer _urlDebugURLWriter;
-  FSDataOutputStream _debugURLStream;
+  //Writer _urlDebugURLWriter;
+  //FSDataOutputStream _debugURLStream;
   
   @Override
   public void configure(JobConf job) {
@@ -92,15 +92,17 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
     // get the crawler name .. 
     crawlerName = crawlerNames[crawlerIndex];
     // calculate work path ... 
-    _workOutputPath = new Path(FileOutputFormat.getWorkOutputPath(job),crawlerName +"/"+NUMBER_FORMAT.format(bucketIndex));
+    _workOutputPath = new Path(FileOutputFormat.getOutputPath(job),crawlerName +"/"+NUMBER_FORMAT.format(bucketIndex));
     
-    _debugOutputPath  = new Path(FileOutputFormat.getWorkOutputPath(job),"debug/" + crawlerName +"/"+NUMBER_FORMAT.format(bucketIndex));
+    _debugOutputPath  = new Path(FileOutputFormat.getOutputPath(job),"debug/" + crawlerName +"/"+NUMBER_FORMAT.format(bucketIndex));
 
     try {
-      _fs = FileSystem.get(job);
+      _fs = FileSystem.get(_workOutputPath.toUri(),job);
+      _fs.delete(_workOutputPath, true);
+      _fs.delete(_debugOutputPath, true);
       LOG.info("Making Directory:" + _workOutputPath);
       _fs.mkdirs(_workOutputPath);
-      _fs.mkdirs(_debugOutputPath);
+      // _fs.mkdirs(_debugOutputPath);
       _conf = job;
     } catch (IOException e) {
       LOG.error(CCStringUtils.stringifyException(e));
@@ -176,10 +178,12 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
       // and spit the host out into the file ... 
       writer.append(new LongWritable(host.getHostFP()),host);
       
+      /*
       _urlDebugURLWriter.append("\nHost:" + host.getHostName());
       for (CrawlSegmentURL urlObject : host.getUrlTargets()) { 
         _urlDebugURLWriter.append("   " + urlObject.getUrl());
       }
+      */
       
       // ok increment url count for active segment 
       _activeSegmentURLCount += host.getUrlTargets().size();
@@ -199,12 +203,14 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
       _activeWriter = null;
       _activeSegmentURLCount =0;				
     }
+    /*
     if (_debugURLStream != null) { 
       _urlDebugURLWriter.flush();
       _debugURLStream.close();
       _urlDebugURLWriter = null;
       _debugURLStream = null;
     }
+    */
   }
 
   SequenceFile.Writer ensureWriter(Reporter reporter)throws IOException { 
@@ -213,7 +219,7 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
       _activeSegmentId++;
       // create path 
       Path outputPath = new Path(_workOutputPath,Integer.toString(_activeSegmentId));
-      Path debugPath = new Path(_debugOutputPath,Integer.toString(_activeSegmentId));
+      //Path debugPath = new Path(_debugOutputPath,Integer.toString(_activeSegmentId));
 
       reporter.incrCounter("", "CREATED_WRITER", 1);
       
@@ -228,8 +234,8 @@ public class SegmenterReducer implements Reducer<SegmentGeneratorBundleKey,Segme
           SequenceFileOutputFormat.getOutputCompressionType(_conf), 
           reporter);
 
-      _debugURLStream = _fs.create(debugPath);
-      _urlDebugURLWriter = new OutputStreamWriter(_debugURLStream,Charset.forName("UTF-8"));
+      //_debugURLStream = _fs.create(debugPath);
+      //_urlDebugURLWriter = new OutputStreamWriter(_debugURLStream,Charset.forName("UTF-8"));
       
       _activeSegmentURLCount = 0;
     }

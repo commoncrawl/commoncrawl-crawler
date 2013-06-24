@@ -507,7 +507,7 @@ public final class HttpFetcher implements Fetcher , NIOHttpConnection.Listener {
 
       if (_active[index] != null && checkForTimeout) { 
 
-        if (_active[index].hasTimedOut()) { 
+        if (_active[index].checkForTimeout()) { 
 
           CrawlContext context = (CrawlContext)_active[index].getContext();
 

@@ -18,7 +18,6 @@
 
 package org.commoncrawl.service.crawler;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -111,7 +110,7 @@ import org.commoncrawl.util.URLUtils;
  * @author rana
  *
  */
-public final class CrawlerEngine  {
+public final class CrawlerEngine implements SegmentLoader.CancelOperationCallback {
 
   /** database keys **/ 
   static final String CRAWLER_CRAWL_SEGMENT_TYPE_PARENT_KEY 	= "TWUnit";
@@ -124,7 +123,7 @@ public final class CrawlerEngine  {
   static final int     LOADER_OVERFLOW_ALLOWED= 100000;
   static final int     MAX_PENDING_URLS=100000;
   static final int     DEFAULT_MAX_ACTIVE_HOSTS = 10000;
-  static final int     DEFAULT_LOCAL_BLOOMFILTER_ELEMENT_SIZE = 500000000;
+  static final int     DEFAULT_LOCAL_BLOOMFILTER_NUM_ELEMENTS = 500000000;
   static final int     DEFAULT_LOCAL_BLOOMFILTER_BITS_PER_ELEMENT = 11;
   static final int     DEFAULT_LOCAL_BLOOMFILTER_BITS_NUM_HASH_FUNCTIONS = 10;
   
@@ -264,6 +263,8 @@ public final class CrawlerEngine  {
   SubDomainComparator _subDomainComparator = new SubDomainComparator();
   /** the active list id we are operating on **/
   int _activeListId = -1;
+  /** bloom filter size **/
+  public static int BLOOM_FILTER_SIZE = DEFAULT_LOCAL_BLOOMFILTER_NUM_ELEMENTS;
 
   /** constructor **/
   public CrawlerEngine(CrawlerServer server,int maxSockets,int dnsHighWaterMark,int dnsLowWaterMark,long cycleTime, int activeListId) { 
@@ -344,7 +345,7 @@ public final class CrawlerEngine  {
     _localBloomFilter 
       = new URLFPBloomFilter(
           
-          DEFAULT_LOCAL_BLOOMFILTER_ELEMENT_SIZE,
+          BLOOM_FILTER_SIZE,
           DEFAULT_LOCAL_BLOOMFILTER_BITS_NUM_HASH_FUNCTIONS,
           DEFAULT_LOCAL_BLOOMFILTER_BITS_PER_ELEMENT);
     
@@ -546,25 +547,27 @@ public final class CrawlerEngine  {
 
   public void stopCrawlerCleanly() { 
     LOG.info("Clean Shutdown - Stopping Crawl");
-    stopCrawl(new CrawlStopCallback() {
-
-      public void crawlStopped() {
-        LOG.info("Clean Shutdown - Crawl Stopped. Stopping Server");
-        _server.stop();
-        LOG.info("Clean Shutdown - Stopping Hadoop");
-        try {
-          FileSystem.closeAll();
-        } catch (IOException e) {
-          // TODO Auto-generated catch block
-          e.printStackTrace();
-        }
-
-        LOG.info("Clean Shutdown - Exiting App");
-        System.exit(1);
-
-      } 
-
-    });
+    if (_crawlActive) { 
+      stopCrawl(new CrawlStopCallback() {
+  
+        public void crawlStopped() {
+          LOG.info("Clean Shutdown - Crawl Stopped. Stopping Server");
+          _server.stop();
+          LOG.info("Clean Shutdown - Stopping Hadoop");
+          try {
+            FileSystem.closeAll();
+          } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
+  
+          LOG.info("Clean Shutdown - Exiting App");
+          System.exit(1);
+  
+        } 
+  
+      });
+    }
   }
 
   public void kickOffCrawl() { 
@@ -936,34 +939,43 @@ public final class CrawlerEngine  {
 
 
   /** internal helper routine to load crawl segment metdata given list id **/
-  private List<CrawlSegment> populateCrawlSegmentsFromHDFS(int listId) throws IOException {
+  private List<CrawlSegment> populateCrawlSegmentsFromHDFS() throws IOException {
     
     ArrayList<CrawlSegment> crawlSegments = new ArrayList<CrawlSegment>();
     
-    LOG.info("Populating CrawlSegment(s) from HDFS for List:" + listId);
-    // get root path for crawl segment data for the specified list id 
-    Path hdfsSearchPath = CrawlSegmentLog.buildHDFSCrawlSegmentSearchPathForListId(listId,_server.getHostName());
-    // scan hdfs for relevant path information for crawl segments
-    FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
-    LOG.info("Searching for crawl segments with hdfs search path:"+ hdfsSearchPath);
-    // scan hdfs for matching files ... 
-    FileStatus fileStatusArray[] = hdfs.globStatus(hdfsSearchPath);
-    LOG.info("Found:" + fileStatusArray.length + " segments at path:"+ hdfsSearchPath);
-    
-    // now walk matched set 
-    for (FileStatus fileStatus : fileStatusArray) { 
-      // segment id is the parent path name of the matched file
-      String segmentName = fileStatus.getPath().getParent().getName();
-      int segmentId = Integer.parseInt(segmentName);
-      //now populate crawl segment information 
-      CrawlSegment crawlSegment = new CrawlSegment();
-
-      crawlSegment.setListId(listId);
-      crawlSegment.setSegmentId(segmentId);
-
-      LOG.info("adding crawl segment:"+crawlSegment.getSegmentId() + " for List:" + listId);
-
-      crawlSegments.add(crawlSegment);
+    // get segment path for host ... 
+    Path basePath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory(),_server.getHostName());
+    // get file system based on path 
+    FileSystem segmentFS = FileSystem.get(basePath.toUri(),CrawlEnvironment.getHadoopConfig());
+    LOG.info("Loading Crawl Segments Using:" + segmentFS + " from Path:" + basePath);
+    // iterate lists in given path ... 
+    FileStatus[] subDirs = segmentFS.globStatus(new Path(basePath,"[0-9]*"));
+    for (FileStatus subDir : subDirs) {
+      LOG.info("Found SubDir: " + subDir.getPath().getName());
+      // extract list id from sub dir name 
+      int listId = Integer.parseInt(subDir.getPath().getName());
+      // search for segments in sub directory  
+      Path searchPath = new Path(subDir.getPath(),"[0-9]*");
+      LOG.info("Searching for crawl segments for list id:" + listId + " with search path:"+ searchPath);
+      // scan hdfs for matching files ... 
+      FileStatus fileStatusArray[] = segmentFS.globStatus(searchPath);
+      LOG.info("Found:" + fileStatusArray.length + " segments at path:"+ searchPath);
+      
+      // now walk matched set 
+      for (FileStatus fileStatus : fileStatusArray) { 
+        // segment id is the parent path name of the matched file
+        String segmentName = fileStatus.getPath().getName();
+        int segmentId = Integer.parseInt(segmentName);
+        //now populate crawl segment information 
+        CrawlSegment crawlSegment = new CrawlSegment();
+  
+        crawlSegment.setListId(listId);
+        crawlSegment.setSegmentId(segmentId);
+  
+        LOG.info("adding crawl segment:"+crawlSegment.getSegmentId() + " for List:" + listId);
+  
+        crawlSegments.add(crawlSegment);
+      }
     }
     return crawlSegments;
   }
@@ -973,7 +985,7 @@ public final class CrawlerEngine  {
 
     LOG.info("Loading Crawl Segments");
 
-    List<CrawlSegment> crawlSegments = populateCrawlSegmentsFromHDFS(_activeListId);
+    List<CrawlSegment> crawlSegments = populateCrawlSegmentsFromHDFS();
 
     LOG.info("defer loading lists");
 
@@ -985,7 +997,11 @@ public final class CrawlerEngine  {
 
       @Override
       public int compare(CrawlSegment o1, CrawlSegment o2) {
-        return o1.getSegmentId() - o2.getSegmentId();
+        int result = (o1.getListId() < o2.getListId()) ? -1 : (o1.getListId() > o2.getListId()) ? 1 : 0;
+        if (result == 0) { 
+          result = (o1.getSegmentId() < o2.getSegmentId()) ? -1 : (o1.getSegmentId() > o2.getSegmentId()) ? 1 : 0;
+        }
+        return result;
       } 
     });
 
@@ -1225,7 +1241,8 @@ public final class CrawlerEngine  {
               // increment pending count ...
               incDecPendingQueuedURLCount(originalURLCount - completedURLCount, 0);
               // and finally, submit the host for distribution ...
-              if (availableCount != 0 && !_shutdownFlag) { 
+              if (availableCount != 0 && !_shutdownFlag) {
+                LOG.info("## LOADER distributingSegmentHost:"+ host.getHostName());
                 distributeSegmentHost(host);
               }
             }
@@ -1322,7 +1339,7 @@ public final class CrawlerEngine  {
         throw new RuntimeException("Expected Non-NULL CrawlSegmentLog for Segment:" + crawlSegment.getSegmentId());
       }
 
-
+      
       getServer().getDefaultThreadPool().execute(new ConcurrentTask<CrawlSegmentStatus>(getServer().getEventLoop(), 
 
           new Callable<CrawlSegmentStatus>(){
@@ -1334,14 +1351,7 @@ public final class CrawlerEngine  {
 
             LOG.info("### SYNC:Loading SegmentFPInfo for List:" + crawlSegment.getListId() + " Segment:" + crawlSegment.getSegmentId());
             // load work unit fingerprint detail  ...
-            final CrawlSegmentFPMap urlFPMap = SegmentLoader.loadCrawlSegmentFPInfo(crawlSegment.getListId(),crawlSegment.getSegmentId(),CrawlerEngine.this.getServer().getHostName(),
-                new SegmentLoader.CancelOperationCallback() {
-
-              @Override
-              public boolean cancelOperation() {
-                return _shutdownFlag;
-              }
-            });
+            final CrawlSegmentFPMap urlFPMap = SegmentLoader.loadCrawlSegmentFPInfo(crawlSegment.getListId(),crawlSegment.getSegmentId(),CrawlerEngine.this.getServer().getHostName(),CrawlerEngine.this);
 
             if (_shutdownFlag) { 
               LOG.info("### SYNC:EXITING LOAD OF List:" + crawlSegment.getListId() + " Segment:" + crawlSegment.getSegmentId());
@@ -1351,7 +1361,7 @@ public final class CrawlerEngine  {
             if (getServer().enableCrawlLog()) { 
               LOG.info("### SYNC: Syncing Log to SegmentFPInfo for List:" + crawlSegment.getListId() + " Segment:" + crawlSegment.getSegmentId());
               // re-sync log to segment ... 
-              segmentLogObj.syncToLog(urlFPMap);
+              segmentLogObj.syncToLog(urlFPMap,CrawlerEngine.this);
             }
 
             LOG.info("### SYNC: Sync for List:" + crawlSegment.getListId() + " Segment:" + crawlSegment.getSegmentId() + " Returned:" + urlFPMap._urlCount + " Total URLS and " + urlFPMap._urlsComplete + " CompleteURLS");
@@ -2397,6 +2407,11 @@ public final class CrawlerEngine  {
       return new FlexBuffer(outputBuffer.getData(),0,outputBuffer.getLength());
     }
     return null;
+  }
+
+  @Override
+  public boolean cancelOperation() {
+    return _shutdownFlag == true;
   }
 
 }

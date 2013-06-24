@@ -121,8 +121,6 @@ public abstract class CommonCrawlServer extends Server {
     try {
       Configuration conf = new Configuration();
 
-      conf.addResource("nutch-default.xml");
-      conf.addResource("nutch-site.xml");
       conf.addResource("core-site.xml");
       conf.addResource("mapred-site.xml");
       conf.addResource("hdfs-site.xml");
@@ -390,7 +388,7 @@ public abstract class CommonCrawlServer extends Server {
   }
 
   public File getLogDirectory() {
-    return new File(System.getProperty("commoncrawl.log.dir"));
+    return new File(System.getProperty("commoncrawl.log.dir","./logs"));
   }
 
   public InetSocketAddress getServerAddress() {
@@ -448,6 +446,7 @@ public abstract class CommonCrawlServer extends Server {
     int rpcPort = _configuration.getInt("org.commoncrawl.rpcPort", getDefaultRPCPort());
     int httpPort = _configuration.getInt("org.commoncrawl.httpPort", getDefaultHttpPort());
     String dataDirectory = _configuration.get("org.commoncrawl.dataDir", getDefaultDataDir());
+    LOG.info("Data Dir is:" + getDefaultDataDir());
     _dnsThreadPoolSize = _configuration.getInt("org.commoncrawl.dnsThreadPoolSize", DEFAULT_DNS_THREAD_POOL_SIZE);
 
     // validate data directory

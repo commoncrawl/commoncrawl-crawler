@@ -223,7 +223,7 @@ public final class RobotRulesParser implements Configurable {
     if (null == agentName) {
       throw new RuntimeException("Agent name not configured!");
     }
-    String agentNames = conf.get("http.robots.agents");
+    String agentNames = conf.get("http.robots.agents","");
     StringTokenizer tok = new StringTokenizer(agentNames, ",");
     ArrayList agents = new ArrayList();
     while (tok.hasMoreTokens()) {

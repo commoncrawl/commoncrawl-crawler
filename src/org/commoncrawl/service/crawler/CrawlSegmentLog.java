@@ -29,6 +29,7 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -265,7 +266,7 @@ public final class CrawlSegmentLog {
     
   
   /** sync the incoming segment against the local crawl log and then send it up to the history server **/
-  public int syncToLog(CrawlSegmentFPMap segmentDetail) throws IOException { 
+  public int syncToLog(CrawlSegmentFPMap segmentDetail,SegmentLoader.CancelOperationCallback cancelCheck) throws IOException { 
     if (Environment.detailLogEnabled())
       LOG.info("### SYNC: List:"+ _listId + " Segment:" + _segmentId +" Syncing Progress Log");
     
@@ -296,7 +297,7 @@ public final class CrawlSegmentLog {
     
     // first things first ... check to see if special completion log file exists in hdfs 
     Path hdfsSegmentCompletionLogPath = 
-      new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + getListId() + "/"
+      new Path(CrawlEnvironment.getCrawlSegmentLogsDirectory() + "/" + getListId() + "/"
                     + getSegmentId() + "/" 
                     + CrawlEnvironment.buildCrawlSegmentCompletionLogFileName(getNodeName()));
     
@@ -317,97 +318,72 @@ public final class CrawlSegmentLog {
     else {
       
       if (segmentDetail != null) { 
-        if (Environment.detailLogEnabled())
-          LOG.info("### SYNC: Building BulkItem History Query for List:"+ _listId + " Segment:" + _segmentId);
-        BulkItemHistoryQuery query = buildHistoryQueryBufferFromMap(segmentDetail);
-        
-        if (query != null) {
-          // create blocking semaphore ... 
-          final Semaphore semaphore = new Semaphore(1);
-          semaphore.acquireUninterruptibly();
+        int retryCount = 0;
+        final AtomicBoolean done = new AtomicBoolean();
+        while (!done.get() && !cancelCheck.cancelOperation()) {
+          
+          retryCount++;
+          
           if (Environment.detailLogEnabled())
-            LOG.info("### SYNC: Dispatching query to history server");
-          //create an outer response object we can pass aysnc response to ... 
-          final BulkItemHistoryQueryResponse outerResponse = new BulkItemHistoryQueryResponse();
+            LOG.info("### SYNC: Building BulkItem History Query for List:"+ _listId + " Segment:" + _segmentId + " Attempt#:" + retryCount);
+          BulkItemHistoryQuery query = buildHistoryQueryBufferFromMap(segmentDetail);
           
-          CrawlerServer.getServer().getHistoryServiceStub().bulkItemQuery(query, new Callback<BulkItemHistoryQuery, BulkItemHistoryQueryResponse>() {
-
-            @Override
-            public void requestComplete(final AsyncRequest<BulkItemHistoryQuery, BulkItemHistoryQueryResponse> request) {
-              // response returns in async thread context ... 
-              if (request.getStatus() == Status.Success) {
-                if (Environment.detailLogEnabled())
-                  LOG.info("###SYNC: bulk Query to history server succeeded. setting out resposne");
-                ImmutableBuffer buffer = request.getOutput().getResponseList();
-                outerResponse.setResponseList(new Buffer(buffer.getReadOnlyBytes(),0,buffer.getCount()));
+          if (query != null) {
+            // create blocking semaphore ... 
+            final Semaphore semaphore = new Semaphore(0);
+            if (Environment.detailLogEnabled())
+              LOG.info("### SYNC: Dispatching query to history server");
+            //create an outer response object we can pass aysnc response to ... 
+            final BulkItemHistoryQueryResponse outerResponse = new BulkItemHistoryQueryResponse();
+            
+            CrawlerServer.getServer().getHistoryServiceStub().bulkItemQuery(query, new Callback<BulkItemHistoryQuery, BulkItemHistoryQueryResponse>() {
+  
+              @Override
+              public void requestComplete(final AsyncRequest<BulkItemHistoryQuery, BulkItemHistoryQueryResponse> request) {
+                try { 
+                  // response returns in async thread context ... 
+                  if (request.getStatus() == Status.Success) {
+                    if (Environment.detailLogEnabled())
+                      LOG.info("###SYNC: bulk Query to history server succeeded. setting out resposne");
+                    ImmutableBuffer buffer = request.getOutput().getResponseList();
+                    outerResponse.setResponseList(new Buffer(buffer.getReadOnlyBytes(),0,buffer.getCount()));
+                    done.set(true);
+                  }
+                  else { 
+                    LOG.error("###SYNC: bulk Query to history server failed. Sleeping for 10 seconds and then will retry");
+                    try {
+                      Thread.sleep(10000);
+                    } catch (InterruptedException e) {
+                    }
+                  }
+                }
+                finally { 
+                  // release semaphore
+                  semaphore.release();
+                }
               }
-              else { 
-                LOG.error("###SYNC: bulk Query to history server failed.");
-                
-              }
-              // release semaphore
-              semaphore.release();
+            });
+            LOG.info("###SYNC: Loader thread blocked waiting for bulk query response");
+            semaphore.acquireUninterruptibly();
+            LOG.info("###SYNC: Loader thread received response from history server");
+            
+            if (outerResponse.getResponseList().getCount() == 0) { 
+              LOG.error("###SYNC: History Server Bulk Query Returned NULL!!! for List:" +  _listId + " Segment:" + _segmentId);
             }
-          });
-          LOG.info("###SYNC: Loader thread blocked waiting for bulk query response");
-          semaphore.acquireUninterruptibly();
-          LOG.info("###SYNC: Loader thread received response from history server");
-          
-          if (outerResponse.getResponseList().getCount() == 0) { 
-            LOG.error("###SYNC: History Server Bulk Query Returned NULL!!! for List:" +  _listId + " Segment:" + _segmentId);
+            else { 
+              // ok time to process the response and integrate the results into the fp list 
+              updateFPMapFromBulkQueryResponse(segmentDetail,outerResponse);
+            }
+            done.set(true);
           }
           else { 
-            // ok time to process the response and integrate the results into the fp list 
-            updateFPMapFromBulkQueryResponse(segmentDetail,outerResponse);
+            if (Environment.detailLogEnabled())
+              LOG.warn("### SYNC: No fingerprints found when processing segment detail for List:"+ _listId + " Segment:" + _segmentId);
+            segmentDetail._urlsComplete = segmentDetail._urlCount;
+            done.set(true);
           }
         }
-        else { 
-          if (Environment.detailLogEnabled())
-            LOG.warn("### SYNC: No fingerprints found when processing segment detail for List:"+ _listId + " Segment:" + _segmentId);
-          segmentDetail._urlsComplete = segmentDetail._urlCount;          
-        }
       }
-      /*
-      // and now walk hdfs looking for any checkpointed logs ...
-      // scan based on checkpoint filename ... 
-      FileStatus[] remoteCheckpointFiles = hdfs.globStatus(new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + getListId() + "/"
-          + getSegmentId() + "/" + CrawlEnvironment.buildCrawlSegmentLogCheckpointWildcardString(getNodeName())));
-      
-      if (remoteCheckpointFiles != null) {
-
-        LOG.info("### SYNC: List:"+ _listId + " Segment:" + _segmentId +" Found Remote Checkpoint Files");
-        
-        // create a temp file to hold the reconciled log ... 
-        File consolidatedLogFile = null;
-        
-        if (remoteCheckpointFiles.length > 1) { 
-          // create temp log file ... 
-          consolidatedLogFile = File.createTempFile("SegmentLog", Long.toString(System.currentTimeMillis()));
-          // write out header ... 
-          CrawlSegmentLog.writeHeader(consolidatedLogFile,0);
-        }
-        // walk the files 
-        for(FileStatus checkpointFilePath : remoteCheckpointFiles) {
-          // and reconcile them against segment ... 
-          itemsProcessed += reconcileLogFile(hdfs,checkpointFilePath.getPath(),getListId(),getSegmentId(),segmentDetail,consolidatedLogFile);
-          LOG.info("### SYNC: List:"+ _listId + " Segment:" + _segmentId +" Processed Checkpoint File:" + checkpointFilePath.getPath() + " Items Processed:" + itemsProcessed);          
-        }
-        
-        // finally ... if consolidatedLogFile is not null 
-        if (consolidatedLogFile != null) { 
-          // build a new hdfs file name ... 
-          Path consolidatedHDFSPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + getListId() + "/" + getSegmentId() + "/" + CrawlEnvironment.buildCrawlSegmentLogCheckpointFileName(getNodeName(), System.currentTimeMillis()));
-          LOG.info("### SYNC: List:"+ _listId + " Segment:" + _segmentId +" Writing Consolidated Log File:" + consolidatedHDFSPath + " to HDFS");         
-          // and copy local file to log ... 
-          hdfs.copyFromLocalFile(new Path(consolidatedLogFile.getAbsolutePath()),consolidatedHDFSPath);
-          // and delete all previous log file entries ... 
-          for (FileStatus oldCheckPointFile : remoteCheckpointFiles) { 
-            hdfs.delete(oldCheckPointFile.getPath());
-          }
-          consolidatedLogFile.delete();
-        }
-      }
-      */
     }
     
     if (segmentDetail != null) { 
@@ -552,15 +528,7 @@ public final class CrawlSegmentLog {
     
     initializeLogFile(activeLogFilePath);
   }
- 
-  /** get list root crawl segment directory given list id **/
-  public static Path buildHDFSCrawlSegmentSearchPathForListId(int listId,String hostName) { 
-    Path pathOut = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory(),Integer.toString(listId));
-    pathOut      = new Path(pathOut,"*/" + hostName);
-    return pathOut;
-    
-  }
-  
+   
   /** get active log file path given segment id **/
    public static File buildActivePath(File rootDirectory,int listId,int segmentId) { 
      // and construct a path to the local crawl segment directory ... 

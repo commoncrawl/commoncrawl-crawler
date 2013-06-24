@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Set;
@@ -33,6 +34,7 @@ import java.util.concurrent.Semaphore;
 
 import javax.servlet.jsp.JspWriter;
 
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.WritableUtils;
 import org.commoncrawl.async.Timer;
@@ -43,6 +45,7 @@ import org.commoncrawl.io.NIODNSResolver;
 import org.commoncrawl.io.NIOHttpConnection;
 import org.commoncrawl.protocol.ActiveHostInfo;
 import org.commoncrawl.protocol.CrawlHistoryStatus;
+import org.commoncrawl.protocol.CrawlMaster;
 import org.commoncrawl.protocol.CrawlSegment;
 import org.commoncrawl.protocol.CrawlSegmentHost;
 import org.commoncrawl.protocol.CrawlSegmentStatus;
@@ -51,6 +54,8 @@ import org.commoncrawl.protocol.CrawlerAction;
 import org.commoncrawl.protocol.CrawlerHistoryService;
 import org.commoncrawl.protocol.CrawlerService;
 import org.commoncrawl.protocol.CrawlerStatus;
+import org.commoncrawl.protocol.SlaveHello;
+import org.commoncrawl.protocol.SlaveRegistration;
 import org.commoncrawl.rpc.base.internal.AsyncClientChannel;
 import org.commoncrawl.rpc.base.internal.AsyncContext;
 import org.commoncrawl.rpc.base.internal.AsyncRequest;
@@ -81,6 +86,7 @@ import org.commoncrawl.service.dns.DNSServiceResolver;
 import org.commoncrawl.service.statscollector.CrawlerStatsService;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.FlexBuffer;
+import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.RuntimeStatsCollector;
 import org.commoncrawl.util.URLUtils;
 
@@ -95,7 +101,8 @@ public class CrawlerServer extends CommonCrawlServer
   implements CrawlerService, 
 	           AsyncClientChannel.ConnectionCallback, 
 	           AsyncServerChannel.ConnectionCallback,
-	           DirectoryServiceCallback {
+	           DirectoryServiceCallback, 
+	           Timer.Callback {
 
 	
 	enum HandshakeStatus {
@@ -136,6 +143,8 @@ public class CrawlerServer extends CommonCrawlServer
   AsyncClientChannel                _historyServiceChannel;
   CrawlerHistoryService.AsyncStub   _historyServiceStub;
   
+  /** Crawl Content FS **/
+  FileSystem  _crawlContentFS;
   
   /** filters **/
   private DomainFilter     _blockedDomainFilter = null;
@@ -180,12 +189,47 @@ public class CrawlerServer extends CommonCrawlServer
   private static int _maxActiveURLS = -1;
   private static long _cycleTime = -1;
   
+  private static int  _crawlLogCheckpointItemThreshold = CrawlLog.DEFAULT_LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD;
+  private static long _crawlLogCheckpointLogSizeThreshold = CrawlLog.DEFAULT_LOG_FILE_SIZE_CHECKPOINT_THRESHOLD;
+  private static int  _crawlLogCheckpointInterval = CrawlLog.DEFAULT_LOG_CHECKPOINT_INTERVAL;
+  private static int  _crawlLogFlushInterval = CrawlLog.DEFAULT_LOG_FLUSH_INTERVAL;
+  
+  /*** NEW MASTER / SLAVE HANDSHAKE STUFF **/
+  
+  enum HandshakeState { 
+    NOT_INITIATED,
+    INITIATING,
+    IDLE,
+    RENEWING,
+    SHUTTING_DOWN
+  }
+  
+  HandshakeState _handshakeState = HandshakeState.NOT_INITIATED;
+  boolean _connectedToMaster = false;
+  SlaveRegistration _registration = null;
+  
+  AsyncClientChannel _masterChannel = null;
+  CrawlMaster.AsyncStub _masterRPCStub;
+  
+  int         _masterPort = -1;
+  /** timers **/
+  Timer _handshakeTimer;
+
+  
 	public static CrawlerEngine getEngine() { 
 	  return _engine;
 	}
 	
 	public static CrawlerServer getServer() { 
 	  return _server;
+	}
+	
+	/**
+	 * 
+	 * @return FileSystem used to store crawled content
+	 */
+	FileSystem getCrawlContentFileSystem() { 
+	  return _crawlContentFS;
 	}
 	
 	/** get the domain queue storage directory name **/
@@ -238,8 +282,7 @@ public class CrawlerServer extends CommonCrawlServer
     }    
 
     _crawlerStatus = new CrawlerStatus();
-        
-    // default to IDLE STATE  
+    _crawlerStatus.setActiveListNumber(0);
     _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.IDLE);
 
     
@@ -312,8 +355,26 @@ public class CrawlerServer extends CommonCrawlServer
 	  // register RPC services it supports ... 
 	  registerService(channel,CrawlerService.spec);
 	  registerService(channel,DirectoryServiceCallback.spec);
-	  
-	  return true;
+
+	  // create connection to master ...
+    InetSocketAddress masterLocalInterfaceAddress = new InetSocketAddress(_serverAddress.getAddress(),0);
+    
+    try {
+      _masterChannel = new AsyncClientChannel(getEventLoop(),masterLocalInterfaceAddress,_masterAddress,this);
+      _masterRPCStub = new CrawlMaster.AsyncStub(_masterChannel);
+      _masterChannel.open();
+
+      
+      _handshakeTimer = new Timer(1000,true,this);
+      getEventLoop().setTimer(_handshakeTimer);
+      
+      return true;
+
+    } catch (IOException e) {
+      LOG.error(CCStringUtils.stringifyException(e));
+    }
+    
+    return false;
   }
 
   
@@ -325,14 +386,19 @@ public class CrawlerServer extends CommonCrawlServer
       _engine.setMaxActiveURLThreshold(_maxActiveURLS);
     }
     
+    InetSocketAddress crawlInterfaces[] = null;
     if (_crawlInterface != null && _crawlInterface.length != 0) { 
       LOG.info("Crawl Interfaces are:");
       for (InetSocketAddress address : _crawlInterface) { 
         LOG.info(address.toString());
       }
+      crawlInterfaces = _crawlInterface;
+    }
+    else { 
+      crawlInterfaces = new InetSocketAddress[] { new InetSocketAddress(0) };
     }
     
-    if (!_engine.initialize(_crawlInterface)) { 
+    if (!_engine.initialize(crawlInterfaces)) { 
       LOG.fatal("Crawl Engine initialization failed!. Exiting... ");
       return false;
     }    
@@ -342,7 +408,8 @@ public class CrawlerServer extends CommonCrawlServer
   //@Override
   protected boolean parseArguements(String[] argv) {
 	  
-	  
+    getConfig().set("http.agent.name",CrawlEnvironment.CCBOT_UA);
+    
 	  for(int i=0; i < argv.length;++i) {
 	      if (argv[i].equalsIgnoreCase("--master")) { 
 	        if (i+1 < argv.length) { 
@@ -413,7 +480,6 @@ public class CrawlerServer extends CommonCrawlServer
             }
           }
         }
-	      
         else if (argv[i].equalsIgnoreCase("--historyserver")) { 
           if (i+1 < argv.length) { 
             _historyServiceAddress = CCStringUtils.parseSocketAddress(argv[++i]);
@@ -422,23 +488,67 @@ public class CrawlerServer extends CommonCrawlServer
         else if (argv[i].equalsIgnoreCase("--mastercrawler")) { 
         	_masterCrawlerAddress = CCStringUtils.parseSocketAddress(argv[++i]);
         }
-	      
-	      
+        else if (argv[i].equalsIgnoreCase("--defaultFS")) { 
+          try {
+            CrawlEnvironment.setDefaultHadoopFSURI(argv[++i]);
+          } catch (Exception e) {
+            LOG.error(CCStringUtils.stringifyException(e));
+          }          
+        }
+        else if (argv[i].equalsIgnoreCase("--contentFS")) { 
+          try {
+            _crawlContentFS = FileSystem.get(new URI(argv[++i]),getConfig());
+          } catch (Exception e) {
+            LOG.error(CCStringUtils.stringifyException(e));
+          }          
+        }
+        else if (argv[i].equalsIgnoreCase("--storageBase")) {
+          CrawlEnvironment.setCCRootDir(argv[++i]);
+          LOG.info("Changed CC_ROOT_DIR to:" + CrawlEnvironment.CC_ROOT_DIR);
+        }
+        else if (argv[i].equalsIgnoreCase("--segmentLogsDir")) {
+          CrawlEnvironment.setCrawlSegmentLogsDirectory(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--segmentDataDir")) {
+          CrawlEnvironment.setCrawlSegmentDataDirectory(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--bloomFilterSize")) {
+          CrawlerEngine.BLOOM_FILTER_SIZE = Integer.parseInt(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--userAgent")) {
+          getConfig().set("http.agent.name",argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--crawlLogItemThreshold")) { 
+          _crawlLogCheckpointItemThreshold = Integer.parseInt(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--crawlLogSizeThreshold")) {
+          _crawlLogCheckpointLogSizeThreshold = Long.parseLong(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--crawlLogCheckpointInterval")) {
+          _crawlLogCheckpointInterval = Integer.parseInt(argv[++i]);
+        }
+        else if (argv[i].equalsIgnoreCase("--crawlLogFlushInterval")) {
+          _crawlLogFlushInterval = Integer.parseInt(argv[++i]);
+        }
 	  }
+	  LOG.info(_crawlContentFS);
 	  return (_masterAddress != null 
 	      && _dnsServiceAddress != null 
 	      && _statsCollectorAddress != null
 	      && _directoryServiceAddress != null
+	      && _crawlContentFS != null
 	      && (_historyServiceAddress != null || externallyManageCrawlSegments()));
   }
 
   //@Override
   protected void printUsage() {
-	  System.out.println("Crawler Startup Args: --master [crawl master server address] " 
-	      + " --crawlInterface [crawler interface list] "
-	      + " --directoryserver [directory service address ] "
-	      + " --statscollector [stats collector service address ] "
-	      + " --historyserver [crawlhistory service address ] "
+	  System.out.println("Crawler Startup Args: --master ["+ _masterAddress +"] " 
+	      + " --crawlInterface ["+ _crawlInterface +"] "
+	      + " --dnsservice ["+ _dnsServiceAddress +"] "
+	      + " --directoryserver ["+ _directoryServiceAddress +"] "
+	      + " --statscollector ["+ _statsCollectorAddress +"] "
+	      + " --historyserver ["+ _historyServiceAddress +"] "
+	      + " --contentFS ["+ _crawlContentFS +"]"
 	      );
   }
 
@@ -495,6 +605,34 @@ public class CrawlerServer extends CommonCrawlServer
     return _proxyAddress;
   }
   
+  @Override
+  public String getHostName() {
+    if (_registration != null) { 
+      return CrawlEnvironment.getCrawlerNameGivenId(_registration.getInstanceId());
+    }
+    else { 
+      LOG.error("Get HostName Called but no Lease!");
+      return super.getHostName();
+    }
+  }
+  
+  public int  getCrawlLogCheckpointItemThreshold() { 
+    return _crawlLogCheckpointItemThreshold;
+  }
+  
+  public long getCrawlLogCheckpointLogSizeThreshold() { 
+    return _crawlLogCheckpointLogSizeThreshold;
+  }
+  
+  public int  getCrawlLogCheckpointInterval() { 
+    return _crawlLogCheckpointInterval;
+  }
+  
+  public int  getCrawlLogFlushInterval() { 
+    return _crawlLogFlushInterval;
+  }
+
+  
 	/*
 	public void addCrawlSegment(AsyncContext<CrawlSegment, CrawlerStatus> rpcContext) throws RPCException {
 	  _engine.addCrawlSegment(rpcContext);
@@ -549,8 +687,16 @@ public class CrawlerServer extends CommonCrawlServer
 	  	LOG.info("Connected to Master Crawler at:" + _masterCrawlerAddress.toString() );
 	  	refreshMasterCrawlerActiveHostList();
 	  }
-	    
+	  else if (channel == _masterChannel) {
+	    LOG.info("Connected to Master");
+	    if (_handshakeState == HandshakeState.NOT_INITIATED) {
+	      LOG.info("Initiating Handshake with Master");
+	      initiateHandshake();
+	    }
+	  }
 	}
+
+	
 	
 	public boolean OutgoingChannelDisconnected(AsyncClientChannel channel) {
 	  if (channel == _dnsServiceChannel) {  
@@ -562,8 +708,14 @@ public class CrawlerServer extends CommonCrawlServer
 	  		_eventLoop.cancelTimer(_masterCrawlerHostListRefreshTimer);
 	  		_masterCrawlerHostListRefreshTimer = null;
 	  	}
-	  	// clear output message queue during a disconnect...
-		  return false;
+	  }
+	  else if (channel == _masterChannel) { 
+	    LOG.info("Master Channel Disconnected. Initiating Clean Shutdown");
+	    try {
+        shutdownServices();
+      } catch (IOException e) {
+        LOG.error(CCStringUtils.stringifyException(e));
+      }
 	  }
 	  return false;
 	}
@@ -1214,6 +1366,206 @@ public class CrawlerServer extends CommonCrawlServer
   	}
   	return false;
   }
-  
 
+  
+  @Override
+  public void timerFired(Timer timer) {
+    if (timer == _handshakeTimer) { 
+      if (_handshakeState == HandshakeState.NOT_INITIATED) { 
+        initiateHandshake();
+      }
+      else if (_handshakeState == HandshakeState.IDLE) { 
+        if (_registration != null) { 
+          if (System.currentTimeMillis() - _registration.getLastTimestamp() >= 1000) { 
+            _handshakeState = HandshakeState.RENEWING;
+            try {
+              _masterRPCStub.extendRegistration(_registration, new AsyncRequest.Callback<SlaveRegistration, NullMessage>() {
+
+                @Override
+                public void requestComplete(AsyncRequest<SlaveRegistration, NullMessage> request) {
+                  if (request.getStatus() == Status.Success) { 
+                    _registration.setLastTimestamp(System.currentTimeMillis());
+                    _handshakeState = HandshakeState.IDLE;
+                  }
+                  else { 
+                    LOG.error("Handshake Extension Failed! - Initiating Shutdown!");
+                    try {
+                      shutdownServices();
+                    } catch (IOException e) {
+                      LOG.error(CCStringUtils.stringifyException(e));
+                    }
+                  }
+                } 
+                
+              });
+            } catch (RPCException e) {
+              LOG.error("Lease Renewal Failed with Error:"+ CCStringUtils.stringifyException(e));
+              try {
+                shutdownServices();
+              } catch (IOException e1) {
+                LOG.error(CCStringUtils.stringifyException(e1));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  public void initiateHandshake() { 
+    _handshakeState = HandshakeState.INITIATING;
+    LOG.info("Connected to Master. Initiating Handshake");
+    SlaveHello slaveHello = new SlaveHello();
+    
+    slaveHello.setIpAddress(IPAddressUtils.IPV4AddressToInteger(_serverAddress.getAddress().getAddress()));
+    slaveHello.setCookie(System.currentTimeMillis());
+    slaveHello.setServiceName("crawler");
+    
+    try { 
+      _masterRPCStub.registerSlave(slaveHello,new AsyncRequest.Callback<SlaveHello, SlaveRegistration>() {
+  
+        @Override
+        public void requestComplete(AsyncRequest<SlaveHello, SlaveRegistration> request) {
+          if (request.getStatus() == Status.Success) {
+            LOG.info("Master Handshake Successfull");
+            _registration = request.getOutput();
+            _registration.setLastTimestamp(System.currentTimeMillis());
+            _handshakeState = HandshakeState.IDLE;
+            LOG.info("Starting Crawler");
+            try {
+              startServices();
+            } catch (IOException e) {
+              LOG.info("Crawler Start Failed with Exception:" +CCStringUtils.stringifyException(e));
+              try {
+                shutdownServices();
+              } catch (IOException e1) {
+                LOG.error(CCStringUtils.stringifyException(e1));
+              }
+            }
+          }
+          else { 
+            LOG.error("Handshake to Master Failed");
+            _handshakeState = HandshakeState.NOT_INITIATED;
+          }
+        }
+      });
+    }
+    catch (Exception e) { 
+      LOG.error(CCStringUtils.stringifyException(e));
+    }
+  }
+  
+  void startServices() throws IOException { 
+    // ok , first things first, send init to history server
+    CrawlHistoryStatus crawlStatus = new CrawlHistoryStatus();
+    
+    crawlStatus.setActiveCrawlNumber(_crawlerStatus.getActiveListNumber());
+    
+    LOG.info("Sending Sync to HistoryServer");
+    _historyServiceStub.sync(crawlStatus,new Callback<CrawlHistoryStatus, NullMessage>() {
+
+      @Override
+      public void requestComplete(AsyncRequest<CrawlHistoryStatus, NullMessage> request) {
+
+        LOG.info("Received response from HistoryServer");
+        
+        if (request.getStatus() == Status.Success) {
+          LOG.info("History Server Sync Successfull - Initializing Engine");
+          if (initializeEngine(_crawlerStatus.getActiveListNumber())) {
+            LOG.info("Engine Initialization Successfull. Starting Crawl for List:" + _crawlerStatus.getActiveListNumber());
+            // kick off the load process 
+            _engine.loadCrawlSegments();
+            _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.ACTIVE);
+          }
+        }
+        else { 
+          LOG.error("History Server Sync Failed! Shutting Down Services!");
+          try {
+            shutdownServices();
+          } catch (IOException e) {
+            LOG.error(CCStringUtils.stringifyException(e));
+          }
+        }
+      }
+    });
+  }
+  
+  void doFinalEngineCleanup() throws IOException { 
+    if (_engine != null) { 
+      _engine.shutdown();
+    }
+    LOG.info("Engine shutdown complete.");
+    _engine = null;
+    // clear data directory 
+    CrawlLog.purgeDataDirectory(getDataDirectory());
+    
+    _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.IDLE);
+    
+    _registration = null;
+    _handshakeState = HandshakeState.NOT_INITIATED;
+  }
+  
+  void shutdownServices()throws IOException {
+    LOG.info("Shutdown Services Initiated");
+    _handshakeState = HandshakeState.SHUTTING_DOWN;
+    
+    if (_crawlerStatus.getCrawlerState() == CrawlerStatus.CrawlerState.ACTIVE  || _crawlerStatus.getCrawlerState() == CrawlerStatus.CrawlerState.IDLE ) {
+      // shift state to pausing ...
+      _crawlerStatus.setCrawlerState(CrawlerStatus.CrawlerState.FLUSHING);
+      
+      if (getEngine() != null) {
+        LOG.info("Stopping Crawl");
+        // stop the crawl ... wait for completion ... 
+        getEngine().stopCrawl(new CrawlStopCallback() {
+          
+          @Override
+          public void crawlStopped() {
+            LOG.info("Crawl Stopped");
+            // ok, now see if we can initiate a flush ... 
+            if (getEngine() != null) {
+              
+              if (getEngine()._crawlLog != null) {
+                LOG.info("Checkpointing CrawlLog");
+                getEngine()._crawlLog.forceFlushAndCheckpointLog(new CheckpointCompletionCallback() {
+                  
+                  @Override
+                  public void checkpointFailed(long checkpointId, Exception e) {
+                    LOG.error("Checkpoint Failed!");
+                    try {
+                      doFinalEngineCleanup();
+                    } catch (IOException e1) {
+                      LOG.error(CCStringUtils.stringifyException(e1));
+                    }
+                  }
+                  
+                  @Override
+                  public void checkpointComplete(long checkpointId,Vector<Long> completedSegmentList) {
+                    LOG.info("Checkpoint Complete");
+                    try {
+                      doFinalEngineCleanup();
+                    } catch (IOException e) {
+                      LOG.error(CCStringUtils.stringifyException(e));
+                    }
+                  }
+                });
+              }
+            }
+            else {
+              LOG.info("Crawl Stopped but CrawlerEngine NULL");
+              try {
+                doFinalEngineCleanup();
+              } catch (IOException e) {
+                LOG.error(CCStringUtils.stringifyException(e));
+              }
+            }
+          }
+        });
+        
+      }
+      else {
+        LOG.info("Shutdown Called but Engine Already NULL");
+        doFinalEngineCleanup();
+      }
+    }
+  }
 }

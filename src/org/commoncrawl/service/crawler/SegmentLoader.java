@@ -77,20 +77,17 @@ public class SegmentLoader {
     
     WritableName.setName(CrawlSegmentHost.class, "org.crawlcommons.protocol.CrawlSegmentHost");
     
+    if (segmentId == -1 || listId == -1) { 
+      throw new IOException("Invalid Parameters!");
+    }
     // construct hdfs path to segment ... 
-    Path hdfsPath;
-    if (segmentId != -1)
-      hdfsPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + listId + "/" + segmentId + "/");
-    else 
-      hdfsPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/");
-    
-    Path workUnitDetailPath = new Path(hdfsPath,crawlerName);
+    Path segmentPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + crawlerName+ "/" + CrawlEnvironment.formatListId(listId) + "/" + segmentId);
     
     SequenceFile.Reader reader = null;
     
     try { 
-      FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
-      reader          = new SequenceFile.Reader(hdfs,workUnitDetailPath,CrawlEnvironment.getHadoopConfig());
+      FileSystem fs   = FileSystem.get(segmentPath.toUri(),CrawlEnvironment.getHadoopConfig());
+      reader          = new SequenceFile.Reader(fs,segmentPath,CrawlEnvironment.getHadoopConfig());
       
       LongWritable      hostFP = new LongWritable();
       CrawlSegmentHost  segmentHost = new CrawlSegmentHost();  
@@ -182,14 +179,12 @@ public class SegmentLoader {
     
     WritableName.setName(CrawlSegmentHost.class, "org.crawlcommons.protocol.CrawlSegmentHost");
     
+    if (segmentId == -1 || listId == -1) { 
+      throw new IOException("Invalid Parameters!");
+    }
     // construct hdfs path to segment ... 
-    Path hdfsPath;
-    if (segmentId != -1)
-      hdfsPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + listId + "/" + segmentId + "/");
-    else 
-      hdfsPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" );
-      
-    Path workUnitDetailPath = new Path(hdfsPath,crawlerName);
+    Path segmentPath = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory() + "/" + crawlerName+ "/" + CrawlEnvironment.formatListId(listId) + "/" + segmentId);
+
     SequenceFile.Reader reader = null;
     try { 
     
@@ -198,8 +193,8 @@ public class SegmentLoader {
       // initialize work unit detail ...
       segmentOut.setSegmentId(segmentId);
       
-      FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
-      reader             = new SequenceFile.Reader(hdfs,workUnitDetailPath,CrawlEnvironment.getHadoopConfig());
+      FileSystem fs     = FileSystem.get(segmentPath.toUri(),CrawlEnvironment.getHadoopConfig());
+      reader            = new SequenceFile.Reader(fs,segmentPath,CrawlEnvironment.getHadoopConfig());
       
       LongWritable          hostFP = new LongWritable();
       CrawlSegmentHost  segmentHost = new CrawlSegmentHost();  

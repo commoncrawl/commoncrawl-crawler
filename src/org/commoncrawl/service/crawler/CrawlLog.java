@@ -91,11 +91,13 @@ public final class CrawlLog {
 
   public static final Log LOG = LogFactory.getLog(CrawlLog.class);
 
-  private static final int LOG_FLUSH_INTERVAL = 30000;
+  public static final int DEFAULT_LOG_FLUSH_INTERVAL = 30000;
 
-  private static final int LOG_CHECKPOINT_INTERVAL = 60000 * 5;
+  public static final int DEFAULT_LOG_CHECKPOINT_INTERVAL = 60000 * 5;
 
-  private static final int LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD = 100000;
+  public static final int DEFAULT_LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD = 100000;
+  
+  public static final long DEFAULT_LOG_FILE_SIZE_CHECKPOINT_THRESHOLD = 1073741824 * 4; 
 
   /** log file header **/
   LogFileHeader _header = new LogFileHeader();
@@ -537,6 +539,8 @@ public final class CrawlLog {
 
   private static class SequenceFileCrawlURLWriter implements HDFSCrawlURLWriter {
 
+    private static final long FLUSH_THRESHOLD = 1073741824L;
+    
     FileSystem _fs;
     Configuration _conf;
     Path _stagingDirectory;
@@ -567,6 +571,7 @@ public final class CrawlLog {
           LOG.info("Flushed Temp Checkpoint File:" + currentFilePath);
           _outputPaths.add(currentFilePath);
         } else {
+          LOG.info("Deleting Emtpy Checkpoint File:" + currentFilePath);
           _fs.delete(currentFilePath, false);
         }
         writer = null;
@@ -599,7 +604,7 @@ public final class CrawlLog {
       long pos = writer.getLength();
       if (pos != _prevPos) {
         _prevPos = pos;
-        if (pos >= 1073741824L) {
+        if (pos >= FLUSH_THRESHOLD) {
           flushFile(true);
         }
       }
@@ -715,14 +720,6 @@ public final class CrawlLog {
     }
   }
 
-  private Path getFinalSegmentLogPath(FileSystem hdfs, long checkpointId, int listId, int segmentId) throws IOException {
-    Path listLogDirectory = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory(), ((Integer) listId).toString());
-    Path segmentLogDirectory = new Path(listLogDirectory, ((Integer) segmentId).toString());
-    Path completionLogFilePath = new Path(segmentLogDirectory, CrawlEnvironment.buildCrawlSegmentLogCheckpointFileName(
-        getNodeName(), checkpointId));
-
-    return completionLogFilePath;
-  }
 
   private Path transferLocalSegmentLog(FileSystem hdfs, File localSegmentLogFile, long checkpointId, int listId,
       int segmentId) throws IOException {
@@ -734,11 +731,17 @@ public final class CrawlLog {
       if (localSegmentLogFile.length() > CrawlSegmentLog.getHeaderSize()) {
         // construct a target path (where we are going to store the checkpointed
         // crawl log )
-        Path remoteLogFileName = new Path(CrawlEnvironment.getCheckpointStagingDirectory(), CrawlEnvironment
-            .buildCrawlSegmentLogCheckpointFileName(getNodeName(), checkpointId)
-            + "_" + Integer.toString(listId) + "_" + Integer.toString(segmentId));
+        Path remoteLogFileName = CrawlEnvironment.getRemoteCrawlSegmentLogCheckpointPath(new Path(CrawlEnvironment.getCrawlSegmentLogsDirectory()),getNodeName(), checkpointId, listId, segmentId);
 
-        hdfs.copyFromLocalFile(new Path(localSegmentLogFile.getAbsolutePath()), remoteLogFileName);
+        // replace if existing ... 
+        hdfs.delete(remoteLogFileName,false);
+
+        Path localPath = new Path(localSegmentLogFile.getAbsolutePath());
+        
+        hdfs.mkdirs(remoteLogFileName.getParent());
+        
+        LOG.info("Copying CrawlSegmentLog for List:" + listId + " Segment:" + segmentId + " from:" + localPath  + " to fs:" + hdfs + " path:" + remoteLogFileName);
+        hdfs.copyFromLocalFile(localPath, remoteLogFileName);
 
         return remoteLogFileName;
       }
@@ -748,7 +751,7 @@ public final class CrawlLog {
 
   private void purgeHDFSSegmentLogs(FileSystem hdfs, int listId, int segmentId) throws IOException {
 
-    Path listLogDirectory = new Path(CrawlEnvironment.getCrawlSegmentDataDirectory(), ((Integer) listId).toString());
+    Path listLogDirectory = new Path(CrawlEnvironment.getCrawlSegmentLogsDirectory(), ((Integer) listId).toString());
     Path segmentLogDirectory = new Path(listLogDirectory, ((Integer) segmentId).toString());
     Path completionLogFilePath = new Path(segmentLogDirectory, CrawlEnvironment
         .buildCrawlSegmentCompletionLogFileName(getNodeName()));
@@ -802,11 +805,11 @@ public final class CrawlLog {
       public Boolean call() throws Exception {
 
         // we need to track these in case of failure ...
-        Vector<Path> segmentLogStagingPaths = new Vector<Path>();
         Vector<Path> segmentLogFinalPaths = new Vector<Path>();
 
         // get the file system
-        final FileSystem hdfs = CrawlEnvironment.getDefaultFileSystem();
+        final FileSystem crawlDataFS  = _engine.getServer().getCrawlContentFileSystem();
+        final FileSystem crawlLogsFS  = CrawlEnvironment.getDefaultFileSystem();
 
         try {
 
@@ -814,10 +817,12 @@ public final class CrawlLog {
 
           // construct a target path (where we are going to store the
           // checkpointed crawl log )
-          Path stagingDirectory = new Path(CrawlEnvironment.getCheckpointStagingDirectory());
+          //Path stagingDirectory = new Path(CrawlEnvironment.getCheckpointStagingDirectory());
+          Path checkpointDirectory = new Path(CrawlEnvironment.getCheckpointDataDirectory());
+          LOG.info("***Checkpoint Dir is:" + checkpointDirectory);
 
           SequenceFileCrawlURLWriter hdfsWriter = new SequenceFileCrawlURLWriter(CrawlEnvironment.getHadoopConfig(),
-              hdfs, stagingDirectory, getNodeName(), _checkpointId);
+              crawlDataFS, checkpointDirectory, getNodeName(), _checkpointId);
 
           try {
             // write out crawl log to hdfs ...
@@ -831,7 +836,7 @@ public final class CrawlLog {
             // delete any hdfs output ...
             for (Path path : hdfsWriter.getFilenames()) {
               LOG.info("Deleting temp (HDFS) checkpoint file:" + path);
-              hdfs.delete(path, false);
+              crawlDataFS.delete(path, false);
             }
             throw e;
           } finally {
@@ -845,18 +850,15 @@ public final class CrawlLog {
             File segmentLogPath = CrawlSegmentLog.buildCheckpointPath(_rootDirectory, getListIdFromLogId(packedLogId),
                 getSegmentIdFromLogId(packedLogId));
 
-            // LOG.info("CrawlLog Checkpoint - Transferring CrawlSegment Log for Segment:"
-            // + segmentId);
+            LOG.info("CrawlLog Checkpoint - Transferring CrawlSegment Log for List:" + getListIdFromLogId(packedLogId) + " Segment:"+ getSegmentIdFromLogId(packedLogId));
             // copy the segment log ...
-            Path remoteLogFilePath = transferLocalSegmentLog(hdfs, segmentLogPath, _checkpointId,
-                getListIdFromLogId(packedLogId), getSegmentIdFromLogId(packedLogId));
+            Path remoteLogFilePath 
+                = transferLocalSegmentLog(crawlLogsFS, segmentLogPath, _checkpointId,getListIdFromLogId(packedLogId), getSegmentIdFromLogId(packedLogId));
+            
             // if path is not null (data was copied) ...
             if (remoteLogFilePath != null) {
               // add it to vector ...
-              segmentLogStagingPaths.add(remoteLogFilePath);
-              // and add final path to vector while we are at it ...
-              segmentLogFinalPaths.add(getFinalSegmentLogPath(hdfs, _checkpointId, getListIdFromLogId(packedLogId),
-                  getSegmentIdFromLogId(packedLogId)));
+              segmentLogFinalPaths.add(remoteLogFilePath);
             }
           }
           LOG.info("CrawlLog Checkpoint - Finished Transferring CrawlSegment Logs");
@@ -864,6 +866,7 @@ public final class CrawlLog {
           // now if we got here ... all hdfs transfers succeeded ...
           // go ahead and move checkpoint log from staging to final data
           // directory ...
+          /* 
           Path checkpointDirectory = new Path(CrawlEnvironment.getCheckpointDataDirectory());
 
           // if no checkpoint data directory ... create one ...
@@ -881,19 +884,13 @@ public final class CrawlLog {
                   + checkpointFinalPath);
             }
           }
-          // and now do the same thing for each segment log files
-          for (int i = 0; i < segmentLogStagingPaths.size(); ++i) {
-            hdfs.rename(segmentLogStagingPaths.get(i), segmentLogFinalPaths.get(i));
-          }
+          */
           // if we got here checkpoint was successfull...
           return true;
         } catch (Exception e) {
           LOG.error("Checkpoint:" + _checkpointId + " FAILED with exception:" + CCStringUtils.stringifyException(e));
-          for (Path segmentPath : segmentLogStagingPaths) {
-            hdfs.delete(segmentPath,false);
-          }
           for (Path segmentPath : segmentLogFinalPaths) {
-            hdfs.delete(segmentPath,false);
+            crawlLogsFS.delete(segmentPath,false);
           }
           throw e;
         }
@@ -929,8 +926,7 @@ public final class CrawlLog {
             LOG.info("CrawlLog Checkpoint - Purging HDFS CrawlSegmentLogs from Completed Segment. List:"
                 + getListIdFromLogId(packedSegmentId) + " Segment:" + getSegmentIdFromLogId(packedSegmentId));
             // purge hdfs files (and create a completion log file)
-            purgeHDFSSegmentLogs(CrawlEnvironment.getDefaultFileSystem(), getListIdFromLogId(packedSegmentId),
-                getSegmentIdFromLogId(packedSegmentId));
+            //purgeHDFSSegmentLogs(CrawlEnvironment.getDefaultFileSystem(), getListIdFromLogId(packedSegmentId),getSegmentIdFromLogId(packedSegmentId));
             LOG.info("CrawlLog Checkpoint - Purging Local CrawlSegmentLogs from Completed Segment. List:"
                 + getListIdFromLogId(packedSegmentId) + " Segment:" + getSegmentIdFromLogId(packedSegmentId));
             // and purge local files as well ...
@@ -1307,11 +1303,12 @@ public final class CrawlLog {
 
   public boolean isCheckpointPossible(long currentTime) {
 
-    if (_lastCheckpointTime == -1 || currentTime - _lastCheckpointTime >= LOG_CHECKPOINT_INTERVAL) {
+    if (_lastCheckpointTime == -1 || currentTime - _lastCheckpointTime >= CrawlerServer.getServer().getCrawlLogCheckpointInterval()) {
 
       // now one more check to see if we have enough items to do a checkpoint
       // ...
-      if (_header._itemCount >= LOG_FILE_CHECKPOINT_ITEM_COUNT_THRESHOLD || _header._fileSize >= 1073741824 * 4) {
+      if (_header._itemCount >= CrawlerServer.getServer().getCrawlLogCheckpointItemThreshold()
+          || _header._fileSize >= CrawlerServer.getServer().getCrawlLogCheckpointLogSizeThreshold()) {
         return true;
       }
     }
@@ -1380,7 +1377,7 @@ public final class CrawlLog {
 
   public void startLogFlusher() {
 
-    _logFlusherTimer = new Timer(LOG_FLUSH_INTERVAL, true, new Timer.Callback() {
+    _logFlusherTimer = new Timer(CrawlerServer.getServer().getCrawlLogFlushInterval(), true, new Timer.Callback() {
 
       public void timerFired(Timer timer) {
         // if checkpoint is NOT in progress ...

@@ -2333,6 +2333,15 @@ public final class CrawlList extends IntrusiveList.IntrusiveListElement<CrawlLis
           // now write out header anew ... 
           writeLogFileHeader(file,header);
         }
+        catch (IOException e) { 
+          LOG.fatal("Encountered Exception Reading From Offline Queue for LogFile:" + logFileName + ". Truncating Queue! \n" + CCStringUtils.stringifyException(e));
+          header._itemCount = 0;
+          header._readPos = 0;
+          header._writePos = 0;
+          
+          writeLogFileHeader(file,header);
+        }
+        
         finally { 
           if (file != null) { 
             file.close();
