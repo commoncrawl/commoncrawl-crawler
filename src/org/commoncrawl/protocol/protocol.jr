@@ -1026,7 +1026,24 @@ module org.commoncrawl.protocol {
       ustring detectedCharset = 13;
    }
 
+  class SlaveHello { 
+    int     ipAddress = 1;
+    ustring serviceName =2;
+    long    cookie = 3;
+  }
+  
+  class SlaveRegistration {
+    [key] int     ipAddress = 1;
+    [key] ustring serviceName = 2;
+    [key] long  cookie = 3;
+    int   instanceId = 4;
+    long  lastTimestamp = 5;
+  }
+    
+
+  // Essentially the Crawler Master Service 
   Service CrawlDBService { 
+  
     // map reduce job state support 
     method updateMapReduceTaskValue(in MapReduceTaskIdAndData,out NullMessage);
     method queryMapReduceTaskValue(in MapReduceTaskIdAndData,out MapReduceTaskIdAndData);
@@ -1034,6 +1051,14 @@ module org.commoncrawl.protocol {
     method queryDuplicateStatus(in URLFPV2,out SimpleByteResult);
     method queryLongValue(in LongQueryParam, out LongQueryParam);
     method queryFingerprintStatus(in URLFPV2,out SimpleByteResult);
+  }
+  
+  Service CrawlMaster { 
+  
+    method registerSlave(in SlaveHello, out SlaveRegistration);
+    method extendRegistration(in SlaveRegistration, out NullMessage);
+    method expireRegistration(in SlaveRegistration, out NullMessage);
+  
   }
   
   Service CrawlerService {
