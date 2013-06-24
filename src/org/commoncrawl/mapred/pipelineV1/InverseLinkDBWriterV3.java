@@ -198,7 +198,7 @@ public class InverseLinkDBWriterV3 extends CrawlDBCustomJob {
     LOG.info("Seed Timestamp is:" + seedTimestamp);
     Path seedDatabasePath = new Path("crawl/crawldb_new/" + seedTimestamp);
 
-    Path linkDBBase = new Path(CrawlEnvironment.HDFS_CrawlDBBaseDir,
+    Path linkDBBase = new Path(CrawlEnvironment.CC_ROOT_DIR,
         CrawlEnvironment.HDFS_LinkDBDir);
     Path linkDBMerged = new Path("crawl/linkdb/merged" + seedTimestamp);
     long linkDBTimestamp = seedTimestamp;
