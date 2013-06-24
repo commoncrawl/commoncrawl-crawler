@@ -4,7 +4,7 @@
   import="javax.servlet.http.*"
   import="java.io.*"
   import="java.util.*"
-  import="org.commoncrawl.*"
+  import="org.commoncrawl.service.crawler.*"
   import="java.text.DateFormat"
   import="java.lang.Math"
   import="java.net.URLEncoder"

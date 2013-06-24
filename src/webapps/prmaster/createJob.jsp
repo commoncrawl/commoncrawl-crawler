@@ -2,7 +2,7 @@
   contentType="text/html; charset=UTF-8"
   import="javax.servlet.*"
   import="javax.servlet.http.*"
-	import="org.commoncrawl.crawl.pagerank.PageRankJobConfig"
+	import="org.commoncrawl.service.pagerank.PageRankJobConfig"
 	import="java.util.Vector"
 %>
 <%
