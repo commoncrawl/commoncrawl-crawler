@@ -242,12 +242,21 @@ public class JobBuilder {
     _jobConf.setMapSpeculativeExecution(true);
     return this;
   }
+
+  public JobBuilder speculativeMapExecution(boolean enable) throws IOException { 
+    _jobConf.setMapSpeculativeExecution(enable);
+    return this;
+  }
   
   public JobBuilder speculativeReducerExecution() throws IOException { 
     _jobConf.setReduceSpeculativeExecution(true);
     return this;
   }
 
+  public JobBuilder speculativeReducerExecution(boolean enable) throws IOException { 
+    _jobConf.setReduceSpeculativeExecution(enable);
+    return this;
+  }
   
   public JobBuilder maxMapAttempts(int maxAttempts)throws IOException { 
     _jobConf.setMaxMapAttempts(maxAttempts);
