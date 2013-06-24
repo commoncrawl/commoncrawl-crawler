@@ -18,10 +18,9 @@
 
 package org.commoncrawl.util;
 
-import java.io.DataInputStream;
-import java.io.IOException;
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -68,7 +67,7 @@ import org.apache.hadoop.io.WritableUtils;
  * @author rana
  * 
  */
-public final class TextBytes extends BinaryComparableWithOffset implements
+public class TextBytes extends BinaryComparableWithOffset implements
     WritableComparable<BinaryComparable> {
 
   private static final Log                   LOG             = LogFactory
