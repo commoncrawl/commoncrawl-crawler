@@ -17,23 +17,31 @@
  **/
 package org.commoncrawl.util;
 
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyShort;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.Vector;
-
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -43,19 +51,16 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.SequenceFile;
-import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.SequenceFile.ValueBytes;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparator;
+import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
@@ -75,8 +80,9 @@ import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import static org.mockito.Mockito.*;
-import com.google.common.collect.*;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.TreeMultimap;
 
 
 /**
@@ -108,7 +114,7 @@ public class MultiFileMergeUtils {
 
     @Override
     public int getPartition(IntWritable key, Text value, int numPartitions) {
-      return key.get();
+      return key.get() % numPartitions;
     }
     @Override
     public void configure(JobConf job) {
@@ -118,6 +124,7 @@ public class MultiFileMergeUtils {
 
   public static class MultiFileMergeInputFormat extends org.apache.hadoop.mapreduce.InputFormat<IntWritable, Text> implements InputFormat<IntWritable,Text>{
 
+    public static final String PARTS_ARE_FILES_PROPERTY = "multifilemerge.parts.are.files";
 
     public MultiFileMergeInputFormat() { }
 
@@ -131,9 +138,6 @@ public class MultiFileMergeUtils {
         throw new IOException("No Input Paths Specified!");
       }
       else {
-
-        FileSystem fs = FileSystem.get(job);
-
         // get job affinity mask 
         String nodeAffinityMask = NodeAffinityMaskBuilder.getNodeAffinityMask(job);
 
@@ -144,8 +148,10 @@ public class MultiFileMergeUtils {
           for (int i=0;i<paths.length;++i) { 
 
             Path nextPath = paths[i];
+            
+            FileSystem pathFS = FileSystem.get(nextPath.toUri(),job);  
 
-            String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs,nextPath,rootAffinityMap);
+            String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(pathFS,nextPath,rootAffinityMap);
 
             if (nodeAffinityMask.compareTo(nextPathAffinityMask) != 0) { 
               LOG.error("Input Path:" + paths[i] + " had an incompatible NodeAffinityMask with root path.");
@@ -159,13 +165,26 @@ public class MultiFileMergeUtils {
 
         // ok build an array of all possible paths
         final ArrayList<Path> pathList = new ArrayList<Path>();
-
-        for (Path path : paths) { 
+        boolean partsAreFiles = job.getBoolean(PARTS_ARE_FILES_PROPERTY, false);
+        for (Path path : paths) {
           FileSystem pathFS = FileSystem.get(path.toUri(),job);
-          FileStatus parts[] = pathFS.globStatus(new Path(path,"part-*"));
 
-          for (FileStatus part : parts) { 
-            pathList.add(part.getPath());
+          boolean isFile = false;
+          if (path.getName().startsWith("part-")) { 
+            if (partsAreFiles)
+              isFile = true; 
+          }
+          if (isFile == false)
+            isFile = pathFS.isDirectory(path);
+          if (!isFile) { 
+            FileStatus parts[] = pathFS.globStatus(new Path(path,"part-*"));
+  
+            for (FileStatus part : parts) { 
+              pathList.add(part.getPath());
+            }
+          }
+          else { 
+            pathList.add(path);
           }
         }
 
@@ -229,8 +248,6 @@ public class MultiFileMergeUtils {
       }
       else {
 
-        FileSystem fs = FileSystem.get(context.getConfiguration());
-
         // get job affinity mask 
         String nodeAffinityMask = NodeAffinityMaskBuilder.getNodeAffinityMask(context.getConfiguration());
         // ok build a mapping 
@@ -239,8 +256,10 @@ public class MultiFileMergeUtils {
         for (int i=0;i<paths.length;++i) { 
 
           Path nextPath = paths[i];
+          
+          FileSystem pathFS = FileSystem.get(nextPath.toUri(),context.getConfiguration());  
 
-          String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(fs,nextPath,rootAffinityMap);
+          String nextPathAffinityMask = NodeAffinityMaskBuilder.buildNodeAffinityMask(pathFS,nextPath,rootAffinityMap);
 
           if (nodeAffinityMask.compareTo(nextPathAffinityMask) != 0) { 
             LOG.error("Input Path:" + paths[i] + " had an incompatible NodeAffinityMask with root path.");
@@ -255,10 +274,26 @@ public class MultiFileMergeUtils {
         // ok build an array of all possible paths
         final ArrayList<Path> pathList = new ArrayList<Path>();
 
-        for (Path path : paths) { 
-          FileStatus parts[] = fs.globStatus(new Path(path,"part-*"));
-          for (FileStatus part : parts) { 
-            pathList.add(part.getPath());
+        boolean partsAreFiles = context.getConfiguration().getBoolean(PARTS_ARE_FILES_PROPERTY, false);
+        for (Path path : paths) {
+          FileSystem pathFS = FileSystem.get(path.toUri(),context.getConfiguration());
+
+          boolean isFile = false;
+          if (path.getName().startsWith("part-")) { 
+            if (partsAreFiles)
+              isFile = true; 
+          }
+          if (isFile == false)
+            isFile = pathFS.isDirectory(path);
+          if (!isFile) { 
+            FileStatus parts[] = pathFS.globStatus(new Path(path,"part-*"));
+  
+            for (FileStatus part : parts) { 
+              pathList.add(part.getPath());
+            }
+          }
+          else { 
+            pathList.add(path);
           }
         }
 
@@ -428,6 +463,7 @@ public class MultiFileMergeUtils {
         _currentValue = initialValue;
       }
 
+      @SuppressWarnings({ "rawtypes", "unchecked" })
       @Override
       public boolean hasNext() {
         if (_currentValue == null) { 
@@ -491,9 +527,8 @@ public class MultiFileMergeUtils {
       }
     }
 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     public Pair<KeyAndValueData<KeyClassType>,Iterable<RawRecordValue>> getNextItemIterator() throws IOException { 
-
-      int newValidStreamCount=0;
 
       // pop the top most item in the queue
       InputSource nextSource = _inputs.poll();
@@ -561,6 +596,7 @@ public class MultiFileMergeUtils {
 
     
     // collect next valid target and all related sources 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     public KeyAndValueData<KeyClassType> readNextItem() throws IOException {
 
       // pop the top most item in the queue
@@ -627,6 +663,7 @@ public class MultiFileMergeUtils {
       }
     }
 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     public void close() {
       InputSource nextSource = null;
       while ((nextSource = _inputs.poll()) != null) { 
@@ -639,17 +676,23 @@ public class MultiFileMergeUtils {
       }
     }
 
+    private static final Class<?>[] EMPTY_ARRAY = new Class[]{};
+
+    @SuppressWarnings({ "rawtypes", "unchecked", "hiding" })
     public class InputSource<KeyClassType extends Writable> implements Comparable<InputSource> {
 
+      
       boolean 					  eos = false;
       Path 								_path;
       SequenceFile.Reader _reader;
       DataOutputBuffer    _keyData = null;
       DataInputBuffer 	  _keyDataReader = new DataInputBuffer();
       Class				  _keyClass;
+      Constructor   _keyObjectConstructor;
       private KeyClassType			  _keyObject;
       RawRecordValue 	  _value;
       ValueBytes       	  _valueBytes = null;
+
 
       public InputSource(FileSystem fs,Configuration conf,Path inputPath,Class optKeyClass) throws IOException { 
         _path = inputPath;
@@ -657,7 +700,14 @@ public class MultiFileMergeUtils {
         _valueBytes = _reader.createValueBytes();
         _keyClass = optKeyClass;
         if (_keyClass != null) { 
-          _keyObject = (KeyClassType)ReflectionUtils.newInstance(_keyClass, conf);
+          try {
+            _keyObjectConstructor = _keyClass.getDeclaredConstructor(EMPTY_ARRAY);
+            _keyObjectConstructor.setAccessible(true);
+            _keyObject = (KeyClassType)_keyObjectConstructor.newInstance();
+          } catch (Exception e) {
+            LOG.error(CCStringUtils.stringifyException(e));
+            throw new IOException(e);
+          }
         }
       }
 
@@ -700,7 +750,12 @@ public class MultiFileMergeUtils {
 
       public KeyClassType detachKeyObject() { 
         KeyClassType keyObjectOut = _keyObject;
-        _keyObject = (KeyClassType)ReflectionUtils.newInstance(_keyClass, _conf);
+        try {
+          _keyObject = (KeyClassType)_keyObjectConstructor.newInstance();
+        } catch (Exception e) {
+          LOG.error(CCStringUtils.stringifyException(e));
+          throw new RuntimeException(e);
+        }
         return keyObjectOut;
       }
       
@@ -710,7 +765,6 @@ public class MultiFileMergeUtils {
         return temp;
       }
 
-      @SuppressWarnings({ "rawtypes", "unchecked" })
       @Override
       public int compareTo(InputSource other) {
         int result;
@@ -784,6 +838,7 @@ public class MultiFileMergeUtils {
     
   }
   
+  @SuppressWarnings({ "rawtypes", "unchecked", "deprecation" })
   @Test
   public void testMerge() throws Exception {
 
@@ -814,6 +869,7 @@ public class MultiFileMergeUtils {
     // spy on input stream to verify close 
     when(fsMock.open(eq(mockPath1),anyInt())).thenAnswer(new Answer<FSDataInputStream>() {
 
+      @SuppressWarnings("resource")
       @Override
       public FSDataInputStream answer(InvocationOnMock invocation)throws Throwable {
         FSDataInputStream stream = new FSDataInputStream(
