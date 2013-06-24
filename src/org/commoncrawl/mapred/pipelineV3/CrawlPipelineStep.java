@@ -34,9 +34,8 @@ import org.apache.hadoop.fs.Path;
  */
 public abstract class CrawlPipelineStep {
 
-  public static Path makeUniqueFullyQualifiedOutputDirPath(Configuration conf,
-      Path basePath, long databaseId) throws IOException {
-    FileSystem fs = FileSystem.get(conf);
+  public static Path makeUniqueFullyQualifiedOutputDirPath(Configuration conf,Path basePath, long databaseId) throws IOException {
+    FileSystem fs = FileSystem.get(basePath.toUri(),conf);
     Path uniquePath = new Path(basePath, Long.toString(databaseId));
     return fs.getFileStatus(uniquePath).getPath();
   }
@@ -84,7 +83,20 @@ public abstract class CrawlPipelineStep {
   }
 
   public Path getBaseOutputDirForStep() throws IOException {
-    return _task.getOutputDirForStep(getOutputDirName());
+    // if the task does not promote its output or this is not the last step in the workflow 
+    // for this task ... 
+    if (!_task.promoteFinalStepOutput() || this != _task.getFinalStep()) {
+      // then return a path that is composed of the tasks's base dir, and the step output dir 
+      return _task.getOutputDirForStep(getOutputDirName());
+    }
+    else { 
+      // otherwise, if this task does promote the output of the final step in the task... 
+      // return the task's base dir as the output path 
+      // (this is accomodate the fact that renames in S3N are not lightweight like they
+      //  are on HDFS. As a matter of fact, renames/relocation of files > 5GB in size are
+      //  even possible :-( 
+      return _task.getTaskOutputBaseDir();
+    }
   }
 
   public Configuration getConf() throws IOException {
@@ -164,9 +176,11 @@ public abstract class CrawlPipelineStep {
     return _task.getTaskIdentityPath();
   }
 
+  /*
   public Path getTempDir() throws IOException {
     return _task.getTempDirForStep(this);
   }
+  */
 
   public boolean isComplete() throws IOException {
     FileSystem fs = getFileSystem();
@@ -208,24 +222,18 @@ public abstract class CrawlPipelineStep {
 
   public abstract void runStep(Path outputPathLocation) throws IOException;
 
-  void runStepInternal() throws IOException {
+  void doStep() throws IOException {
 
-    Path tempPath = getTempDir();
     Path outputDir = getOutputDir();
 
     getLogger().info(
-        "Running " + getDescription() + " temp:" + tempPath + " finaloutput:"
+        "Running " + getDescription() + " finaloutput:"
             + outputDir);
 
-    getFileSystem().mkdirs(tempPath.getParent());
-
-    runStep(tempPath);
+    runStep(outputDir);
 
     getLogger().info(
-        "Finished running: " + getDescription() + ".Promoting temp:" + tempPath
-            + " to:" + outputDir);
+        "Finished running: " + getDescription());
 
-    getFileSystem().mkdirs(outputDir.getParent());
-    getFileSystem().rename(tempPath, outputDir);
   }
 }

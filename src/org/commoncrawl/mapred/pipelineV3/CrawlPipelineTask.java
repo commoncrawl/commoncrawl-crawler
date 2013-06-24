@@ -48,6 +48,8 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
   ArrayList<CrawlPipelineStep> _steps          = new ArrayList<CrawlPipelineStep>();
   ArrayList<CrawlPipelineTask> _dependencyList = new ArrayList<CrawlPipelineTask>();
   protected String             _args[];
+  protected Path _identityBasePath;
+  protected Path _rootOutputDir;
 
   /**
    * constructor for top level task
@@ -56,9 +58,8 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
    * @param taskDescription
    * @throws IOException
    */
-  public CrawlPipelineTask(CrawlPipelineTask parentTask, Configuration conf,
-      String taskDescription) throws IOException {
-    super(parentTask, taskDescription, null);
+  public CrawlPipelineTask(Configuration conf,String taskDescription,String outputDirName) throws IOException {
+    super(null, taskDescription, outputDirName);
     setConf(conf);
   }
 
@@ -69,10 +70,10 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
    * @param taskDescription
    * @throws IOException
    */
-  public CrawlPipelineTask(CrawlPipelineTask parentTask,
-      String taskDescription, String outputDir) throws IOException {
-    super(parentTask, taskDescription, outputDir);
+  public CrawlPipelineTask(CrawlPipelineTask parentTask,String taskDescription,String outputDirName) throws IOException {
+    super(parentTask, taskDescription, outputDirName);
     setConf(parentTask.getConf());
+    _identityBasePath = parentTask.getTaskIdentityBasePath();
   }
 
   public CrawlPipelineTask addStep(CrawlPipelineStep step) throws IOException {
@@ -125,11 +126,11 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
 
   @Override
   public FileSystem getFileSystem() throws IOException {
-    return CrawlEnvironment.getDefaultFileSystem();
+    return FileSystem.get(getTaskIdentityBasePath().toUri(), _conf);
   }
 
   public long getLatestDatabaseTimestamp() throws IOException {
-    FileSystem fs = CrawlEnvironment.getDefaultFileSystem();
+    FileSystem fs = FileSystem.get(getTaskIdentityBasePath().toUri(), _conf);
 
     LOG
         .info("Scanning for Database Candidates in:"
@@ -202,8 +203,33 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
     return _dependencyList;
   }
 
-  public abstract Path getTaskIdentityBasePath() throws IOException;
 
+  public Path getTaskIdentityBasePath() {
+    return _identityBasePath;
+  }
+  
+  public void setTaskIdentityBasePath(Path path) { 
+    _identityBasePath = path;
+  }
+  
+  public Path getRootOutputDir() { 
+    return _rootOutputDir;
+  }
+  
+  public void setRootOutputDir(Path rootOutputDir) { 
+    _rootOutputDir = rootOutputDir;
+  }
+  
+  public Path getTaskOutputBaseDir() throws IOException {
+    if (getTask() != null) { 
+      return new Path(getTask().getTaskOutputBaseDir(), getOutputDirName());
+    }
+    else { 
+      return new Path(_rootOutputDir,getOutputDirName());
+    }
+  }
+
+  
   @Override
   public long getTaskIdentityId() throws IOException {
     return getLatestDatabaseTimestamp();
@@ -215,7 +241,6 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
         .toString(getLatestDatabaseTimestamp()));
   }
 
-  public abstract Path getTaskOutputBaseDir();
 
   public Path getTempDirForStep(CrawlPipelineStep step) throws IOException {
     Path tempOutputDir = new Path(CrawlEnvironment.getHadoopConfig().get(
@@ -230,8 +255,21 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
     return true;
   }
 
+  /** overload to parse arguements **/
   protected void parseArgs() throws IOException {
 
+  }
+
+  /** 
+   * overload to initialize task after argument parsing ... 
+   * 
+   * @throws IOException
+   */
+  public void initTask(String[] args)throws IOException { 
+    // save args ... 
+    _args = args;
+    // parse args .. 
+    parseArgs();
   }
 
   protected boolean promoteFinalStepOutput() {
@@ -240,13 +278,18 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
 
   @Override
   public int run(String[] args) throws Exception {
-    return runTask(args);
+    // init task
+    initTask(args);
+    // run task next 
+    return runTask();
   }
+  
+  
 
   @Override
   public void runStep(Path unused) throws IOException {
     try {
-      int result = runTask(_args);
+      int result = runTask();
       if (result != 0) {
         throw new IOException(getDescription() + " Failed With ErrorCode:"
             + result);
@@ -257,13 +300,20 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
     }
   }
 
-  public int runTask(String[] args) throws Exception {
+  public CrawlPipelineStep getFinalStep() { 
+    if (_steps.size() != 0) { 
+      return _steps.get(_steps.size()-1);
+    }
+    return null;
+  }
+  
+  public int runTask() throws Exception {
 
     for (CrawlPipelineTask dependency : _dependencyList) {
       getLogger().info(
           getDescription() + " - Running Dependency:"
               + dependency.getDescription());
-      int result = dependency.run(args);
+      int result = dependency.run(_args);
       if (result != 0) {
         getLogger().error(
             "Dependency: " + dependency.getDescription()
@@ -272,10 +322,7 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
       }
     }
 
-    _args = args;
     try {
-      // getLogger().info(getDescription() + " - Parsing Arguements");
-      parseArgs();
       getLogger().info(getDescription() + " - Iterating Steps");
 
       if (_steps.size() != 0) {
@@ -294,9 +341,12 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
                       + " is not runnable!");
               return 1;
             } else {
+              if (step.isTask()) { 
+                ((CrawlPipelineTask)step).initTask(_args);
+              }
               getLogger().info(
                   getDescription() + " - Running Step:" + step.getName());
-              step.runStepInternal();
+              step.doStep();
               getLogger().info(
                   getDescription() + " - Finished Running Step:"
                       + step.getName());
@@ -322,5 +372,13 @@ public abstract class CrawlPipelineTask extends CrawlPipelineStep implements
   public void setConf(Configuration conf) {
     _conf = conf;
     CrawlEnvironment.setHadoopConfig(_conf);
+  }
+  
+  /** 
+   * get any passed in args 
+   * @return
+   */
+  public String[] getArgs() { 
+    return _args;
   }
 }
