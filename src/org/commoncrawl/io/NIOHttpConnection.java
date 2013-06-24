@@ -184,6 +184,9 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   private static final int MIN_BYTES_FOR_STATUS_LINE = 8;
   private static byte[] httpStr = { 'h', 't', 't', 'p' };
 
+  private static final int SSL_MAX_PACKET_SIZE = 16665 + 2048;
+
+  
   /** cumilative bytes read **/
   public static long getCumilativeBytesRead() {
     return _cumilativeRead;
@@ -1889,7 +1892,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
           ByteBuffer slicedNetBuffer = (ByteBuffer) _sslNetReadBuffer.duplicate().flip();
           
           if (slicedNetBuffer.remaining() != 0) { 
-            ByteBuffer bufferOut = ByteBuffer.allocate(NIOSSLBufferPool.MAX_PACKET_SIZE);
+            ByteBuffer bufferOut = ByteBuffer.allocate(SSL_MAX_PACKET_SIZE);
             LOG.info("Calling SSL UNWRAP with BytesAvailable:" + slicedNetBuffer.remaining());
             SSLEngineResult unwrapResult = _sslEngine.unwrap(slicedNetBuffer,bufferOut);
             
