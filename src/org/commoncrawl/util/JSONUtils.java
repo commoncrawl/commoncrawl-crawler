@@ -66,13 +66,22 @@ public class JSONUtils {
 
   public static void safeIncrementJSONCounter(JsonObject jsonObj,
       String property, int byAmount) {
-    if (jsonObj.has(property)) {
-      jsonObj
-          .addProperty(property, jsonObj.get(property).getAsInt() + byAmount);
-    } else {
-      jsonObj.addProperty(property, byAmount);
+    if (byAmount != 0) { 
+      if (jsonObj.has(property)) {
+        jsonObj
+            .addProperty(property, jsonObj.get(property).getAsInt() + byAmount);
+      } else {
+        jsonObj.addProperty(property, byAmount);
+      }
     }
   }
+  
+  
+  public static void mergeCounters(JsonObject dest,JsonObject src,String counterName) { 
+    JSONUtils.safeIncrementJSONCounter(dest,counterName,
+        JSONUtils.safeGetInteger(src, counterName,0));
+  }
+  
 
   public static boolean safeGetBoolean(JsonObject jsonObj, String property) {
     JsonElement element = jsonObj.get(property);
@@ -83,20 +92,41 @@ public class JSONUtils {
   }
 
   public static long safeGetLong(JsonObject jsonObj, String property) {
+    return safeGetLong(jsonObj, property,-1L);
+  }
+
+  public static long safeGetLong(JsonObject jsonObj, String property,long defaultValue) {
     JsonElement element = jsonObj.get(property);
     if (element != null) {
       return element.getAsLong();
     }
-    return -1;
+    return defaultValue;
   }
 
   public static int safeGetInteger(JsonObject jsonObj, String property) {
+    return safeGetInteger(jsonObj, property,-1);
+  }
+
+  public static int safeGetInteger(JsonObject jsonObj, String property,int defaultValue) {
     JsonElement element = jsonObj.get(property);
     if (element != null) {
       return element.getAsInt();
     }
-    return -1;
+    return defaultValue;
   }
+  
+  public static double safeGetDouble(JsonObject jsonObj, String property) {
+    return safeGetDouble(jsonObj, property,Double.NaN);
+  }
+
+  public static double safeGetDouble(JsonObject jsonObj, String property,double defaultValue) {
+    JsonElement element = jsonObj.get(property);
+    if (element != null) {
+      return element.getAsDouble();
+    }
+    return defaultValue;
+  }
+  
 
   public static long safeGetHttpDate(JsonObject jsonObj, String property) {
     JsonElement element = jsonObj.get(property);
@@ -185,5 +215,6 @@ public class JSONUtils {
     }
     jsonObject.add(propertyName, array);
   }
+  
 
 }
