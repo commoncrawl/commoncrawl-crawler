@@ -455,7 +455,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
                 contentLengthValue = rangeValue.substring(rangeValue.indexOf('/') + 1);
               }
               
-              int contentLength = Integer.parseInt(contentLengthValue);
+              long contentLength = Long.parseLong(contentLengthValue);
               if (contentLength != -1) {
                 
                 item.setLastKnownETagAndContentLength(etagValue, contentLength);
@@ -631,7 +631,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       return (_lastReadPos != 0);
     }    
     
-    public int getDownloadedBytes() { 
+    public long getDownloadedBytes() { 
       return _downloadedBytes;
     }
     
@@ -643,7 +643,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       _downloadedBytes += newlyReceivedByteCount;
     }
     
-    public void setLastKnownETagAndContentLength(String etag,int contentLength) { 
+    public void setLastKnownETagAndContentLength(String etag,long contentLength) { 
       _lastKnownETag = etag;
       _lastKnownContentLength = contentLength;
     }
@@ -656,7 +656,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     private long       _lastReadPos = 0;
     private NIOHttpConnection.ErrorType _lastErrorType=NIOHttpConnection.ErrorType.UNKNOWN;
     private int          _lastKnownResultCode=-1;
-    private int          _downloadedBytes;
+    private long         _downloadedBytes;
     private BandwidthUtils.BandwidthHistory     _downloadStats = new BandwidthUtils.BandwidthHistory();
   }
   
