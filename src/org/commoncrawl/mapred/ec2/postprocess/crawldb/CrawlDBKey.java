@@ -18,6 +18,7 @@
 
 package org.commoncrawl.mapred.ec2.postprocess.crawldb;
 
+import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.commons.logging.Log;
@@ -47,10 +48,39 @@ import org.junit.Test;
  * @author rana
  *
  */
-public class CrawlDBKey { 
+public class CrawlDBKey extends TextBytes { 
   
   private static final Log LOG = LogFactory.getLog(CrawlDBKey.class);
+
+  long rootDomainHash;
+  long domainHash;
+  long urlHash;
+  long type;
+  long timestamp;
+  FlexBuffer extraData = null;
   
+  static FlexBuffer[] scanArray = allocateScanArray();
+  
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    // delegate to super class 
+    super.readFields(in);
+    
+    synchronized (scanArray) {
+      // read components 
+      scanForComponents(this, ':', scanArray);
+      // populate fields .. 
+      rootDomainHash = getLongComponentFromComponentArray(scanArray,ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID);
+      domainHash = getLongComponentFromComponentArray(scanArray,ComponentId.DOMAIN_HASH_COMPONENT_ID);
+      urlHash = getLongComponentFromComponentArray(scanArray,ComponentId.URL_HASH_COMPONENT_ID);
+      type = getLongComponentFromComponentArray(scanArray,ComponentId.TYPE_COMPONENT_ID);
+      if (type == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal())
+        timestamp = getLongComponentFromComponentArray(scanArray,ComponentId.EXTRA_DATA_COMPONENT_ID);
+      else
+        extraData = getByteArrayFromComponentArray(scanArray, CrawlDBKey.ComponentId.EXTRA_DATA_COMPONENT_ID);
+    }
+  }
+    
   public enum ComponentId { 
     ROOT_DOMAIN_HASH_COMPONENT_ID,
     DOMAIN_HASH_COMPONENT_ID,
@@ -65,9 +95,23 @@ public class CrawlDBKey {
     KEY_TYPE_ATOM_LINK,
     KEY_TYPE_RSS_LINK,
     KEY_TYPE_INCOMING_URLS_SAMPLE,
-    KEY_TYPE_MERGED_RECORD
+    KEY_TYPE_MERGED_RECORD,
+    KEY_TYPE_ROOTDOMAIN_METADATA_RECORD,
+    KEY_TYPE_SUBDOMAIN_METADATA_RECORD
   }
-  
+  public static final int TypeSortOrder[] = { 
+    11, // KEY_TYPE_CRAWL_STATUS
+    12, // KEY_TYPE_HTML_LINK
+    13, // KEY_TYPE_ATOM_LINK
+    14, // KEY_TYPE_RSS_LINK
+    15,  // KEY_TYPE_INCOMING_URLS_SAMPLE
+    10, // KEY_TYPE_MERGED_RECORD
+    0,  // KEY_TYPE_ROOTDOMAIN_METADATA_RECORD
+    1,  // KEY_TYPE_SUBDOMAIN_METADATA_RECORD
+    
+  };
+      
+      
   public static FlexBuffer[] allocateScanArray() { 
     FlexBuffer[] array = new FlexBuffer[ComponentId.values().length];
     for (int i=0;i<array.length;++i) { 
@@ -239,7 +283,27 @@ public class CrawlDBKey {
     
   }
   
-  public static class CrawlDBKeyGroupingComparator implements RawComparator<TextBytes> {
+  public static class PartitionBySuperDomainPartitioner implements Partitioner<TextBytes, TextBytes> {
+
+    static int hashCodeFromKey(TextBytes key) { 
+      int result = 1;
+      result = MurmurHash.hashLong(getLongComponentFromKey(key, ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID),result);      
+      return result;
+    }
+    
+    @Override
+    public int getPartition(TextBytes key, TextBytes value, int numPartitions) {
+      return (hashCodeFromKey(key) & Integer.MAX_VALUE) % numPartitions;
+    }
+
+    @Override
+    public void configure(JobConf job) {
+      
+    }     
+  }
+  
+  
+  public static class CrawlDBKeyGroupByURLComparator implements RawComparator<TextBytes> {
 
     TextBytes key1 = new TextBytes();
     TextBytes key2 = new TextBytes();
@@ -258,8 +322,6 @@ public class CrawlDBKey {
         inputBuffer.reset(b2,s2,l2);
         keyLen = WritableUtils.readVInt(inputBuffer);
         key2.set(b2,inputBuffer.getPosition(), keyLen);
-        
-        System.out.println("Key1:" + key1 + " Key2:" + key2);
         return compare(key1,key2);
         
       } catch (IOException e) {
@@ -288,6 +350,87 @@ public class CrawlDBKey {
       
       return result;
     }
+  }
+
+  public static class CrawlDBKeyGroupByRootDomainComparator implements RawComparator<TextBytes> {
+
+    TextBytes key1 = new TextBytes();
+    TextBytes key2 = new TextBytes();
+    
+    FlexBuffer scanArray1[] = allocateScanArray();
+    FlexBuffer scanArray2[] = allocateScanArray();
+    DataInputBuffer inputBuffer = new DataInputBuffer();
+    
+    @Override
+    public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+      int keyLen;
+      try {
+        inputBuffer.reset(b1,s1,l1);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key1.set(b1,inputBuffer.getPosition(), keyLen);
+        inputBuffer.reset(b2,s2,l2);
+        keyLen = WritableUtils.readVInt(inputBuffer);
+        key2.set(b2,inputBuffer.getPosition(), keyLen);
+        return compare(key1,key2);
+        
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public int compare(TextBytes o1, TextBytes o2) {
+
+      scanForComponents(o1, ':',scanArray1);
+      scanForComponents(o2, ':',scanArray2);
+      
+      long rootDomain1Key = getLongComponentFromComponentArray(scanArray1,ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID);
+      long rootDomain2Key = getLongComponentFromComponentArray(scanArray2,ComponentId.ROOT_DOMAIN_HASH_COMPONENT_ID);
+      
+      int result = (rootDomain1Key < rootDomain2Key) ? -1 : (rootDomain1Key > rootDomain2Key) ? 1 : 0;
+            
+      return result;
+    }
+  }
+
+  
+  public static class CrawlDBKeyComparator implements java.util.Comparator<CrawlDBKey> {
+
+    @Override
+    public int compare(CrawlDBKey o1, CrawlDBKey o2) {
+
+      int result = (o1.rootDomainHash < o2.rootDomainHash) ? -1 : (o1.rootDomainHash > o2.rootDomainHash) ? 1 : 0;
+
+      if (result == 0) { 
+                
+        result = (o1.domainHash < o2.domainHash) ? -1 : (o1.domainHash > o2.domainHash) ? 1 : 0;
+        
+        if (result == 0) { 
+          result = (o1.urlHash < o2.urlHash) ? -1 : (o1.urlHash > o2.urlHash) ? 1 : 0;
+        }
+        
+        if (result == 0) { 
+                    
+          long type1SortOrder = TypeSortOrder[(int)o1.type];
+          long type2SortOrder = TypeSortOrder[(int)o2.type];
+          
+          result = (type1SortOrder < type2SortOrder) ? -1 : (type1SortOrder > type2SortOrder) ? 1 : 0;
+        
+          if (result == 0) { 
+            if (o1.type == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) { 
+              
+              result = (o1.timestamp < o2.timestamp) ? -1 : (o1.timestamp > o2.timestamp) ? 1 : 0;
+              
+            }
+            else { 
+              result = o1.extraData.compareTo(o2.extraData);
+            }
+          }
+        }
+      }
+      return result;
+    } 
+    
   }
   
   public static class LinkKeyComparator implements RawComparator<TextBytes> {
@@ -350,15 +493,10 @@ public class CrawlDBKey {
           long type1 = getLongComponentFromComponentArray(scanArray1,ComponentId.TYPE_COMPONENT_ID);
           long type2 = getLongComponentFromComponentArray(scanArray2,ComponentId.TYPE_COMPONENT_ID);
           
-          if (type1 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
-            result = -1;
-          }
-          else if (type1 != CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal() && type2 == CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD.ordinal()) { 
-            result = 1;
-          }
-          else { 
-            result = (type1 < type2) ? -1 : (type1 > type2) ? 1 : 0;
-          }
+          long type1SortOrder = TypeSortOrder[(int)type1];
+          long type2SortOrder = TypeSortOrder[(int)type2];
+          
+          result = (type1SortOrder < type2SortOrder) ? -1 : (type1SortOrder > type2SortOrder) ? 1 : 0;
         
           if (result == 0) { 
             if (type1 == CrawlDBKey.Type.KEY_TYPE_CRAWL_STATUS.ordinal()) { 
@@ -418,18 +556,47 @@ public class CrawlDBKey {
   
   
   private static void compareKeys(RawComparator<TextBytes> comparator,TextBytes key1,TextBytes key2,int expectedResult) { 
+    long nanoStart = System.nanoTime();
     Assert.assertEquals(comparator.compare(key1, key2),expectedResult);
+    long nanoEnd = System.nanoTime();
+    System.out.println("Object Comparison Took:" + (nanoEnd-nanoStart));
     DataOutputBuffer outputBuffer1 = new DataOutputBuffer();
     DataOutputBuffer outputBuffer2 = new DataOutputBuffer();
     try {
       key1.write(outputBuffer1);
       key2.write(outputBuffer2);
+      nanoStart = System.nanoTime();
       Assert.assertEquals(comparator.compare(outputBuffer1.getData(), 0, outputBuffer1.getLength(), outputBuffer2.getData(), 0, outputBuffer2.getLength()),expectedResult);
+      nanoEnd = System.nanoTime();
+      System.out.println("Raw Comparison Took:" + (nanoEnd-nanoStart));
       int offset1 = outputBuffer1.getLength();
       int offset2 = outputBuffer2.getLength();
       key1.write(outputBuffer1);
       key2.write(outputBuffer2);
       Assert.assertEquals(comparator.compare(outputBuffer1.getData(), offset1, outputBuffer1.getLength() - offset1, outputBuffer2.getData(), offset2, outputBuffer2.getLength() - offset2),expectedResult);
+      
+      if (comparator instanceof LinkKeyComparator) { 
+        DataInputBuffer inputStream1 = new DataInputBuffer();
+        DataInputBuffer inputStream2 = new DataInputBuffer();
+        
+        inputStream1.reset(outputBuffer1.getData(), outputBuffer1.getLength());
+        inputStream2.reset(outputBuffer2.getData(), outputBuffer2.getLength());
+        
+        CrawlDBKey cdbkey1 = new CrawlDBKey();
+        CrawlDBKey cdbkey2 = new CrawlDBKey();
+        
+        cdbkey1.readFields(inputStream1);
+        cdbkey2.readFields(inputStream2);
+        
+        CrawlDBKeyComparator altComparator = new CrawlDBKeyComparator();
+        System.out.println("*Comparing Using CrawlDBKey Comparator");
+        nanoStart = System.nanoTime();
+        Assert.assertEquals(altComparator.compare(cdbkey1, cdbkey2),expectedResult);
+        nanoEnd = System.nanoTime();
+        System.out.println("Typed Comparison Took:" + (nanoEnd-nanoStart));
+
+      }
+      
     } catch (IOException e) {
       e.printStackTrace();
       throw new RuntimeException(e);
@@ -475,8 +642,12 @@ public class CrawlDBKey {
         TextBytes linkKey4   = generateLinkKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),CrawlDBKey.Type.KEY_TYPE_ATOM_LINK,"1234");
         TextBytes linkKey5   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_ATOM_LINK,"12345");
         
+        TextBytes mergeKey3   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD,"12345");
+        TextBytes rootDomainKey3   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_ROOTDOMAIN_METADATA_RECORD,"12345");
+        TextBytes subDomainKey3   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_SUBDOMAIN_METADATA_RECORD,"12345");
+        
         LinkKeyComparator comparator = new LinkKeyComparator();
-        CrawlDBKeyGroupingComparator gcomparator = new CrawlDBKeyGroupingComparator();
+        CrawlDBKeyGroupByURLComparator gcomparator = new CrawlDBKeyGroupByURLComparator();
         
         System.out.println("Comparing Similar status Keys");
         compareKeys(comparator,statusKey1,statusKey2,0);
@@ -517,6 +688,18 @@ public class CrawlDBKey {
         System.out.println("Comparing TWO Link Keys with similar types but different hash values - Grouping C");
         compareKeys(gcomparator,linkKey4,linkKey5,-1);
         compareKeys(gcomparator,linkKey5,linkKey4,1);
+        
+        compareKeys(comparator,mergeKey3,linkKey3,-1);
+        compareKeys(comparator,rootDomainKey3,mergeKey3,-1);
+        compareKeys(comparator,subDomainKey3,mergeKey3,-1);
+        compareKeys(comparator,rootDomainKey3,subDomainKey3,-1);
+        compareKeys(comparator,subDomainKey3,rootDomainKey3,1);
+        compareKeys(comparator,rootDomainKey3,rootDomainKey3,0);
+        
+        TextBytes mergeKey   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_MERGED_RECORD,"12345");
+        TextBytes rootDomainKey   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_ROOTDOMAIN_METADATA_RECORD,"12345");
+        TextBytes subDomainKey   = generateLinkKey(fpLink3,CrawlDBKey.Type.KEY_TYPE_SUBDOMAIN_METADATA_RECORD,"12345");
+
         
         
         TextBytes linkKeyTest   = generateLinkKey(URLUtils.getURLFPV2FromURL("http://www.google.com/"),CrawlDBKey.Type.KEY_TYPE_HTML_LINK,"");
