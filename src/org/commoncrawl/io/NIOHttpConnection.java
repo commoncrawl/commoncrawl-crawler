@@ -26,19 +26,40 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLEngineResult;
+import javax.net.ssl.SSLEngineResult.HandshakeStatus;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import junit.framework.Assert;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.StringUtils;
+import org.commoncrawl.async.Callback;
+import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
 import org.commoncrawl.io.NIOBufferList.CRLFReadState;
 import org.commoncrawl.util.BandwidthUtils;
+import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.CustomLogger;
+import org.commoncrawl.util.FlexBuffer;
+import org.commoncrawl.util.GZIPUtils;
+import org.commoncrawl.util.GZIPUtils.UnzipResult;
 import org.commoncrawl.util.GoogleURL;
 import org.commoncrawl.util.IPAddressUtils;
 import org.junit.Test;
@@ -92,7 +113,15 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
      * @param dataBuffer
      * @return
      */
-    boolean read(NIOBufferList dataBuffer) throws IOException;
+    boolean read(NIOHttpConnection sourceConnection,NIOBufferList dataBuffer) throws IOException;
+    
+    /**
+     * finished writing this buffer
+     * 
+     * @param thisBuffer
+     * @throws IOException
+     */
+    void finsihedWriting(NIOHttpConnection sourceConnection,ByteBuffer thisBuffer)throws IOException;
   };
 
   /** Error Type Enum **/
@@ -135,7 +164,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
 
   /** State Machine States */
   public enum State {
-    IDLE, AWAITING_RESOLUTION, AWAITING_CONNECT, SENDING_REQUEST, RECEIVING_HEADERS, PARSING_HEADERS,
+    IDLE, AWAITING_RESOLUTION, AWAITING_CONNECT, SSL_HANDSHAKE,SENDING_REQUEST, RECEIVING_HEADERS, PARSING_HEADERS,
     RECEIVING_CONTENT, DONE, ERROR
   }
 
@@ -153,7 +182,6 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   /** charset for UTF-8 conversion */
   private static final Charset _utf8Charset = Charset.forName("UTF8");
   private static final int MIN_BYTES_FOR_STATUS_LINE = 8;
-  private static final int HTTP_STATUS_LINE_SLOP = 4;
   private static byte[] httpStr = { 'h', 't', 't', 'p' };
 
   /** cumilative bytes read **/
@@ -313,6 +341,8 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
 
   /** resolved address **/
   private InetAddress _resolvedAddress = null;
+  /** destination port **/
+  private int _destinationPort = -1;
   /** source address **/
   private InetSocketAddress _sourceIP = null;
   /** resolved address ttl **/
@@ -412,10 +442,27 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   /** optional cookie store **/
   private NIOHttpCookieStore _cookieStore;
 
+  /** optional ssl engine instance**/
+  private SSLEngine _sslEngine;
+  /** ssl read / write network buffers **/
+  private ByteBuffer _sslNetReadBuffer = null;
+  private ByteBuffer _sslNetWriteBuffer = null;
+  private boolean    _sslWritesPending = false;
+  private boolean    _sslTaskPending = false;
+  /** ssl engine thread pool **/
+  static ExecutorService _sslExecutorService = Executors.newCachedThreadPool();
+  
+  
+  /** static ssl engine context **/
+  private static SSLContext _sslContext;
+  
+
   /** internal constructor - for test purposes **/
   private NIOHttpConnection() {
 
   }
+  
+
 
   /**
    * 
@@ -440,6 +487,8 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     _selector = selector;
     _resolver = resolver;
     _cookieStore = cookieStore;
+    
+    initSSLContext();
   }
 
   /**
@@ -463,8 +512,33 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     _selector = selector;
     _resolver = resolver;
     _cookieStore = cookieStore;
+    
+    initSSLContext();
   }
 
+  void initSSLContext() throws IOException {
+    synchronized (NIOHttpConnection.class) { 
+      if (_sslContext == null) { 
+        try {
+          _sslContext = SSLContext.getInstance("TLSv1");
+          _sslContext.init(null, getNonValidatingTrustManager(), null);
+        } catch (NoSuchAlgorithmException e) {
+          LOG.error("SSL Initialization Failed with Exception:"+ e.toString());
+          LOG.error(CCStringUtils.stringifyException(e));
+          throw new IOException(e);
+        } catch (KeyManagementException e) {
+          LOG.error("SSL Initialization Failed with Exception:"+ e.toString());
+          LOG.error(CCStringUtils.stringifyException(e));
+          throw new IOException(e);
+        }
+      }
+    }
+  }
+  
+  public static void shutdownThreadPools() { 
+    _sslExecutorService.shutdown();
+  }
+  
   private final void _buildAndWriteRequestHeader() throws IOException {
 
     if (_populateDefaultHeaderItems) {
@@ -596,7 +670,16 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
 
     // TODO: FIX FOR HTTPS
     // start the actual connect ...
-    startConnect(new InetSocketAddress(_resolvedAddress, (_url.getPort() == -1) ? 80 : _url.getPort()));
+    int connectionPort = _url.getPort();
+    if (connectionPort == -1) { 
+      if (isHTTPs()) { 
+        connectionPort = 443;
+      }
+      else { 
+        connectionPort = 80;
+      }
+    }
+    startConnect(new InetSocketAddress(_resolvedAddress, connectionPort));
   }
 
   public void close() {
@@ -616,7 +699,11 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       }
       // release output buffer ...
       _outBuf.reset();
-
+      
+      _sslEngine.closeOutbound();
+      _sslEngine = null;
+      _sslNetReadBuffer = null;
+      _sslNetWriteBuffer = null;
       _closed = true;
     }
   }
@@ -624,7 +711,29 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   // @Override
   public void Connected(NIOClientSocket theSocket) throws IOException {
 
-    setState(State.SENDING_REQUEST, null);
+    if (isHTTPs()) { 
+      try { 
+        _sslEngine = _sslContext.createSSLEngine(_url.getHost(),_destinationPort);
+        _sslEngine.setUseClientMode(true);
+        _sslEngine.beginHandshake();
+        _sslNetReadBuffer = ByteBuffer.allocateDirect(32768);
+        _sslNetWriteBuffer = ByteBuffer.allocateDirect(32768);
+        _inBuf.setMinBufferSize(32768);
+        setState(State.SSL_HANDSHAKE,null);
+        
+      }
+      catch (Exception e) { 
+        LOG.error("Error Initializing SSL Engine:" + e.toString());
+        LOG.error(CCStringUtils.stringifyException(e));
+        setErrorType(ErrorType.IOEXCEPTION);
+        setErrorDesc(e.toString());
+        setState(State.ERROR, e);
+        return;
+      }
+    }  
+    else {
+      setState(State.SENDING_REQUEST, null);
+    }
 
     try {
       _selector.registerForWrite(_socket);
@@ -860,7 +969,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     return _url;
   }
 
-  public boolean hasTimedOut() {
+  public boolean checkForTimeout() {
 
     boolean timedOut = false;
     if (getState().ordinal() > State.AWAITING_RESOLUTION.ordinal()) {
@@ -949,7 +1058,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   }
 
   public void open() throws IOException {
-
+    
     if (_state != State.IDLE)
       throw new IOException("Invalid State");
 
@@ -1312,12 +1421,76 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     return true;
   }
 
+  int doSocketRead(ByteBuffer buffer) throws IOException { 
+    if (!isHTTPs()) { 
+      return _socket.read(buffer);
+    }
+    else {
+      int socketReadAmount = 0; 
+      if (_sslNetReadBuffer.remaining() != 0) { 
+        socketReadAmount = _socket.read(_sslNetReadBuffer);
+        LOG.info("doSocketRead(SSL) socketRead returned:" + socketReadAmount);
+      }
+
+      // flip the read buffer to enable consumption 
+      _sslNetReadBuffer.flip();
+      
+      SSLEngineResult engineResult = _sslEngine.unwrap(_sslNetReadBuffer, buffer);
+      
+      int bytesOut = 0;
+      
+      switch (engineResult.getStatus()) { 
+        case BUFFER_OVERFLOW: {
+          IOException e = new IOException("SSL READ OVERFLOW REPORTED When Buffer Size Was:" + buffer.remaining());
+          setState(State.ERROR, e);
+          LOG.error(e.toString());
+          bytesOut = -1;
+        }
+        break;
+        
+        case BUFFER_UNDERFLOW: {
+          LOG.info("SSL Engine needs more network bytes. Orig Bytes Available:" + _sslNetReadBuffer.remaining());
+        }
+        break;
+        
+        case OK: { 
+          LOG.info("SSL Engine said OK after unwrap. Bytes Produced:" + engineResult.bytesProduced());
+          bytesOut = engineResult.bytesProduced();
+        }
+        break;
+        
+        case CLOSED: {
+          LOG.info("SSL Engine Indicates CLOSED Connection - bytes produced:" + engineResult.bytesProduced());
+          bytesOut = engineResult.bytesProduced();
+        }
+        break;
+      }
+      
+      // remember to compact the read buffer here ...
+      _sslNetReadBuffer.compact();
+      LOG.info("Compacted SSL Read Buffer Result:" + _sslNetReadBuffer);
+      
+      if (bytesOut == 0 && socketReadAmount == -1) 
+        return -1;
+      else
+        return bytesOut;
+    }
+    
+  }
+  
   // @Override
   public int Readable(NIOClientSocket theSocket) throws IOException {
+    
+    LOG.info("Readable Called");
 
     if (!theSocket.isOpen()) {
       LOG.error("Connection:[" + getId() + "] Readable Called on Closed Socket");
       return -1;
+    }
+    
+    if (getState() == State.SSL_HANDSHAKE) { 
+      doSSLHandshake(theSocket, false, true,false);
+      return 0;
     }
 
     int totalBytesRead = 0;
@@ -1340,13 +1513,17 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
             }
           }
 
-          singleReadAmount = _socket.read(buffer);
+          singleReadAmount = doSocketRead(buffer);
 
           if (singleReadAmount > 0) {
             _inBuf.write(buffer);
             _totalRead += singleReadAmount;
             _cumilativeRead += singleReadAmount;
             totalBytesRead += singleReadAmount;
+            if (isHTTPs()) { 
+              // we need full read buffers to read from SSL 
+              _inBuf.flush();
+            }
           }
 
         } while (singleReadAmount > 0 && (_downloadMax == -1 || _totalRead < _downloadMax));
@@ -1586,7 +1763,8 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   }
 
   private void startConnect(InetSocketAddress addressToConnectTo) {
-
+    _destinationPort = addressToConnectTo.getPort();
+    
     if (_socket != null && _socket.isOpen()) {
 
       setState(State.AWAITING_CONNECT, null);
@@ -1623,14 +1801,252 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     }
     return strOut;
   }
+  class SSLTaskExecutor implements Runnable {
 
+    Runnable sslTask;
+    
+    public SSLTaskExecutor(Runnable actualSSLTask) { 
+      sslTask = actualSSLTask;
+    }
+    @Override
+    public void run() {
+      try {
+        LOG.info("Running SSL Task");
+        sslTask.run();
+        LOG.info("Finished Running SSL Task");
+      }
+      finally { 
+        NIOHttpConnection.this._selector._eventLoop.queueAsyncCallback(new Callback() {
+          @Override
+          public void execute() {
+            try {
+              LOG.info("Task Completion Callback calling doSSLHandshake");
+              NIOHttpConnection.this.doSSLHandshake(_socket, false, false,true);
+            } catch (IOException e) {
+              LOG.error(CCStringUtils.stringifyException(e));
+              NIOHttpConnection.this.setState(State.ERROR, e);
+            }
+          }
+        });
+      }
+      
+    } 
+    
+  }
+  private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  
+  void writeSSLNetworkBytesToSocket()throws IOException { 
+    _sslNetWriteBuffer.flip();
+    int bytesWritten = _socket.write(_sslNetWriteBuffer);
+    LOG.info("writeSSLNetworkBytes wrote:" + bytesWritten +" bytes via socket. Remaining:" + _sslNetWriteBuffer.remaining());
+    if (bytesWritten > 0) { 
+      if (_sslNetWriteBuffer.remaining() == 0) {
+        _sslWritesPending = false;
+      }
+    }
+    _sslNetWriteBuffer.compact();
+  }
+  
+  void doSSLHandshake(NIOClientSocket theSocket,boolean writable,boolean readable,boolean taskCompleted) throws IOException {
+    
+    if (_sslTaskPending && !taskCompleted) { 
+      return;
+    }
+    if (taskCompleted)
+      _sslTaskPending = false;
+    
+    LOG.info("Entering doSSLHandshake");
+    
+    if (_sslWritesPending && writable) {
+      writeSSLNetworkBytesToSocket();
+      if (_sslWritesPending) { 
+        LOG.info("SSL - Still More Bytes To Write");
+        _selector.registerForWrite(theSocket);
+        return;
+      }
+    }
+
+    HandshakeStatus handshakeStatus = _sslEngine.getHandshakeStatus();
+    
+    while (handshakeStatus != null) {
+      LOG.info("Entering doSSLHandshake");
+
+      HandshakeStatus currentHandshakeStatus = handshakeStatus;
+      handshakeStatus = null;
+      
+      switch (currentHandshakeStatus) {
+        // need data ... 
+        case NEED_UNWRAP: { 
+          LOG.info("SSL - NEED_UNWRAP");  
+                  
+          if (readable && _sslNetReadBuffer.remaining() != 0) {
+            int bytesRead = theSocket.read(_sslNetReadBuffer);
+            LOG.info("Socket Read in Handshake UNWRAP returned:" + bytesRead + " bytes");
+            readable = false;
+          }
+          
+          // dupe the network buffer ... 
+          ByteBuffer slicedNetBuffer = (ByteBuffer) _sslNetReadBuffer.duplicate().flip();
+          
+          if (slicedNetBuffer.remaining() != 0) { 
+            ByteBuffer bufferOut = ByteBuffer.allocate(NIOSSLBufferPool.MAX_PACKET_SIZE);
+            LOG.info("Calling SSL UNWRAP with BytesAvailable:" + slicedNetBuffer.remaining());
+            SSLEngineResult unwrapResult = _sslEngine.unwrap(slicedNetBuffer,bufferOut);
+            
+            switch (unwrapResult.getStatus()) { 
+              case BUFFER_UNDERFLOW: {
+                LOG.info("SSL UNWRAP Said Underflow");
+                _selector.registerForRead(theSocket);
+              }
+              break;
+                
+              case BUFFER_OVERFLOW: { 
+                IOException exception = new IOException("SSL Buffer Overflow When Max Buffer Size Should have accomodated Packet");
+                setState(State.ERROR, exception);
+                LOG.error(exception.toString());
+              }
+              break;
+              
+              case OK: { 
+                _sslNetReadBuffer.flip();
+                _sslNetReadBuffer.position(_sslNetReadBuffer.position() + unwrapResult.bytesConsumed());
+                _sslNetReadBuffer.compact();
+                LOG.info("SSL Said OK. Bytes Read:"+ unwrapResult.bytesConsumed() + " Remaining:" + _sslNetReadBuffer.position());
+                handshakeStatus = unwrapResult.getHandshakeStatus();
+              }
+              break;
+              
+              case CLOSED: { 
+                IOException exception = new IOException("SSL UNWRAP during Handshake returned CLOSED");
+                setState(State.ERROR, exception);
+                LOG.error(exception.toString());
+              }
+              break;
+            }
+            readable = false;
+          }
+          else { 
+            _selector.registerForRead(theSocket);
+            break;
+          }
+        }
+        break;
+      
+        case NEED_WRAP: {
+          LOG.info("SSL - NEEDS_WRAP");
+          SSLEngineResult wrapResult = _sslEngine.wrap(EMPTY_BUFFER,_sslNetWriteBuffer);
+          
+          switch (wrapResult.getStatus()) {
+            case  OK: { 
+              LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
+              if (wrapResult.bytesProduced() >0) { 
+                _sslWritesPending = true;
+              }
+              if (writable && _sslWritesPending) {
+                writable = false;
+                writeSSLNetworkBytesToSocket();
+              }
+              if (!writable && _sslWritesPending) { 
+                _selector.registerForWrite(theSocket);
+              }
+              handshakeStatus = wrapResult.getHandshakeStatus();
+            }
+            break;
+            
+            default: { 
+              LOG.info("SSL - wrap said:" + wrapResult.getStatus());
+            }
+          }
+        }
+        break;
+      
+        case NEED_TASK: {
+          LOG.info("SSL Needs Task");
+          final Runnable task = _sslEngine.getDelegatedTask();
+          if (task == null) { 
+            IOException e = new IOException("Null Delegated Task during SSL Handshake!");
+            setState(State.ERROR, e);
+            LOG.error(e.toString());
+            return;
+          }
+          LOG.info("SSL - Scheduling Task");
+          _sslExecutorService.execute(new SSLTaskExecutor(task));
+        }
+        break;
+      
+        case FINISHED: { 
+          LOG.info("SSL - Handshake FINISHED");
+          setState(State.SENDING_REQUEST, null);
+          _selector.registerForWrite(theSocket);
+        }
+        break;
+      
+        case NOT_HANDSHAKING: { 
+          LOG.info("NOT IN HANDSHAKE STATUS!");
+          IOException e = new IOException("Invalid Call to Handshake");
+          setState(State.ERROR, e);
+        }
+        break;
+      }
+    }
+  }
+  
+  int doSocketWrite(ByteBuffer buffer)throws IOException {
+    
+    if (!isHTTPs()) { 
+      return _socket.write(buffer);
+    }
+    else {
+      if (_sslNetWriteBuffer.remaining() != 0) { 
+        SSLEngineResult wrapResult = _sslEngine.wrap(buffer,_sslNetWriteBuffer);
+        
+        switch (wrapResult.getStatus()) {
+          case  OK: { 
+            LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
+            if (wrapResult.bytesProduced() >0) { 
+              _sslWritesPending = true;
+            }
+            if (_sslWritesPending) {
+              writeSSLNetworkBytesToSocket();
+            }
+            if (_sslWritesPending) { 
+              _selector.registerForWrite(_socket);
+            }
+            LOG.info("doSocketWrite(SSL) returning:" + wrapResult.bytesConsumed());
+            return wrapResult.bytesConsumed();
+          }
+          
+          default: { 
+            LOG.info("SSL - wrap said:" + wrapResult.getStatus());
+          }
+        }
+      }
+      LOG.info("SSL doSocketWrite - returned zero");
+      return 0;
+    }
+  }
+  
   // @Override
   public void Writeable(NIOClientSocket theSocket) throws IOException {
-
+    LOG.info("Writeable Called");
     if (!theSocket.isOpen()) {
       return;
     }
 
+    if (getState() == State.SSL_HANDSHAKE) { 
+      doSSLHandshake(theSocket, true, false,false);
+      return;
+    }
+    
+    if (isHTTPs() && _sslWritesPending) {
+      writeSSLNetworkBytesToSocket();
+      if (_sslWritesPending) { 
+        LOG.info("SSL - Still More Bytes To Write");
+        _selector.registerForWrite(_socket);
+        return;
+      }
+    }
+    
     int amountWritten = 0;
 
     try {
@@ -1641,7 +2057,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
 
       if (_outBuf.available() == 0 && _dataSource != null) {
         // read some more data from the data source
-        contentEOF = _dataSource.read(_outBuf);
+        contentEOF = _dataSource.read(this,_outBuf);
       }
 
       ByteBuffer bufferToWrite = _outBuf.read();
@@ -1666,13 +2082,15 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
               // limit to amount to write ...
               slicedBuffer.limit(amountToWrite);
               // and write to socket ...
-              amountWritten = _socket.write(slicedBuffer);
+              // amountWritten = _socket.write(slicedBuffer);
+              amountWritten = doSocketWrite(slicedBuffer);
               if (amountWritten >= 0) {
                 // advance source buffer manually...
                 bufferToWrite.position(bufferToWrite.position() + amountWritten);
               }
             } else {
-              amountWritten = _socket.write(bufferToWrite);
+              //amountWritten = _socket.write(bufferToWrite);
+              amountWritten = doSocketWrite(bufferToWrite);
             }
 
             if (_uploadRateLimiter != null) {
@@ -1704,6 +2122,11 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
         if (bufferToWrite.remaining() > 0) {
           _outBuf.putBack(bufferToWrite);
         }
+        else {
+          if (_dataSource != null) { 
+            _dataSource.finsihedWriting(this,bufferToWrite);
+          }
+        }
       }
 
       if (_totalWritten > 0 && !_outBuf.isDataAvailable() && (_dataSource == null || contentEOF)) {
@@ -1730,10 +2153,15 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     if (_state == State.SENDING_REQUEST) {
       _selector.registerForReadAndWrite(theSocket);
     } else if (_state.ordinal() >= State.RECEIVING_HEADERS.ordinal() && _state.ordinal() < State.DONE.ordinal()) {
-      _selector.registerForRead(theSocket);
+      if (isHTTPs() && _sslWritesPending) { 
+        _selector.registerForReadAndWrite(theSocket);
+      }
+      else { 
+        _selector.registerForRead(theSocket);
+      }
     }
   }
-
+  
   public void disableReads() { 
     if (_socket != null) { 
       _socket.disableReads();
@@ -1745,6 +2173,161 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       _socket.enableReads();
       _selector.registerForRead(_socket);
     }
+  }
+  
+  /** 
+   * convert the returned content to an error string 
+   * 
+   * @return
+   */
+  public String getErrorResponse() { 
+    String errorDescription = null;
+    
+    if (getContentBuffer().available() != 0) { 
+
+      NIOBufferList contentBuffer = getContentBuffer();
+      
+      try { 
+        // now check headers to see if it is gzip encoded
+        int keyIndex =  getResponseHeaders().getKey("Content-Encoding");
+        
+        if (keyIndex != -1) { 
+
+          String encoding = getResponseHeaders().getValue(keyIndex);
+        
+          byte data[] = new byte[contentBuffer.available()]; 
+          // and read it from the niobuffer 
+          contentBuffer.read(data);
+            
+            if (encoding.equalsIgnoreCase("gzip")) { 
+              UnzipResult result = GZIPUtils.unzipBestEffort(data,256000);
+              if (result != null) { 
+                contentBuffer.reset();
+                contentBuffer.write(result.data.get(), 0, result.data.getCount());
+                contentBuffer.flush();
+              }
+            }
+        }
+        
+        byte data[] = new byte[contentBuffer.available()];
+      
+        contentBuffer.read(data);
+        
+        ByteBuffer bb = ByteBuffer.wrap(data);
+        StringBuffer buf = new StringBuffer();
+        buf.append(Charset.forName("ASCII").decode(bb));
+        errorDescription = buf.toString();
+      }
+      catch (IOException e) { 
+        LOG.error(CCStringUtils.stringifyException(e));
+      }
+    }
+    if (errorDescription == null) { 
+      errorDescription = "";
+    }
+    return errorDescription;
+  }
+  
+  
+  /** 
+   * ssl support 
+   */
+  boolean isHTTPs() { 
+    return _url.getProtocol().toLowerCase().equals("https");
+  }
+  
+  private static TrustManager DUMMY_TRUST_MANAGER = new X509TrustManager() {
+    public X509Certificate[] getAcceptedIssuers() {
+        return new X509Certificate[0];
+    }
+
+    public void checkClientTrusted(
+            X509Certificate[] chain, String authType) throws CertificateException {
+    }
+
+    public void checkServerTrusted(
+            X509Certificate[] chain, String authType) throws CertificateException {
+    }
+  };
+
+  public static TrustManager[] getNonValidatingTrustManager() {
+      return new TrustManager[] { DUMMY_TRUST_MANAGER };
+  }
+  
+  
+  public static void main(String[] args)throws IOException {
+    URL url = new URL(args[0]);
+    final AtomicInteger loopCount = new AtomicInteger(1);
+    if (args.length > 1) 
+      loopCount.set(Integer.parseInt(args[1]));
+    final ExecutorService resolverThreadPool = Executors.newFixedThreadPool(1);
+    final EventLoop theEventLoop = new EventLoop(resolverThreadPool);
+    theEventLoop.start();
+    
+    while (loopCount.get() != 0) { 
+      final NIOHttpConnection connection = new NIOHttpConnection(url,theEventLoop.getSelector(),theEventLoop.getResolver(),null);
+      final DataOutputBuffer resultBuffer = new DataOutputBuffer();
+      
+      connection.setListener(new Listener() {
+        
+        @Override
+        public void HttpContentAvailable(NIOHttpConnection theConnection,
+            NIOBufferList contentBuffer) {
+          ByteBuffer incomingBuffer = null;
+          try { 
+            while ((incomingBuffer = contentBuffer.read()) != null) { 
+              byte data[] = incomingBuffer.array();
+              resultBuffer.write(data,incomingBuffer.position(),incomingBuffer.remaining());
+            }
+          }
+          catch (IOException e) { 
+            LOG.error(CCStringUtils.stringifyException(e));
+          }
+        }
+        
+        @Override
+        public void HttpConnectionStateChanged(NIOHttpConnection theConnection,
+            State oldState, State state) {
+          System.out.println("New State:" +state);
+          if (state == State.DONE) { 
+            System.out.println("Response Headers:");
+            System.out.println(theConnection.getResponseHeaders());
+            String contentEncoding = theConnection.getResponseHeaders().findValue("content-encoding");
+            FlexBuffer contentBytes = new FlexBuffer(resultBuffer.getData(),0,resultBuffer.getLength());
+            if (contentEncoding != null && contentEncoding.equalsIgnoreCase("gzip")) { 
+              UnzipResult result = GZIPUtils.unzipBestEffort(contentBytes.get(),0,contentBytes.getCount(),Integer.MAX_VALUE);
+              contentBytes = result.data;
+            }
+            
+            System.out.println("Raw Content Length:" + resultBuffer.getLength());
+            if (contentBytes != null) { 
+              String result = new String(contentBytes.get(),0,contentBytes.getCount(),Charset.forName("UTF-8"));
+              System.out.println(result);
+            }
+            connection.close();
+            loopCount.decrementAndGet();
+          }
+          else if (state == State.ERROR) { 
+            connection.close();
+            loopCount.decrementAndGet();
+          }
+        }
+      });
+      int preOpenLoopCount = loopCount.get();
+      connection.open();
+      
+      while (loopCount.get() == preOpenLoopCount) { 
+        try {
+          Thread.sleep(5000);
+        } catch (InterruptedException e) {
+        }
+      }
+    }
+    theEventLoop.stop();
+    resolverThreadPool.shutdown();
+    NIOHttpConnection.shutdownThreadPools();
+    
+    LOG.info("Done");
   }
   
 }

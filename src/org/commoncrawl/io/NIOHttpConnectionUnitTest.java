@@ -313,7 +313,7 @@ public class NIOHttpConnectionUnitTest implements NIOHttpConnection.Listener {
 
           for (int j = 0; j < connections.length; ++j) {
 
-            if (connections[j] == null || connections[j].hasTimedOut()) {
+            if (connections[j] == null || connections[j].checkForTimeout()) {
 
               if (urlList.size() != 0) {
 
