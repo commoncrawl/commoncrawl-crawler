@@ -39,10 +39,8 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.commoncrawl.async.EventLoop;
-import org.commoncrawl.async.Timer;
 import org.commoncrawl.io.NIOBufferList;
 import org.commoncrawl.io.NIOHttpConnection;
-import org.commoncrawl.io.NIOHttpConnection.State;
 import org.commoncrawl.io.NIOHttpHeaders;
 import org.commoncrawl.util.BandwidthUtils.BandwidthStats;
 import org.commoncrawl.util.GZIPUtils.UnzipResult;
@@ -56,7 +54,7 @@ import org.commoncrawl.util.GZIPUtils.UnzipResult;
 public class S3Uploader implements NIOHttpConnection.DataSource {
 
   /** logging **/
-  private static final Log LOG = LogFactory.getLog(S3Uploader.class);
+  static final Log LOG = LogFactory.getLog(S3Uploader.class);
   
   private static final int MAX_QUEUED_READ_SIZE = 10 * 1024 * 1024;
 
@@ -85,167 +83,7 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
   int         _Id;
   long  _bytesUploaded = 0;
   
-  public static class BulkUploader implements NIOHttpConnection.Listener {
-
-    EventLoop _theEventLoop;
-    FileSystem _fileSystem;
-    Path         _uploadCandidates[];
-    int           _bandwidthPerUploader;
-    S3Uploader _uploaders[];
-    String       _s3Bucket;
-    String       _s3AccessId;
-    String       _s3SecretKey;
-    Timer      _timer;
-    Callback _callback;
-    int         _lastUploaderId = 0;
-
-    
-    /** default polling interval **/
-    private static final int DEFAULT_POLL_INTERVAL = 500;
-    
-    public static class UploadCandidate { 
-      
-      public UploadCandidate(Path path,String uploadName,String mimeType,String acl) { 
-        _path = path;
-        _uploadName = uploadName;
-        _mimeType = mimeType;
-        _acl = acl;
-      }
-      
-      public Path     _path;
-      public String   _uploadName;
-      public String   _mimeType;
-      public String   _acl;
-    }
-
-    public static interface Callback { 
-      /** get next upload candidate **/
-      public UploadCandidate getNextUploadCandidate();
-      /** the upload failed ... return true if we should retry the item **/
-      public void  uploadFailed(Path path,IOException e);
-      /** the upload succeeded for the specified item **/
-      public void uploadComplete(Path path,String bandwidthStats);
-    }
-    
-    public BulkUploader(EventLoop eventLoop,FileSystem fileSystem,Callback callback,String s3Bucket,String s3AccessId, String s3SecretKey,int bandwidthPerUploader,int maxUploaders) { 
-      _theEventLoop = eventLoop;
-      _fileSystem = fileSystem;
-      _bandwidthPerUploader = bandwidthPerUploader;
-      _uploaders = new S3Uploader[maxUploaders];
-      _s3Bucket = s3Bucket;
-      _s3AccessId = s3AccessId;
-      _s3SecretKey = s3SecretKey;
-      _callback = callback;
-    }
-    
-    public void startUpload() { 
-      _timer = new Timer(DEFAULT_POLL_INTERVAL,true,new Timer.Callback() {
-
-        public void timerFired(Timer timer) {
-          fillSlots();
-        }
-      });
-      _theEventLoop.setTimer(_timer);
-    }
-    
-    private void fillSlots() { 
-      for (int i=0;i<_uploaders.length;++i) { 
-        // if empty slot found ... 
-        if (_uploaders[i] == null) { 
-          UploadCandidate uploadCandidate = _callback.getNextUploadCandidate();
-          
-          if (uploadCandidate != null) {
-            LOG.info("Queuing: " + uploadCandidate._path.toString() + " for Upload");
-            _uploaders[i] = new S3Uploader(++_lastUploaderId,_theEventLoop,_fileSystem,uploadCandidate._path,
-                _bandwidthPerUploader,_s3Bucket,uploadCandidate._uploadName,uploadCandidate._mimeType,_s3AccessId,_s3SecretKey,uploadCandidate._acl);
-            _uploaders[i].setSlot(i);
-            try { 
-              _uploaders[i].startUpload(BulkUploader.this);
-            }
-            catch (IOException e) { 
-              
-              LOG.error ("Upload for : " + uploadCandidate._path.toString() + " FAILED with Exception:" + CCStringUtils.stringifyException(e));
-              // notify controller through callback ...
-              _callback.uploadFailed(uploadCandidate._path, e);
-            }
-          }
-        }
-      }
-    }
-    
-    public void HttpConnectionStateChanged(NIOHttpConnection theConnection,State oldState, State state) {
-      
-      // extract the reference to the uploader based on 
-      S3Uploader uploader = (S3Uploader) theConnection.getContext();
-      
-      System.out.println("HttpConnection for: " + uploader.getPath() + " transitioned:" + oldState + " to " + state );
-      
-      // get the associated slot ... 
-      int slotIndex = uploader.getSlot();
-      
-      if (state == State.ERROR || state == State.DONE) { 
-        
-        boolean failed = true;
-        
-        if (state == State.DONE) { 
-          
-          int resultCode = NIOHttpConnection.getHttpResponseCode(theConnection.getResponseHeaders());
-          
-          if (resultCode == 200) {
-            failed = false;
-            BandwidthUtils.BandwidthStats stats = new BandwidthUtils.BandwidthStats();
-            uploader._rateLimiter.getStats(stats);
-            
-            _callback.uploadComplete(uploader.getPath(),"DownloadSpeed:" + stats.scaledBitsPerSecond + " " + stats.scaledBitsUnits);
-          }
-        }
-        
-        // if the get failed ... 
-        if (failed) { 
-          // check to see if we have a cached exception ...
-          IOException failureException = uploader.getException();
-          
-          if (failureException == null) { 
-            // if not ... construct one from the result (if present).... 
-            if (theConnection.getContentBuffer().available() != 0) { 
-              failureException = failureExceptionFromContent(theConnection);
-            }
-          }
-          
-          _callback.uploadFailed(uploader.getPath(), failureException);
-          LOG.info("Returned from uploadFailed");
-        }
-        
-        if (failed)
-          LOG.info("Calling uploader.shutdown");
-        // shutdown the uploader ... 
-        uploader.shutdown();
-        
-        if (failed)
-          LOG.info("Post uploader.shutdown");
-        
-        // empty the slot ... 
-        _uploaders[slotIndex] = null;
-
-        if (failed)
-          LOG.info("Calling fill Slots");
-        
-        // and fill slots ... 
-        fillSlots();
-        
-        if (failed)
-          LOG.info("Post fill Slots");
-        
-      }
-    }
-
-    public void HttpContentAvailable(NIOHttpConnection theConnection,NIOBufferList contentBuffer) {
-      // TODO Auto-generated method stub
-      
-    } 
-  }
-  
-  private static IOException failureExceptionFromContent(NIOHttpConnection theConnection) { 
+  static IOException failureExceptionFromContent(NIOHttpConnection theConnection) { 
 
     String errorDescription = null;
     
@@ -316,6 +154,11 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
  
   public int getSlot() { return _slot; }
   public void setSlot(int index) { _slot = index; }
+  
+  Object _context;
+  
+  public void setContext(Object o) { _context = o; } 
+  public Object getContext() { return _context; }
  
   public Path getPath() { return _uploadTarget; }
   
@@ -597,7 +440,7 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
   }
 
 
-  public boolean read(NIOBufferList dataBuffer)throws IOException {
+  public boolean read(NIOHttpConnection connection,NIOBufferList dataBuffer)throws IOException {
     
     ByteBuffer buffer = null;
     
@@ -620,5 +463,10 @@ public class S3Uploader implements NIOHttpConnection.DataSource {
     
     
     return eof;
+  }
+
+  @Override
+  public void finsihedWriting(NIOHttpConnection connection,ByteBuffer thisBuffer) throws IOException {
+    //NOOP
   }
 }
