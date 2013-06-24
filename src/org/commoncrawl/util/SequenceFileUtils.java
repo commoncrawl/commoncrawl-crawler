@@ -23,6 +23,7 @@ import java.io.OutputStreamWriter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Writable;
 
@@ -57,8 +58,8 @@ public class SequenceFileUtils {
     JsonParser parser = new JsonParser();
     
     try { 
-      Writable key = (Writable) reader.getKeyClass().newInstance();
-      Writable value = (Writable)  reader.getValueClass().newInstance();
+      Writable key = (Writable) ((reader.getKeyClass() == NullWritable.class) ? NullWritable.get() : reader.getKeyClass().newInstance());
+      Writable value = (Writable)  ((reader.getValueClass() == NullWritable.class) ? NullWritable.get() : reader.getValueClass().newInstance());
       
       boolean more = true;
       do { 
@@ -77,9 +78,9 @@ public class SequenceFileUtils {
             OutputStreamWriter writer = new OutputStreamWriter(System.out, "UTF-8");
             writer.write(value.toString());
             writer.flush();
+            System.out.println();
           }
           else { 
-            System.out.print("\n");
             System.out.println(JSONUtils.prettyPrintJSON(jsonElement));
           }
         }
