@@ -20,25 +20,43 @@ package org.commoncrawl.crawl.common.internal;
 
 import java.io.IOException;
 import java.net.URI;
+import java.text.NumberFormat;
+import java.util.ArrayList;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.commoncrawl.common.Environment;
+import org.mortbay.log.Log;
+
+import com.google.common.collect.Lists;
 
 public final class CrawlEnvironment extends Environment {
 
+  
+  public static final NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
+  static {
+    NUMBER_FORMAT.setMinimumIntegerDigits(5);
+    NUMBER_FORMAT.setGroupingUsed(false);
+  }    
+  
   public static final int      MAX_URL_LENGTH_ALLOWED                  = 2048;
 
   /** ccbot user agent string **/
-  public static final String   CCBOT_UA                                = "";
+  public static final String   CCBOT_UA                                = "ccbot";
 
   public static final int      MIN_DNS_CACHE_TIME                      = 60 * 60 * 1000;
 
-  /** crawlers **/
+  public static final int NUM_CRAWLERS = 32;
+
+  
+  /** OLD crawler LIST  **/
+  
   public static final String[] CRAWLERS                                = {
       "ccc01-01", "ccc01-02", "ccc02-01", "ccc02-02", "ccc03-01", "ccc03-02",
       "ccc04-01", "ccc04-02",                                         };
+  
 
   /** crawl datum metadata **/
   public static final String   MetaData_FailureReason                  = "_cc_failCode_";
@@ -60,8 +78,7 @@ public final class CrawlEnvironment extends Environment {
   public static final String   PROPERTY_SEGMENT_LIST_ID                = "crawldbserver.segment.list.id";
 
   /** hdfs paths **/
-  public static final String   HDFS_CrawlDBBaseDir                     = "crawl";
-  public static final String   HDFS_ParseSegment_CrawlLog_OutputDir    = "crawlOut";
+  public static       String   CC_ROOT_DIR                             = "/crawl";
 
   public static final String   HDFS_LinkDBDir                          = "linkdb";
   public static final String   HDFS_MergedLinkDB                       = "current";
@@ -81,7 +98,7 @@ public final class CrawlEnvironment extends Environment {
   public static final int      PR_NUMSLAVES                            = 46;
 
   // number of shards to use when creating various system databases...
-  public static final int      NUM_DB_SHARDS                           = 92;
+  public static final int      NUM_DB_SHARDS                           = 96;
 
   public static final String   HDFS_HeaderDB                           = "header_db";
   public static final String   HDFS_UploadCandidateDB                  = "uploadCandidates_db";
@@ -92,7 +109,7 @@ public final class CrawlEnvironment extends Environment {
   public static final String   HDFS_SpamListsDB                        = "spam_lists";
   public static final String   HDFS_SuperDomainTLDList                 = "top_level_domain_db";
 
-  public static final String   HDFS_HistoryServerBase                  = "crawl/history";
+  public static final String   HDFS_HistoryServerBase                  = "/crawl/history";
   public static final String   HDFS_HistoryServerCheckpointMutex       = "checkpointMutex";
 
   public static final String   ActiveCrawlLog                          = "ActiveCrawlLog";
@@ -102,28 +119,23 @@ public final class CrawlEnvironment extends Environment {
   public static final String   CheckpointSegmentLog                    = "SegmentLog";
   public static final String   SegmentCompletionLog                    = "CompletionLog";
 
-  public static final String   HDFS_CrawlDBDirectory                   = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "crawldb";
-  public static final String   HDFS_CrawlSegmentsDirectory             = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "crawl_segments";
-  public static final String   HDFS_ParseCandidateSegmentsDirectory    = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "parse_segments";
-  public static final String   HDFS_CheckpointDataDirectory            = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "checkpoint_data";
-  public static final String   HDFS_CheckpointStagingDirectory         = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "checkpoint_staging";
-  public static final String   HDFS_RobotsDBDirectory                  = HDFS_CrawlDBBaseDir
-                                                                           + "/robotsDB";
+  private static final String   HDFS_CrawlDBDirectory                   = "crawldb";
+  
+  private static final String   HDFS_CrawlSegmentsDataDirectory         = "crawl_segments";
+  
+  private static final String   HDFS_CrawlSegmentLogsDirectory          = "crawl_segment_logs";
+  
+  private static final String   HDFS_ParseCandidateSegmentsDirectory    = "parse_segments";
+  
+  private static final String   HDFS_CheckpointDataDirectory            = "checkpoint_data";
+  
+  private static final String   HDFS_CheckpointStagingDirectory         = "checkpoint_staging";
+  
+  private static final String   HDFS_RobotsDBDirectory                  =  "robotsDB";
 
-  public static final String   HDFS_StatsDirectory                     = HDFS_CrawlDBBaseDir
-                                                                           + "/"
-                                                                           + "stats";
-  public static final String   HDFS_CrawlSegmentsFileName              = "crawlSegmentStats";
+  private static final String   HDFS_StatsDirectory                     =  "stats";
+  
+  public static final String   HDFS_CrawlSegmentsFileName               = "crawlSegmentStats";
 
   // lists
   
@@ -237,10 +249,11 @@ public final class CrawlEnvironment extends Environment {
   private static boolean       _unitTestMode                           = false;
   private static String        _defaultHadoopFS                        = null;
   private static Configuration _hadoopConfig                           = null;
-  private static String        _crawlSegmentDataDirectory              = HDFS_CrawlSegmentsDirectory;
-  private static String        _parseCandidateSegmentDataDirectory     = HDFS_ParseCandidateSegmentsDirectory;
-  private static String        _checkpointDataDirectory                = HDFS_CheckpointDataDirectory;
-  private static String        _checkpointStagingDirectory             = HDFS_CheckpointStagingDirectory;
+  private static String        _crawlSegmentDataDirectory              = null;
+  private static String        _crawlSegmentLogsDirectory              = null;
+  private static String        _parseCandidateSegmentDataDirectory     = null;
+  private static String        _checkpointDataDirectory                = null;
+  private static String        _checkpointStagingDirectory             = null;
 
   private static String        CRAWL_LOG_CHECKPOINT_PREFIX             = "CrawlLog_";
 
@@ -278,11 +291,18 @@ public final class CrawlEnvironment extends Environment {
     }
   }
 
+  public static void setCCRootDir(String directory) { 
+    CC_ROOT_DIR = directory;
+  }
+  
   public static String getCrawlDBDirectory() {
-    return HDFS_CrawlDBDirectory;
+    return CC_ROOT_DIR + "/" + HDFS_CrawlDBDirectory;
   }
 
   public static String getCrawlSegmentDataDirectory() {
+    if (_crawlSegmentDataDirectory == null) { 
+      return CC_ROOT_DIR + "/" + HDFS_CrawlSegmentsDataDirectory;
+    }
     return _crawlSegmentDataDirectory;
   }
 
@@ -290,7 +310,21 @@ public final class CrawlEnvironment extends Environment {
     _crawlSegmentDataDirectory = directory;
   }
 
+  public static String getCrawlSegmentLogsDirectory() {
+    if (_crawlSegmentLogsDirectory == null) { 
+      return CC_ROOT_DIR + "/" + HDFS_CrawlSegmentLogsDirectory;
+    }
+    return _crawlSegmentLogsDirectory;
+  }
+  
+  public static void setCrawlSegmentLogsDirectory(String directory) { 
+    _crawlSegmentLogsDirectory = directory;
+  }
+  
   public static String getParseCandidateSegmentDataDirectory() {
+    if (_parseCandidateSegmentDataDirectory == null) { 
+      return CC_ROOT_DIR + "/" + HDFS_ParseCandidateSegmentsDirectory;
+    }
     return _parseCandidateSegmentDataDirectory;
   }
 
@@ -303,25 +337,45 @@ public final class CrawlEnvironment extends Environment {
     return "*";
   }
 
-  public static String buildCrawlSegmentLogCheckpointFileName(String nodeName,
-      long checkpointId) {
-    return CheckpointSegmentLog + "_" + nodeName + "_" + checkpointId;
+  public static String buildCrawlSegmentLogCheckpointFileName(long checkpointId) {
+    return CheckpointSegmentLog + "_" + checkpointId;
   }
 
   public static String buildCrawlSegmentCompletionLogFileName(String nodeName) {
     return SegmentCompletionLog + "_" + nodeName;
   }
 
-  public static String buildCrawlSegmentLogCheckpointWildcardString(
-      String nodeName) {
-    return CheckpointSegmentLog + "_" + nodeName + "_*";
+  public static Path getRemoteCrawlSegmentLogWildcardPath(Path rootPath, String hostId) { 
+    Path relativePath 
+    = new Path(
+        hostId + "/" 
+            + "*" + "/" 
+            + "*" + "/" 
+            + "SegmentLog_*");
+    
+    return new Path(rootPath,relativePath);
   }
+  
+  public static Path getRemoteCrawlSegmentLogCheckpointPath(Path rootPath, String hostId,long checkpointId, int listId, int segmentId) throws IOException {
+    Path relativePath 
+      = new Path(
+          hostId + "/" 
+              + CrawlEnvironment.formatListId(listId) + "/" 
+              + segmentId + "/" 
+              + CrawlEnvironment.buildCrawlSegmentLogCheckpointFileName(checkpointId));
+    
+    return new Path(rootPath,relativePath); 
+  }
+  
 
   public static void setParseSegmentDataDirectory(String directory) {
     _parseCandidateSegmentDataDirectory = directory;
   }
 
   public static String getCheckpointDataDirectory() {
+    if (_checkpointDataDirectory == null) { 
+      return CC_ROOT_DIR + "/" + HDFS_CheckpointDataDirectory;
+    }
     return _checkpointDataDirectory;
   }
 
@@ -330,6 +384,9 @@ public final class CrawlEnvironment extends Environment {
   }
 
   public static String getCheckpointStagingDirectory() {
+    if (_checkpointStagingDirectory == null) { 
+      return CC_ROOT_DIR + "/" + HDFS_CheckpointStagingDirectory;
+    }
     return _checkpointStagingDirectory;
   }
 
@@ -355,6 +412,22 @@ public final class CrawlEnvironment extends Environment {
 
   public static int getCurrentCrawlNumber() {
     return 2;
+  }
+  
+  public static String getCrawlerNameGivenId(int hostId) { 
+    return NUMBER_FORMAT.format(hostId);
+  }
+  
+  public static String formatListId(int listId) { 
+    return NUMBER_FORMAT.format(listId);
+  }
+  
+  public static ArrayList<String> getCrawlerNames() { 
+    ArrayList<String> crawlers = Lists.newArrayList();
+    for (int i=0;i<NUM_CRAWLERS;++i) { 
+      crawlers.add(NUMBER_FORMAT.format(i));
+    }
+    return crawlers;
   }
 
 }
