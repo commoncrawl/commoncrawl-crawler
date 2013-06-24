@@ -64,7 +64,7 @@ public class StatsServiceServer
   
   private FileSystem _fileSystem = null;
   private File       _localDataDir = null;
-  private static final String HDFS_ROOT = CrawlEnvironment.HDFS_CrawlDBBaseDir + "/" + CrawlEnvironment.STATS_SERVICE_HDFS_ROOT;
+  private static final String HDFS_ROOT = CrawlEnvironment.CC_ROOT_DIR + "/" + CrawlEnvironment.STATS_SERVICE_HDFS_ROOT;
   private static final String LOCAL_DATA_ROOT = "stats_root";
   private static final Log LOG = LogFactory.getLog(StatsServiceServer.class);
   private Map<String,TimeSeriesDataFile<BytesWritable>> _groupToFileMap = new TreeMap<String,TimeSeriesDataFile<BytesWritable>>();
