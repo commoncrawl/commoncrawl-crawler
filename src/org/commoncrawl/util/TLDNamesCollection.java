@@ -49,7 +49,7 @@ public class TLDNamesCollection {
 	    		ImmutableMultimap.Builder<String, String> builder = new ImmutableMultimap.Builder<String,String>();
 	    		
 	    			    		
-	  		  InputStream inputStream = ClassLoader.getSystemClassLoader().getResourceAsStream("effective_tld_list.txt");
+	  		  InputStream inputStream = TLDNamesCollection.class.getResourceAsStream("/conf/effective_tld_list.txt");
 	  		  
 	  		  try { 
 	  		  
