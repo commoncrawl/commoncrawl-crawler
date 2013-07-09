@@ -208,7 +208,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
       registerService(_serverChannel,CrawlerHistoryService.spec);
       
       
-      _handshakeTimer = new Timer(1000,true,this);
+      _handshakeTimer = new Timer(5000,true,this);
       getEventLoop().setTimer(_handshakeTimer);
       
       return true;
@@ -267,6 +267,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
     }
     finally { 
       _checkpointThreadSemaphore.release();
+      _bloomFilter = null;
     }
   }
   
@@ -574,6 +575,8 @@ public class CrawlHistoryServer extends CommonCrawlServer
       stream.readInt(); // version  
       stream.readInt(); // crawl number ... 
       
+      // release previous version of bloom filter if any 
+      _bloomFilter = null;
       // serialize bloom filter contents ... 
       _bloomFilter = URLFPBloomFilter.load(stream);
     }
@@ -777,7 +780,7 @@ public class CrawlHistoryServer extends CommonCrawlServer
           else { 
             try {
               //LOG.info("Checkpoint Thread IDLE");
-              Thread.sleep(100);
+              Thread.sleep(30000);
             } catch (InterruptedException e) {
             }
           }
