@@ -244,8 +244,8 @@ public class S3ArcFileReader implements S3Downloader.Callback {
   }
   
   
-  // @Override
-  public boolean downloadStarting(int itemId,String itemKey,long contentLength) { 
+  @Override
+  public boolean downloadStarting(NIOHttpConnection connection,int itemId,String itemKey,long contentLength) { 
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
     
@@ -255,7 +255,7 @@ public class S3ArcFileReader implements S3Downloader.Callback {
     return true;
   }
   
-  // @Override
+  @Override
   public boolean contentAvailable(NIOHttpConnection connection,int itemId,String itemKey,NIOBufferList contentBuffer) {
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
@@ -277,8 +277,8 @@ public class S3ArcFileReader implements S3Downloader.Callback {
     return continueDownload;
   }
   
-  //@Override
-  public void downloadFailed(int itemId,String itemKey,String errorCode) { 
+  @Override
+  public void downloadFailed(NIOHttpConnection connection,int itemId,String itemKey,String errorCode) { 
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
 
@@ -298,8 +298,8 @@ public class S3ArcFileReader implements S3Downloader.Callback {
     }
   }
   
-  //@Override
-  public void downloadComplete(int itemId,String itemKey) {
+  @Override
+  public void downloadComplete(NIOHttpConnection connection,int itemId,String itemKey) {
     // set key to decoder affinity ...
     int threadIdx = itemId % MAX_DECODER_THREADS;
 
