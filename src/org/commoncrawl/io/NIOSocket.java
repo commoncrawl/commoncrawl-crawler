@@ -24,8 +24,7 @@ import java.nio.channels.spi.AbstractSelectableChannel;
  * @author rana
  * 
  *         NIOSocket - Abstract interface used to represent an underlying
- *         asynchronous socket. Used primarily to abstract away from TCP Socket
- *         so that we can support HTTPS in the future ...
+ *         asynchronous socket.
  * 
  */
 public interface NIOSocket {
