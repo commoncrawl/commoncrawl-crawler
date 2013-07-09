@@ -1038,6 +1038,7 @@ module org.commoncrawl.protocol {
     [key] long  cookie = 3;
     int   instanceId = 4;
     long  lastTimestamp = 5;
+    ustring propertiesHash = 6;
   }
     
 
