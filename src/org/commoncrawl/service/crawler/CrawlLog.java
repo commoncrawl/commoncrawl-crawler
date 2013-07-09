@@ -807,8 +807,7 @@ public final class CrawlLog {
         // we need to track these in case of failure ...
         Vector<Path> segmentLogFinalPaths = new Vector<Path>();
 
-        // get the file system
-        final FileSystem crawlDataFS  = _engine.getServer().getCrawlContentFileSystem();
+        // get the log file system
         final FileSystem crawlLogsFS  = CrawlEnvironment.getDefaultFileSystem();
 
         try {
@@ -818,9 +817,14 @@ public final class CrawlLog {
           // construct a target path (where we are going to store the
           // checkpointed crawl log )
           //Path stagingDirectory = new Path(CrawlEnvironment.getCheckpointStagingDirectory());
-          Path checkpointDirectory = new Path(CrawlEnvironment.getCheckpointDataDirectory());
+          Path checkpointDirectory = CrawlerServer.getServer().getCrawlContentPath();
           LOG.info("***Checkpoint Dir is:" + checkpointDirectory);
+          if (checkpointDirectory == null) { 
+            throw new IOException("Checkpoint Failed. Null Checkpoint Directory!");
+          }
 
+          FileSystem crawlDataFS = FileSystem.get(checkpointDirectory.toUri(),CrawlEnvironment.getHadoopConfig());
+          LOG.info("***Checkpoint Content FS is:" + crawlDataFS);
           SequenceFileCrawlURLWriter hdfsWriter = new SequenceFileCrawlURLWriter(CrawlEnvironment.getHadoopConfig(),
               crawlDataFS, checkpointDirectory, getNodeName(), _checkpointId);
 
