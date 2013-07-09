@@ -348,8 +348,10 @@ public final class NIOBufferList {
   /** Reset State (Release buffers) */
   public void reset() {
     _bufferList.clear();
+    _bufferListBytes = 0;
     _readBuffer = null;
     _writeBuffer = null;
+    _lastWriteBufSize = 0;
   }
 
   public void setMaxBufferSize(int size) {
@@ -436,6 +438,20 @@ public final class NIOBufferList {
 
     ByteBuffer writeBuffer = getWriteBuf();
     writeBuffer.put((byte) value);
+  }
+  
+  @Override
+  public String toString() {
+    int readBufferBytes = (_readBuffer != null) ? _readBuffer.remaining() : 0;
+    int listBytes = 0;
+    for (ByteBuffer readBuffer : _bufferList) {
+      listBytes += readBuffer.remaining();
+    }
+    return 
+        "BufferList Size:" + _bufferList.size() 
+        +" BufferListBytes:" + _bufferListBytes 
+        + " BufferListBytes(Computed):" + listBytes
+        + " ReadBufferBytes:" + readBufferBytes;
   }
 
 }
