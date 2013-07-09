@@ -61,6 +61,7 @@ public abstract class CommonCrawlServer extends Server {
     public int _webPort = -1;
     public String _configName;
     public String _dataDir = null;
+    public String _logDir = null;
     public int _dnsThreadPoolSize = -1;
   }
 
@@ -177,6 +178,9 @@ public abstract class CommonCrawlServer extends Server {
       if (_commonConfig._dataDir != null) {
         conf.set("org.commoncrawl.dataDir", _commonConfig._dataDir);
       }
+      if (_commonConfig._logDir != null) {
+        conf.set("commoncrawl.log.dir", _commonConfig._logDir);
+      }      
       if (_commonConfig._dnsThreadPoolSize != -1) {
         conf.setInt("org.commoncrawl.dnsThreadPoolSize", _commonConfig._dnsThreadPoolSize);
       }
@@ -249,6 +253,9 @@ public abstract class CommonCrawlServer extends Server {
           if (i + 1 < argv.length) {
             configOut._dataDir = argv[++i];
           }
+        }
+        else if (argv[i].equalsIgnoreCase("--logDir")) {
+          configOut._logDir = argv[++i];
         } else if (argv[i].equalsIgnoreCase("--dnsPoolSize")) {
           configOut._dnsThreadPoolSize = Integer.parseInt(argv[++i]);
         }
@@ -388,7 +395,12 @@ public abstract class CommonCrawlServer extends Server {
   }
 
   public File getLogDirectory() {
-    return new File(System.getProperty("commoncrawl.log.dir","./logs"));
+    if (_configuration.get("commoncrawl.log.dir",null) != null) { 
+      return new File(_configuration.get("commoncrawl.log.dir",null));
+    }
+    else { 
+      return new File(System.getProperty("commoncrawl.log.dir","./logs"));
+    }
   }
 
   public InetSocketAddress getServerAddress() {
