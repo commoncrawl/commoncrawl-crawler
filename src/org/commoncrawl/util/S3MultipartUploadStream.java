@@ -544,7 +544,7 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
     }
     
     /** 
-     * flush the active upload part 
+     * flush the active upload part onto the upload queue
      * 
      * @throws IOException
      */
@@ -557,6 +557,8 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
             
       ByteBuffer buffer = null;
       long totalSize = 0;
+      // drain buffer list buffers into a more manageable data structure   
+      // to facilitate replay in case of failure. 
       while ((buffer = _bufferList.read()) != null) {
         totalSize += buffer.limit();
         _buffers.add(buffer);
@@ -597,6 +599,16 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
       }
       // reset buffer item cursor 
       _bufferPos = 0;
+    }
+    
+    /** 
+     * free up buffer resources associated with this item 
+     */
+    void releaseResources() { 
+      _bufferList = null;
+      _buffers.clear();
+      _buffers = null;
+      _connection = null;
     }
     
     /** 
@@ -785,6 +797,7 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
   }
   
   private void internalClose(boolean isAbort) throws IOException {  
+
     if (!_closed) {
       try { 
         if (!isAbort && !uploadFailed()) { 
@@ -843,7 +856,11 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
           _dnsThreadPool.shutdown();
         }
       }
-      finally { 
+      finally {
+        // cleanup resources ... 
+        _uploadQueue.clear();
+        _completedItems.clear();
+        _activeItem = null;
         _closed = true;
       }
     }
@@ -859,6 +876,9 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
         LOG.error(CCStringUtils.stringifyException(e2));
       }
     }
+
+    
+    
     // throw failure exception if first occurunce ... 
     if (!isAbort && !_failureExceptionThrown && _failureException.get() != null) {
       _failureExceptionThrown = true;
@@ -913,6 +933,7 @@ public class S3MultipartUploadStream extends OutputStream implements NIOHttpConn
               if (!failed) { 
                 synchronized (_uploadQueue) {
                   _inFlightCount--;
+                  item.releaseResources();
                   _completedItems.put(item._requestObject.getPartNumber(),item);
                   _uploadQueue.notifyAll();
                 }
