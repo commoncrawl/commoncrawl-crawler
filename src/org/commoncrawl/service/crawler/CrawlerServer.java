@@ -35,6 +35,7 @@ import java.util.concurrent.Semaphore;
 import javax.servlet.jsp.JspWriter;
 
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.WritableUtils;
 import org.commoncrawl.async.Timer;
@@ -90,6 +91,10 @@ import org.commoncrawl.util.IPAddressUtils;
 import org.commoncrawl.util.RuntimeStatsCollector;
 import org.commoncrawl.util.URLUtils;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 
 /**
  * Crawler Server (CommonCrawlerServer derived class)
@@ -143,8 +148,8 @@ public class CrawlerServer extends CommonCrawlServer
   AsyncClientChannel                _historyServiceChannel;
   CrawlerHistoryService.AsyncStub   _historyServiceStub;
   
-  /** Crawl Content FS **/
-  FileSystem  _crawlContentFS;
+  /** Crawl Content Path  **/
+  Path  _crawlContentPath;
   
   /** filters **/
   private DomainFilter     _blockedDomainFilter = null;
@@ -226,10 +231,10 @@ public class CrawlerServer extends CommonCrawlServer
 	
 	/**
 	 * 
-	 * @return FileSystem used to store crawled content
+	 * @return Path where crawled content is stored 
 	 */
-	FileSystem getCrawlContentFileSystem() { 
-	  return _crawlContentFS;
+	Path getCrawlContentPath() { 
+	  return _crawlContentPath;
 	}
 	
 	/** get the domain queue storage directory name **/
@@ -495,9 +500,9 @@ public class CrawlerServer extends CommonCrawlServer
             LOG.error(CCStringUtils.stringifyException(e));
           }          
         }
-        else if (argv[i].equalsIgnoreCase("--contentFS")) { 
+        else if (argv[i].equalsIgnoreCase("--contentDataDir")) { 
           try {
-            _crawlContentFS = FileSystem.get(new URI(argv[++i]),getConfig());
+            _crawlContentPath = new Path(argv[++i]);
           } catch (Exception e) {
             LOG.error(CCStringUtils.stringifyException(e));
           }          
@@ -531,12 +536,11 @@ public class CrawlerServer extends CommonCrawlServer
           _crawlLogFlushInterval = Integer.parseInt(argv[++i]);
         }
 	  }
-	  LOG.info(_crawlContentFS);
 	  return (_masterAddress != null 
 	      && _dnsServiceAddress != null 
 	      && _statsCollectorAddress != null
 	      && _directoryServiceAddress != null
-	      && _crawlContentFS != null
+	      && _crawlContentPath != null
 	      && (_historyServiceAddress != null || externallyManageCrawlSegments()));
   }
 
@@ -548,7 +552,7 @@ public class CrawlerServer extends CommonCrawlServer
 	      + " --directoryserver ["+ _directoryServiceAddress +"] "
 	      + " --statscollector ["+ _statsCollectorAddress +"] "
 	      + " --historyserver ["+ _historyServiceAddress +"] "
-	      + " --contentFS ["+ _crawlContentFS +"]"
+	      + " --contentFS ["+ _crawlContentPath +"]"
 	      );
   }
 
@@ -1412,6 +1416,9 @@ public class CrawlerServer extends CommonCrawlServer
     }
   }
   
+  JsonObject _masterProperties = new JsonObject();
+
+  
   public void initiateHandshake() { 
     _handshakeState = HandshakeState.INITIATING;
     LOG.info("Connected to Master. Initiating Handshake");
@@ -1433,6 +1440,21 @@ public class CrawlerServer extends CommonCrawlServer
             _handshakeState = HandshakeState.IDLE;
             LOG.info("Starting Crawler");
             try {
+              _masterProperties = new JsonObject();
+              if (request.getOutput().getPropertiesHash().length() != 0) {
+                _masterProperties = new JsonParser().parse(request.getOutput().getPropertiesHash()).getAsJsonObject();
+                if (_masterProperties.has(CrawlEnvironment.PROPERTY_SEGMENT_DATA_DIR)) { 
+                  LOG.info("Master Overrode Segment Data Dir to:" 
+                        + _masterProperties.get(CrawlEnvironment.PROPERTY_SEGMENT_DATA_DIR).getAsString()); 
+                  CrawlEnvironment.setCrawlSegmentDataDirectory(_masterProperties.get(CrawlEnvironment.PROPERTY_SEGMENT_DATA_DIR).getAsString());
+                }
+                if (_masterProperties.has(CrawlEnvironment.PROPERTY_CONTENT_DATA_DIR)) { 
+                  LOG.info("Master Overrode Content Data Dir to:" 
+                        + _masterProperties.get(CrawlEnvironment.PROPERTY_CONTENT_DATA_DIR).getAsString()); 
+                  _crawlContentPath = new Path(_masterProperties.get(CrawlEnvironment.PROPERTY_CONTENT_DATA_DIR).getAsString());
+                }
+                
+              }
               startServices();
             } catch (IOException e) {
               LOG.info("Crawler Start Failed with Exception:" +CCStringUtils.stringifyException(e));
@@ -1455,7 +1477,9 @@ public class CrawlerServer extends CommonCrawlServer
     }
   }
   
-  void startServices() throws IOException { 
+  
+  void startServices() throws IOException {
+    
     // ok , first things first, send init to history server
     CrawlHistoryStatus crawlStatus = new CrawlHistoryStatus();
     
