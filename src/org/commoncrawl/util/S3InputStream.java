@@ -24,6 +24,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -32,7 +33,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.commoncrawl.async.Callback;
-import org.commoncrawl.async.EventLoop;
+import org.commoncrawl.async.Timer;
 import org.commoncrawl.io.NIOBufferList;
 import org.commoncrawl.io.NIOBufferListInputStream;
 import org.commoncrawl.io.NIOHttpConnection;
@@ -45,7 +46,7 @@ import org.commoncrawl.io.NIOHttpConnection;
  * @author rana
  *
  */
-public class S3InputStream extends NIOBufferListInputStream implements S3Downloader.Callback {
+public class S3InputStream extends NIOBufferListInputStream implements S3Downloader.Callback, Timer.Callback  {
 
   /** logging **/
   private static final Log LOG = LogFactory.getLog(S3InputStream.class);
@@ -55,9 +56,15 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
   AtomicReference<Exception> _exception = new AtomicReference<Exception>();
   ReentrantLock _writeLock = new ReentrantLock();
   AtomicReference<Condition>     _writeEvent = new AtomicReference<Condition>(_writeLock.newCondition());
+  long                           _waitStartTime = -1;
+  boolean                        _inWaitState = false;
   AtomicBoolean _eofCondition = new AtomicBoolean();
   AtomicReference<NIOHttpConnection> pausedConnection = new AtomicReference<NIOHttpConnection>();
+  AtomicReference<NIOHttpConnection> activeConnection = new AtomicReference<NIOHttpConnection>();
+  int activeItemId = -1;
+  String activeItemKey = null;
   int MAX_BUFFER_SIZE = 1048576 * 5;
+  Timer timeoutTimer;
 
   
   /** 
@@ -86,61 +93,80 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
     else { 
       downloader.fetchPartialItem(uri.getPath().substring(1), seekPos,-1L);
     }
+    timeoutTimer = new Timer(5000,true,this);
   }
   
   
   @Override
   protected void ensureBuffer() throws IOException {
-    super.ensureBuffer();
-    while(_activeBuf == null) {
-      
-      //System.out.println("Read from Main Thread  for Path:" + uri + ". Checking for EOF or Error");
-      _writeLock.lock();
-      try { 
-        if (_eofCondition.get()) {
-          if (_exception.get() != null) { 
-            LOG.error("Read from Main Thread for Path:" + uri + " detected Exception"); 
-            throw new IOException(_exception.get());
-          }
-          else {
-            LOG.info("Read from Main Thread for Path:" + uri + " detected EOF");
-            return;
-          }
-        }
-        else { 
-          _writeEvent.set(_writeLock.newCondition());
-          //long nanoTimeStart = System.nanoTime();
-          //System.out.println("Read from Main Thread for Path:" + uri + " Waiting on Write");
-          try {
-            _writeEvent.get().await();
-            //long nanoTimeEnd = System.nanoTime();
-            //System.out.println("Read from Main Thread for Path:" + uri + " Returned from Wait Took:" + (nanoTimeEnd-nanoTimeStart));
-          } catch (InterruptedException e) {
-            LOG.error("Read from Main Thread for Path:" + uri + " was Interrupted. Exiting");
-            throw new IOException(e);
-          }
-        }
-      }
-      finally { 
-        _writeLock.unlock();
-      }
-      super.ensureBuffer();
-    }
-    if (pausedConnection.get() != null && _bufferQueue.available() < MAX_BUFFER_SIZE) {
-      final NIOHttpConnection connection = pausedConnection.get();
-      pausedConnection.set(null);
-      downloader.getEventLoop().queueAsyncCallback(new Callback() {
+    
+    do {
 
+      super.ensureBuffer();
+      
+      if (_activeBuf == null) {
+        // ok, unpause the connection in case it is in a paused state before going into a wait state ... 
+        unpauseConnection();
+        //System.out.println("Read from Main Thread  for Path:" + uri + ". Checking for EOF or Error");
+        _writeLock.lock();
+        try { 
+          if (_eofCondition.get()) {
+            if (_exception.get() != null) { 
+              LOG.error("Read from Main Thread for Path:" + uri + " detected Exception"); 
+              throw new IOException(_exception.get());
+            }
+            else {
+              LOG.info("Read from Main Thread for Path:" + uri + " detected EOF");
+              return;
+            }
+          }
+          else { 
+            _writeEvent.set(_writeLock.newCondition());
+            _inWaitState = true;
+            _waitStartTime = System.currentTimeMillis();
+            //long nanoTimeStart = System.nanoTime();
+            //System.out.println("Read from Main Thread for Path:" + uri + " Waiting on Write");
+            try {
+              _writeEvent.get().await();
+              _waitStartTime = -1L;
+              //long nanoTimeEnd = System.nanoTime();
+              //System.out.println("Read from Main Thread for Path:" + uri + " Returned from Wait Took:" + (nanoTimeEnd-nanoTimeStart));
+            } catch (InterruptedException e) {
+              LOG.error("Read from Main Thread for Path:" + uri + " was Interrupted. Exiting");
+              throw new IOException(e);
+            }
+          }
+        }
+        finally {
+          _inWaitState = false;
+          _writeLock.unlock();
+        }
+      }
+    }
+    while(_activeBuf == null);
+    
+    if (_bufferQueue.available() < MAX_BUFFER_SIZE) {
+      unpauseConnection();
+    }
+  }
+
+  void unpauseConnection() {
+    if (pausedConnection.get() != null) { 
+      downloader.getEventLoop().queueAsyncCallback(new Callback() {
+  
         @Override
         public void execute() {
-          //System.out.println("*** RESUMING DOWNLOADS ***");
-          try {
-            connection.enableReads();
-          } catch (IOException e) {
-            LOG.error(CCStringUtils.stringifyException(e));
+          final NIOHttpConnection connection = pausedConnection.get();
+          pausedConnection.set(null);
+          if (connection != null) { 
+            LOG.info("*** RESUMING DOWNLOADS FOR:" + connection.getURL() + "***");
+            try {
+              connection.enableReads();
+            } catch (IOException e) {
+              LOG.error(CCStringUtils.stringifyException(e));
+            }
           }
         } 
-        
       });
     }
   }
@@ -151,7 +177,12 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
   }  
   
   @Override
-  public boolean downloadStarting(int itemId, String itemKey,long contentLength) {
+  public boolean downloadStarting(NIOHttpConnection connection,int itemId, String itemKey,long contentLength) {
+    activeConnection.set(connection);
+    downloader.getEventLoop().setTimer(timeoutTimer);
+    activeItemId = itemId;
+    activeItemKey = itemKey;
+    
     return true;
   }
 
@@ -177,6 +208,7 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
       exception = e;
     }
     if (_bufferQueue.available() >= MAX_BUFFER_SIZE) {
+      LOG.info("*** PAUSING DOWNLOADS FOR:" + theConnection.getURL());
       theConnection.disableReads();
       pausedConnection.set(theConnection);
     }
@@ -201,7 +233,7 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
   }
 
   @Override
-  public void downloadFailed(int itemId, String itemKey, String errorCode) {
+  public void downloadFailed(NIOHttpConnection connection,int itemId, String itemKey, String errorCode) {
     LOG.error("Download Failed for URI:" + S3InputStream.this.uri);
     _writeLock.lock();
     try {
@@ -215,10 +247,12 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
     finally { 
       _writeLock.unlock();
     }
+    downloader.getEventLoop().cancelTimer(timeoutTimer);
+    activeConnection.set(null);
   }
 
   @Override
-  public void downloadComplete(int itemId, String itemKey) {
+  public void downloadComplete(NIOHttpConnection connection,int itemId, String itemKey) {
     LOG.info("Download Complete for URI:" + S3InputStream.this.uri);
     _writeLock.lock();
     try {
@@ -231,6 +265,44 @@ public class S3InputStream extends NIOBufferListInputStream implements S3Downloa
     }
     finally { 
       _writeLock.unlock();
+    }
+    downloader.getEventLoop().cancelTimer(timeoutTimer);
+    activeConnection.set(null);
+  }
+
+  private static final int WAIT_LOCK_TIMEOUT = 5 * 60000;
+  @Override
+  public void timerFired(Timer timer) {
+    LOG.info("timeout timer fired");
+    boolean timedOut = false;
+    NIOHttpConnection connection = activeConnection.get();
+    if (connection != null) { 
+      if (pausedConnection.get() == null) { 
+        if (connection.checkForTimeout()) { 
+          LOG.info("*** TIMEOUT detected via HTTPConnection for stream:" + connection.getURL());
+          timedOut = true;
+        }
+      }
+    }
+    
+    if (!timedOut) { 
+      _writeLock.lock();
+      try { 
+        if (_inWaitState) { 
+          if (System.currentTimeMillis() - _waitStartTime >= WAIT_LOCK_TIMEOUT) { 
+            LOG.info("*** TIMEOUT detected via LOCKWAIT time for stream:" + connection.getURL());
+            timedOut = true;
+          }
+        }
+      }
+      finally { 
+        _writeLock.unlock();
+      }
+    }
+    
+    if (timedOut) {
+      downloader.shutdown();
+      downloadFailed(activeConnection.get(), activeItemId, activeItemKey, "TIMEOUT");
     }
   }
 }
