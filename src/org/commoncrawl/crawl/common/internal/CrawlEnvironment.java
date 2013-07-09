@@ -77,6 +77,11 @@ public final class CrawlEnvironment extends Environment {
   public static final String   PROPERTY_SEGMENT_OUTPUT_TEMP_DIR        = "crawldbserver.segment.output.temp.dir";
   public static final String   PROPERTY_SEGMENT_LIST_ID                = "crawldbserver.segment.list.id";
 
+  /** other system properties **/
+  public static final String   PROPERTY_SEGMENT_DATA_DIR = "crawlSegmentDir";
+  public static final String   PROPERTY_CONTENT_DATA_DIR = "crawlContentDir";
+
+  
   /** hdfs paths **/
   public static       String   CC_ROOT_DIR                             = "/crawl";
 
@@ -136,6 +141,7 @@ public final class CrawlEnvironment extends Environment {
   private static final String   HDFS_StatsDirectory                     =  "stats";
   
   public static final String   HDFS_CrawlSegmentsFileName               = "crawlSegmentStats";
+  
 
   // lists
   
