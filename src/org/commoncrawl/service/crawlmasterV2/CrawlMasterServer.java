@@ -30,6 +30,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Ranges;
 import com.google.common.collect.Sets;
 import com.google.common.collect.TreeMultimap;
+import com.google.gson.JsonObject;
 
 public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster, Timer.Callback {
 
@@ -40,7 +41,7 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
   Map<Integer,Integer> _ipToInstanceIdMap = Maps.newTreeMap();
   Set<Integer> _instanceIds  = Sets.newTreeSet();
   private static final int WATCHDOG_DELAY = 1000;
-  private static final int MAX_TIME_BETWEEN_HEARTBEATS = 30000;
+  private static final int MAX_TIME_BETWEEN_HEARTBEATS = 120000;
   Timer _watchDogTimer = new Timer(WATCHDOG_DELAY,true,this);
   
   public static final Log LOG = LogFactory.getLog(CrawlMasterServer.class);
@@ -75,6 +76,7 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
       rpcContext.getOutput().setCookie(rpcContext.getInput().getCookie());
       rpcContext.getOutput().setInstanceId(instanceId);
       rpcContext.getOutput().setLastTimestamp(System.currentTimeMillis());
+      rpcContext.getOutput().setPropertiesHash(_properties.toString());
       // stash it away ... 
       _registry.put(instanceId, rpcContext.getOutput());
       // and echo it back to sender ... 
@@ -115,9 +117,6 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
         registrations.remove(rpcContext.getInput());
         registrations.add(rpcContext.getInput());
         
-        for (SlaveRegistration registration : registrations) { 
-          LOG.info("Debug TS:" + registration.getLastTimestamp() + " Cookie:" + registration.getCookie());
-        }
         // set status bit 
         rpcContext.setStatus(Status.Success);
         
@@ -198,9 +197,12 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
     return CrawlEnvironment.CRAWLMASTER_WEBAPP_NAME;
   }
 
+  JsonObject _properties = new JsonObject();
+  
   @Override
   protected boolean parseArguements(String[] argv) {
-
+    
+    
     for(int i=0; i < argv.length;++i) {
       if (argv[i].equalsIgnoreCase("--awsAccessKey")) { 
         if (i+1 < argv.length) { 
@@ -211,6 +213,12 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
         if (i+1 < argv.length) { 
           _s3Secret = argv[++i];
         }
+      }
+      else if (argv[i].equalsIgnoreCase("--segmentDataDir")) {
+        _properties.addProperty(CrawlEnvironment.PROPERTY_SEGMENT_DATA_DIR, argv[++i]);
+      }
+      else if (argv[i].equalsIgnoreCase("--contentDataDir")) {
+        _properties.addProperty(CrawlEnvironment.PROPERTY_CONTENT_DATA_DIR, argv[++i]);
       }
       
     }
@@ -263,7 +271,7 @@ public class CrawlMasterServer extends CommonCrawlServer  implements CrawlMaster
 
   @Override
   public void timerFired(Timer timer) {
-    LOG.info("Heartbeat timer fired.");
+    //LOG.info("Heartbeat timer fired.");
     // ok walk registry expiring stuff ...  
     Iterator<Entry<Integer, SlaveRegistration>> registrations =  _registry.entries().iterator();
     while (registrations.hasNext()) {
