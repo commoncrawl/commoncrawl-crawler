@@ -107,7 +107,6 @@ public class NIOClientTCPSocket extends NIOClientSocket {
     _localAddress = (InetSocketAddress) _channel.socket().getLocalSocketAddress();
     setClientSocketOptions(_channel);
     _listener = socketListener;
-
   }
 
   /**
@@ -130,6 +129,17 @@ public class NIOClientTCPSocket extends NIOClientSocket {
         System.out.println(e);
       }
       _channel = null;
+    }
+  }
+  
+  public void reconnect() throws IOException { 
+    
+    if (_channel != null) {
+      _channel.close();
+      connect(_address);
+    }
+    else { 
+      throw new IOException("Invalid State!");
     }
   }
 
