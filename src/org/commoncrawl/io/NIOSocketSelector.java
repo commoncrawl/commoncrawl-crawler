@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
 import org.commoncrawl.async.EventLoop;
+import org.commoncrawl.util.CCStringUtils;
 
 /**
  * NIOSocketSelector - class used to poll a set of asynchronous NIOSocket
@@ -210,13 +211,11 @@ public class NIOSocketSelector {
               // + " with Exception:"+e);
               theSocket.close();
               disconnectException = e;
-            } catch (RuntimeException e) {
-              LOG.error("Caught Runtime Exception in Connected Event:" + StringUtils.stringifyException(e));
+            } catch (Exception e) {
+              LOG.fatal("Caught Runtime Exception in Connected Event:" + CCStringUtils.stringifyException(e));
               ((NIOClientSocketListener) theSocket.getListener()).Excepted(theSocket, e);
               theSocket.close();
               disconnectException = e;
-              // KILL THE SERVER
-              throw e;
             }
 
             // if we were unable to properly establish the connection, trigger
