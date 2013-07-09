@@ -30,6 +30,9 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
   String        _s3Secret;
   S3InputStream _s3Stream;
   int           _bufferSize;
+  // position of the file cursor 
+  long          _cursorPos = 0;
+  // position of the stream
   long          _streamPos = 0;
   long          _streamLength=-1;
   int           _retryCounts;
@@ -80,11 +83,17 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
   @Override
   public int read() throws IOException {
     IOException lastException = null;
+    if (_streamPos != _cursorPos) { 
+      _streamPos = _cursorPos;
+      restartStream();
+    }
+      
     do {
       try { 
         int bytesRead = _s3Stream.read();
         if (bytesRead != -1) { 
           _streamPos++;
+          _cursorPos++;
         }
         else if (_streamPos != _streamLength) { 
           throw new EOFException();
@@ -110,12 +119,25 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
 
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
+    
+    if (_streamPos != _cursorPos) { 
+      _streamPos = _cursorPos;
+      restartStream();
+    }
+    int bytesRead = streamRead(b, off, len);
+    if (bytesRead != -1) 
+      _cursorPos += bytesRead;
+    return bytesRead;
+  }
+  
+  private int streamRead(byte[] b, int off, int len) throws IOException {
     IOException lastException = null;
     do {
       try { 
         int bytesRead = _s3Stream.read(b, off, len);
         if (bytesRead != -1) {  
           _streamPos += bytesRead;
+          //LOG.info("Stream:" + _uri.toString() + " Pos:" + _streamPos);
         }
         else if (_streamPos != _streamLength) { 
           throw new EOFException();
@@ -149,49 +171,50 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
 
   @Override
   public void seek(long pos) throws IOException {
-    _streamPos = pos;
-    restartStream();
+    _cursorPos = pos;
+    if (_streamPos != _cursorPos) { 
+      _streamPos = _cursorPos;
+      restartStream();
+    }
   }
 
   @Override
   public long getPos() throws IOException {
-    return _streamPos;
+    return _cursorPos;
   }
 
   @Override
   public boolean seekToNewSource(long targetPos) throws IOException {
-    _streamPos = targetPos;
-    restartStream();
+    seek(targetPos);
     return true;
   }
 
   @Override
   public int read(long position, byte[] buffer, int offset, int length)throws IOException {
-    long oldStreamPos = _streamPos;
-    try { 
+    LOG.info("PREAD pos:" + position + " originalPos:" + _streamPos + " URI:" + _uri.toString());
+    if (_streamPos != position) { 
       _streamPos = position;
       restartStream();
-      int bytesRead = read(buffer,offset,length);
-      return bytesRead;
     }
-    finally { 
-      _streamPos = oldStreamPos;
-      restartStream();
-    }
+    return streamRead(buffer,offset,length);
   }
 
   @Override
   public void readFully(long position, byte[] buffer, int offset, int length)
       throws IOException {
-    long oldStreamPos = _streamPos;
-    try { 
+    LOG.info("PREAD pos:" + position + " originalPos:" + _streamPos + " URI:" + _uri.toString());
+    if (_streamPos != position) { 
       _streamPos = position;
       restartStream();
-      IOUtils.readFully(this, buffer, offset, length);
     }
-    finally { 
-      _streamPos = oldStreamPos;
-      restartStream();
+    int toRead = length;
+    while (toRead > 0) {
+      int ret = streamRead(buffer, offset, toRead);
+      if (ret < 0) {
+        throw new IOException("Premature EOF from inputStream");
+      }
+      toRead -= ret;
+      offset += ret;
     }
   }
 
@@ -199,4 +222,6 @@ public class S3SeekableResilientInputStream extends InputStream implements Seeka
   public void readFully(long position, byte[] buffer) throws IOException {
     readFully(position, buffer, 0, buffer.length);
   }
+  
+  
 }
