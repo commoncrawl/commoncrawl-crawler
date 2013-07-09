@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -703,10 +704,12 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       // release output buffer ...
       _outBuf.reset();
       
-      _sslEngine.closeOutbound();
-      _sslEngine = null;
-      _sslNetReadBuffer = null;
-      _sslNetWriteBuffer = null;
+      if (_sslEngine != null) { 
+        _sslEngine.closeOutbound();
+        _sslEngine = null;
+        _sslNetReadBuffer = null;
+        _sslNetWriteBuffer = null;
+      }
       _closed = true;
     }
   }
@@ -817,9 +820,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   }
 
   @Override
-  public void done(NIODNSResolver eventSource, FutureTask<NIODNSQueryResult> task) {
-    // TODO Auto-generated method stub
-
+  public void done(NIODNSResolver eventSource, Future<NIODNSQueryResult> task) {
   }
 
   // @Override
@@ -1108,7 +1109,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     }
     // otherwise delegate to resolver (to figure out ip address)
     else {
-      LOG.info("Sending Host:" + _url.getHost() + " to resolver");
+      //LOG.info("Sending Host:" + _url.getHost() + " to resolver");
       _resolver.resolve(this, _url.getHost(), false, true, _dnsTimeout);
     }
   }
@@ -1432,7 +1433,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       int socketReadAmount = 0; 
       if (_sslNetReadBuffer.remaining() != 0) { 
         socketReadAmount = _socket.read(_sslNetReadBuffer);
-        LOG.info("doSocketRead(SSL) socketRead returned:" + socketReadAmount);
+        //LOG.info("doSocketRead(SSL) socketRead returned:" + socketReadAmount);
       }
 
       // flip the read buffer to enable consumption 
@@ -1444,7 +1445,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       
       switch (engineResult.getStatus()) { 
         case BUFFER_OVERFLOW: {
-          IOException e = new IOException("SSL READ OVERFLOW REPORTED When Buffer Size Was:" + buffer.remaining());
+          IOException e = new IOException("SSL READ OVERFLOW REPORTED When Buffer Size Was:" + buffer.remaining() + " URL:" + _url);
           setState(State.ERROR, e);
           LOG.error(e.toString());
           bytesOut = -1;
@@ -1452,18 +1453,18 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
         break;
         
         case BUFFER_UNDERFLOW: {
-          LOG.info("SSL Engine needs more network bytes. Orig Bytes Available:" + _sslNetReadBuffer.remaining());
+          //LOG.info("SSL Engine needs more network bytes. Orig Bytes Available:" + _sslNetReadBuffer.remaining());
         }
         break;
         
         case OK: { 
-          LOG.info("SSL Engine said OK after unwrap. Bytes Produced:" + engineResult.bytesProduced());
+          //LOG.info("SSL Engine said OK after unwrap. Bytes Produced:" + engineResult.bytesProduced());
           bytesOut = engineResult.bytesProduced();
         }
         break;
         
         case CLOSED: {
-          LOG.info("SSL Engine Indicates CLOSED Connection - bytes produced:" + engineResult.bytesProduced());
+          //LOG.info("SSL Engine Indicates CLOSED Connection - bytes produced:" + engineResult.bytesProduced());
           bytesOut = engineResult.bytesProduced();
         }
         break;
@@ -1484,10 +1485,8 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   // @Override
   public int Readable(NIOClientSocket theSocket) throws IOException {
     
-    LOG.info("Readable Called");
-
     if (!theSocket.isOpen()) {
-      LOG.error("Connection:[" + getId() + "] Readable Called on Closed Socket");
+      LOG.error("Connection:[" + getId() + "] Readable Called on Closed Socket URL:" + _url);
       return -1;
     }
     
@@ -1814,17 +1813,22 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     @Override
     public void run() {
       try {
-        LOG.info("Running SSL Task");
+        //LOG.info("Running SSL Task");
         sslTask.run();
-        LOG.info("Finished Running SSL Task");
+        //LOG.info("Finished Running SSL Task");
       }
       finally { 
         NIOHttpConnection.this._selector._eventLoop.queueAsyncCallback(new Callback() {
           @Override
           public void execute() {
             try {
-              LOG.info("Task Completion Callback calling doSSLHandshake");
-              NIOHttpConnection.this.doSSLHandshake(_socket, false, false,true);
+              if (getState() == State.SSL_HANDSHAKE) { 
+                //LOG.info("Task Completion Callback calling doSSLHandshake");
+                NIOHttpConnection.this.doSSLHandshake(_socket, false, false,true);
+              }
+              else { 
+                LOG.error("SSL Task Completion on Connection in invalid state:" + getState() + " URL:" + _url);
+              }
             } catch (IOException e) {
               LOG.error(CCStringUtils.stringifyException(e));
               NIOHttpConnection.this.setState(State.ERROR, e);
@@ -1841,7 +1845,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
   void writeSSLNetworkBytesToSocket()throws IOException { 
     _sslNetWriteBuffer.flip();
     int bytesWritten = _socket.write(_sslNetWriteBuffer);
-    LOG.info("writeSSLNetworkBytes wrote:" + bytesWritten +" bytes via socket. Remaining:" + _sslNetWriteBuffer.remaining());
+    //LOG.info("writeSSLNetworkBytes wrote:" + bytesWritten +" bytes via socket. Remaining:" + _sslNetWriteBuffer.remaining());
     if (bytesWritten > 0) { 
       if (_sslNetWriteBuffer.remaining() == 0) {
         _sslWritesPending = false;
@@ -1858,12 +1862,12 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     if (taskCompleted)
       _sslTaskPending = false;
     
-    LOG.info("Entering doSSLHandshake");
+    //LOG.info("Entering doSSLHandshake");
     
     if (_sslWritesPending && writable) {
       writeSSLNetworkBytesToSocket();
       if (_sslWritesPending) { 
-        LOG.info("SSL - Still More Bytes To Write");
+        //LOG.info("SSL - Still More Bytes To Write");
         _selector.registerForWrite(theSocket);
         return;
       }
@@ -1872,7 +1876,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     HandshakeStatus handshakeStatus = _sslEngine.getHandshakeStatus();
     
     while (handshakeStatus != null) {
-      LOG.info("Entering doSSLHandshake");
+      //LOG.info("Entering doSSLHandshake");
 
       HandshakeStatus currentHandshakeStatus = handshakeStatus;
       handshakeStatus = null;
@@ -1880,68 +1884,75 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
       switch (currentHandshakeStatus) {
         // need data ... 
         case NEED_UNWRAP: { 
-          LOG.info("SSL - NEED_UNWRAP");  
-                  
+          //LOG.info("SSL - NEED_UNWRAP");  
+            
+          int bytesRead = 0;
           if (readable && _sslNetReadBuffer.remaining() != 0) {
-            int bytesRead = theSocket.read(_sslNetReadBuffer);
-            LOG.info("Socket Read in Handshake UNWRAP returned:" + bytesRead + " bytes");
+            bytesRead = theSocket.read(_sslNetReadBuffer);
+            //LOG.info("Socket Read in Handshake UNWRAP returned:" + bytesRead + " bytes");
             readable = false;
           }
           
-          // dupe the network buffer ... 
-          ByteBuffer slicedNetBuffer = (ByteBuffer) _sslNetReadBuffer.duplicate().flip();
-          
-          if (slicedNetBuffer.remaining() != 0) { 
-            ByteBuffer bufferOut = ByteBuffer.allocate(SSL_MAX_PACKET_SIZE);
-            LOG.info("Calling SSL UNWRAP with BytesAvailable:" + slicedNetBuffer.remaining());
-            SSLEngineResult unwrapResult = _sslEngine.unwrap(slicedNetBuffer,bufferOut);
-            
-            switch (unwrapResult.getStatus()) { 
-              case BUFFER_UNDERFLOW: {
-                LOG.info("SSL UNWRAP Said Underflow");
-                _selector.registerForRead(theSocket);
-              }
-              break;
-                
-              case BUFFER_OVERFLOW: { 
-                IOException exception = new IOException("SSL Buffer Overflow When Max Buffer Size Should have accomodated Packet");
-                setState(State.ERROR, exception);
-                LOG.error(exception.toString());
-              }
-              break;
-              
-              case OK: { 
-                _sslNetReadBuffer.flip();
-                _sslNetReadBuffer.position(_sslNetReadBuffer.position() + unwrapResult.bytesConsumed());
-                _sslNetReadBuffer.compact();
-                LOG.info("SSL Said OK. Bytes Read:"+ unwrapResult.bytesConsumed() + " Remaining:" + _sslNetReadBuffer.position());
-                handshakeStatus = unwrapResult.getHandshakeStatus();
-              }
-              break;
-              
-              case CLOSED: { 
-                IOException exception = new IOException("SSL UNWRAP during Handshake returned CLOSED");
-                setState(State.ERROR, exception);
-                LOG.error(exception.toString());
-              }
-              break;
-            }
-            readable = false;
+          if (bytesRead == -1) { 
+            IOException exception = new IOException("SSL Connection detected premature close - URL:" + _url);
+            setState(State.ERROR, exception);
+            LOG.error(exception);
           }
           else { 
-            _selector.registerForRead(theSocket);
-            break;
+            ByteBuffer slicedNetBuffer = (ByteBuffer) _sslNetReadBuffer.duplicate().flip();
+            
+            if (slicedNetBuffer.remaining() != 0) { 
+              ByteBuffer bufferOut = ByteBuffer.allocate(SSL_MAX_PACKET_SIZE);
+              //LOG.info("Calling SSL UNWRAP with BytesAvailable:" + slicedNetBuffer.remaining());
+              SSLEngineResult unwrapResult = _sslEngine.unwrap(slicedNetBuffer,bufferOut);
+              
+              switch (unwrapResult.getStatus()) { 
+                case BUFFER_UNDERFLOW: {
+                  //LOG.info("SSL UNWRAP Said Underflow");
+                  _selector.registerForRead(theSocket);
+                }
+                break;
+                  
+                case BUFFER_OVERFLOW: { 
+                  IOException exception = new IOException("SSL Buffer Overflow When Max Buffer Size Should have accomodated Packet - URL:" + _url);
+                  setState(State.ERROR, exception);
+                  LOG.error(exception.toString());
+                }
+                break;
+                
+                case OK: { 
+                  _sslNetReadBuffer.flip();
+                  _sslNetReadBuffer.position(_sslNetReadBuffer.position() + unwrapResult.bytesConsumed());
+                  _sslNetReadBuffer.compact();
+                  //LOG.info("SSL Said OK. Bytes Read:"+ unwrapResult.bytesConsumed() + " Remaining:" + _sslNetReadBuffer.position());
+                  handshakeStatus = unwrapResult.getHandshakeStatus();
+                }
+                break;
+                
+                case CLOSED: { 
+                  IOException exception = new IOException("SSL UNWRAP during Handshake returned CLOSED - URL:" + _url);
+                  setState(State.ERROR, exception);
+                  LOG.error(exception.toString());
+                }
+                break;
+              }
+              readable = false;
+            }
+            else { 
+              _selector.registerForRead(theSocket);
+              break;
+            }
           }
         }
         break;
       
         case NEED_WRAP: {
-          LOG.info("SSL - NEEDS_WRAP");
+          //LOG.info("SSL - NEEDS_WRAP");
           SSLEngineResult wrapResult = _sslEngine.wrap(EMPTY_BUFFER,_sslNetWriteBuffer);
           
           switch (wrapResult.getStatus()) {
             case  OK: { 
-              LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
+              //LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
               if (wrapResult.bytesProduced() >0) { 
                 _sslWritesPending = true;
               }
@@ -1957,35 +1968,35 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
             break;
             
             default: { 
-              LOG.info("SSL - wrap said:" + wrapResult.getStatus());
+              //LOG.info("SSL - wrap said:" + wrapResult.getStatus());
             }
           }
         }
         break;
       
         case NEED_TASK: {
-          LOG.info("SSL Needs Task");
+          //LOG.info("SSL Needs Task");
           final Runnable task = _sslEngine.getDelegatedTask();
           if (task == null) { 
-            IOException e = new IOException("Null Delegated Task during SSL Handshake!");
+            IOException e = new IOException("Null Delegated Task during SSL Handshake! - URL:" + _url);
             setState(State.ERROR, e);
             LOG.error(e.toString());
             return;
           }
-          LOG.info("SSL - Scheduling Task");
+          //LOG.info("SSL - Scheduling Task");
           _sslExecutorService.execute(new SSLTaskExecutor(task));
         }
         break;
       
         case FINISHED: { 
-          LOG.info("SSL - Handshake FINISHED");
+          //LOG.info("SSL - Handshake FINISHED");
           setState(State.SENDING_REQUEST, null);
           _selector.registerForWrite(theSocket);
         }
         break;
       
         case NOT_HANDSHAKING: { 
-          LOG.info("NOT IN HANDSHAKE STATUS!");
+          //LOG.info("NOT IN HANDSHAKE STATUS!");
           IOException e = new IOException("Invalid Call to Handshake");
           setState(State.ERROR, e);
         }
@@ -2005,7 +2016,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
         
         switch (wrapResult.getStatus()) {
           case  OK: { 
-            LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
+            //LOG.info("SSL - wrap said OK:" + wrapResult.bytesProduced() +" bytes");
             if (wrapResult.bytesProduced() >0) { 
               _sslWritesPending = true;
             }
@@ -2015,23 +2026,22 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
             if (_sslWritesPending) { 
               _selector.registerForWrite(_socket);
             }
-            LOG.info("doSocketWrite(SSL) returning:" + wrapResult.bytesConsumed());
+            //LOG.info("doSocketWrite(SSL) returning:" + wrapResult.bytesConsumed());
             return wrapResult.bytesConsumed();
           }
           
           default: { 
-            LOG.info("SSL - wrap said:" + wrapResult.getStatus());
+            //LOG.info("SSL - wrap said:" + wrapResult.getStatus());
           }
         }
       }
-      LOG.info("SSL doSocketWrite - returned zero");
+      //LOG.info("SSL doSocketWrite - returned zero");
       return 0;
     }
   }
   
   // @Override
   public void Writeable(NIOClientSocket theSocket) throws IOException {
-    LOG.info("Writeable Called");
     if (!theSocket.isOpen()) {
       return;
     }
@@ -2044,7 +2054,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     if (isHTTPs() && _sslWritesPending) {
       writeSSLNetworkBytesToSocket();
       if (_sslWritesPending) { 
-        LOG.info("SSL - Still More Bytes To Write");
+        //LOG.info("SSL - Still More Bytes To Write");
         _selector.registerForWrite(_socket);
         return;
       }
@@ -2330,7 +2340,7 @@ public final class NIOHttpConnection implements NIOClientSocketListener, NIODNSQ
     resolverThreadPool.shutdown();
     NIOHttpConnection.shutdownThreadPools();
     
-    LOG.info("Done");
+    //LOG.info("Done");
   }
   
 }
