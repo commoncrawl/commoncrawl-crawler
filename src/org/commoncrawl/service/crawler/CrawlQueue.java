@@ -222,8 +222,9 @@ public final class CrawlQueue {
     public Protocol getProtocol() { return _protocol; }
 
     /** identify the protocol associated with the given host ... **/
-    public static Protocol identifyProtocol(String  url) { 
-      if (url.startsWith("http://") || url.startsWith("HTTP://")) { 
+    public static Protocol identifyProtocol(String  url) {
+      if (url.toLowerCase().startsWith("http://") || url.startsWith("HTTP://")
+          || url.toLowerCase().startsWith("https://") || url.startsWith("HTTPS://")) { 
         return Protocol.HTTP;
       }
       return Protocol.UNKNOWN;
