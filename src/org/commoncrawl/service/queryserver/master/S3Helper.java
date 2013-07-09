@@ -93,19 +93,19 @@ public class S3Helper {
       }
 
       @Override
-      public void downloadComplete(int itemId, String itemKey) {
+      public void downloadComplete(NIOHttpConnection connection,int itemId, String itemKey) {
         LOG.info("S3 Download Complete for item:" + itemKey);
         downloadCompleteSemaphore.release();
       }
 
       @Override
-      public void downloadFailed(int itemId, String itemKey, String errorCode) {
+      public void downloadFailed(NIOHttpConnection connection,int itemId, String itemKey, String errorCode) {
         LOG.info("S3 Download Failed for item:" + itemKey);
         downloadCompleteSemaphore.release();
       }
 
       @Override
-      public boolean downloadStarting(int itemId, String itemKey,long contentLength) {
+      public boolean downloadStarting(NIOHttpConnection connection,int itemId, String itemKey,long contentLength) {
         LOG.info("ContentQuery DownloadStarting for Item:" + itemKey + " contentLength:" + contentLength);
         return true;
       } 
