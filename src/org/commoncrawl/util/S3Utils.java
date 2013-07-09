@@ -151,19 +151,21 @@ public class S3Utils {
       buf.append(key);
     }
 
-    String[] parameterNames = pathArgs.keySet().toArray(new String[pathArgs.keySet().size()]);
-    Arrays.sort(parameterNames);
-    char separator = '?';
-
-    for (String parameterName : parameterNames) {
-      if (SIGNED_PARAMETERS.contains(parameterName)) { 
-        buf.append(separator);
-        buf.append(parameterName);
-        String parameterValue = pathArgs.get(parameterName);
-        if (parameterValue != null) {
-            buf.append("=").append(parameterValue);
+    if (pathArgs != null) { 
+      String[] parameterNames = pathArgs.keySet().toArray(new String[pathArgs.keySet().size()]);
+      Arrays.sort(parameterNames);
+      char separator = '?';
+  
+      for (String parameterName : parameterNames) {
+        if (SIGNED_PARAMETERS.contains(parameterName)) { 
+          buf.append(separator);
+          buf.append(parameterName);
+          String parameterValue = pathArgs.get(parameterName);
+          if (parameterValue != null) {
+              buf.append("=").append(parameterValue);
+          }
+          separator = '&';
         }
-        separator = '&';
       }
     }
 
