@@ -37,7 +37,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.Callable;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -1615,7 +1615,7 @@ public final class CrawlerEngine implements SegmentLoader.CancelOperationCallbac
           public void DNSResultsAvailable() {}
 
           @Override
-          public void done(NIODNSResolver source,FutureTask<NIODNSQueryResult> task) {
+          public void done(NIODNSResolver source,Future<NIODNSQueryResult> task) {
           }
 
         };
@@ -2303,7 +2303,7 @@ public final class CrawlerEngine implements SegmentLoader.CancelOperationCallbac
         public void DNSResultsAvailable() {}
 
         @Override
-        public void done(NIODNSResolver source,FutureTask<NIODNSQueryResult> task) {
+        public void done(NIODNSResolver source,Future<NIODNSQueryResult> task) {
         }
       };
       try {
