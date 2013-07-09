@@ -30,7 +30,7 @@ import java.util.Date;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -838,7 +838,7 @@ public class ProxyServer extends CrawlerServer implements CrawlQueueLoader {
       }
 
       @Override
-      public void done(NIODNSResolver source, FutureTask<NIODNSQueryResult> task) {
+      public void done(NIODNSResolver source, Future<NIODNSQueryResult> task) {
       }
     };
 
