@@ -76,13 +76,14 @@ public class S3Downloader implements NIOHttpConnection.Listener {
   private int _maxParallelStreams = DEFAULT_MAX_PARALLEL_STREAMS;
   private BandwidthUtils.BandwidthHistory _downloaderStats = new BandwidthUtils.BandwidthHistory();
   private boolean _isRequesterPays = false;
+  private boolean _isActive = false;
   
 
   public static interface Callback { 
-    public boolean downloadStarting(int itemId,String itemKey,long contentLength);
+    public boolean downloadStarting(NIOHttpConnection connection,int itemId,String itemKey,long contentLength);
     public boolean contentAvailable(NIOHttpConnection theConnection,int itemId,String itemKey,NIOBufferList contentBuffer);
-    public void downloadFailed(int itemId,String itemKey,String errorCode);
-    public void downloadComplete(int itemId,String itemKey);
+    public void downloadFailed(NIOHttpConnection connection,int itemId,String itemKey,String errorCode);
+    public void downloadComplete(NIOHttpConnection connection,int itemId,String itemKey);
   }
   
   public S3Downloader(String s3BucketName,String s3AccessId,String s3SecretKey, boolean isRequesterPays)throws IOException {
@@ -108,6 +109,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
   public void initialize(Callback listener)throws IOException { 
     initialize(listener,null);
   }
+  
   public void initialize(Callback listener,EventLoop externalEventLoop) throws IOException { 
     
     if (externalEventLoop == null) { 
@@ -130,68 +132,77 @@ public class S3Downloader implements NIOHttpConnection.Listener {
     if (_ownsEventLoop) { 
       _eventLoop.start();
     }
+    _isActive = true;
   }
   
+  
   public void shutdown() { 
-
-    if (_callback == null) { 
-      throw new RuntimeException("Invalid State - stop called on already inactive downloader");
-    }
-    
-    _freezeDownloads = true;
-    
-    Thread eventThread = (_ownsEventLoop) ? _eventLoop.getEventThread() : null;
-    
-    final Semaphore shutdownSemaphore = new Semaphore(0);
-    
-    _eventLoop.setTimer(new Timer(1,false,new Timer.Callback() {
-
-      // shutdown within the context of the async thread ... 
-      public void timerFired(Timer timer) {
+    if (_isActive) {
       
-        try { 
-          
-          // fail any active connections 
-          for (NIOHttpConnection connection : Lists.newArrayList(_activeConnections)) { 
-            S3DownloadItem item = (S3DownloadItem) connection.getContext();
-            if (item != null) { 
-              failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,connection, false);
+      if (_callback == null) { 
+        throw new RuntimeException("Invalid State - stop called on already inactive downloader");
+      }
+      
+      _freezeDownloads = true;
+      
+      Thread eventThread = _eventLoop.getEventThread();
+  
+      
+      final Semaphore shutdownSemaphore = new Semaphore(0);
+      
+      _eventLoop.setTimer(new Timer(1,false,new Timer.Callback() {
+  
+        // shutdown within the context of the async thread ... 
+        public void timerFired(Timer timer) {
+        
+          try { 
+            
+            // fail any active connections 
+            for (NIOHttpConnection connection : Lists.newArrayList(_activeConnections)) { 
+              S3DownloadItem item = (S3DownloadItem) connection.getContext();
+              if (item != null) { 
+                failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,connection, false);
+              }
             }
+            
+            _activeConnections.clear();
+            
+            // next, fail all queued items 
+            for (S3DownloadItem item : _queuedItems) { 
+              failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,null, false);
+            }
+            _queuedItems.clear();
+            _freezeDownloads = false;
+            _callback = null;
+            
+            if (_ownsEventLoop) { 
+              System.out.println("Stopping Event Loop");
+              _eventLoop.stop();
+            }
+            _eventLoop = null;
+            _ownsEventLoop = false;
           }
-          
-          _activeConnections.clear();
-          
-          // next, fail all queued items 
-          for (S3DownloadItem item : _queuedItems) { 
-            failDownload(item, NIOHttpConnection.ErrorType.UNKNOWN,null, false);
+          finally { 
+            //System.out.println("Releasing Semaphore");
+            shutdownSemaphore.release();
           }
-          _queuedItems.clear();
-          _freezeDownloads = false;
-          _callback = null;
+        }  
+      }));
+      
+      if (Thread.currentThread() != eventThread) { 
+        //System.out.println("Acquiring Shutdown Semaphore");
+        shutdownSemaphore.acquireUninterruptibly();
+        //System.out.println("Acquired Shutdown Semaphore");
+        
+        try {
           
           if (_ownsEventLoop) { 
-            System.out.println("Stopping Event Loop");
-            _eventLoop.stop();
+            eventThread.join();
           }
-          _eventLoop = null;
-          _ownsEventLoop = false;
+        } catch (InterruptedException e) {
         }
-        finally { 
-          //System.out.println("Releasing Semaphore");
-          shutdownSemaphore.release();
-        }
-      }  
-    }));
-    //System.out.println("Acquiring Shutdown Semaphore");
-    shutdownSemaphore.acquireUninterruptibly();
-    //System.out.println("Acquired Shutdown Semaphore");
-    
-    try {
-      
-      if (eventThread != null) { 
-        eventThread.join();
       }
-    } catch (InterruptedException e) {
+      _isActive = false;
     }
   }
   
@@ -387,7 +398,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       else { 
         LOG.error("Download Failed for Item:" + item.getKey());
         if (_callback != null) { 
-          _callback.downloadFailed(item.getId(),item.getKey(),"Failure Reason:" + errorType.toString() + " ResultCode:" + resultCode);
+          _callback.downloadFailed(theConnection,item.getId(),item.getKey(),"Failure Reason:" + errorType.toString() + " ResultCode:" + resultCode);
         }
       }
     }
@@ -400,7 +411,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
 
     if (item != null) { 
       if (_callback != null) { 
-        _callback.downloadComplete(item.getId(),item.getKey());
+        _callback.downloadComplete(theConnection,item.getId(),item.getKey());
       }
     }
     resetConnection(theConnection);
@@ -471,7 +482,7 @@ public class S3Downloader implements NIOHttpConnection.Listener {
       if (continueDownloading) {
         if (!isContinuation) { 
           if (_callback != null) { 
-            continueDownloading = _callback.downloadStarting(item.getId(),item.getKey(), item.getContentLength());
+            continueDownloading = _callback.downloadStarting(theConnection,item.getId(),item.getKey(), item.getContentLength());
           }
         }
       }
