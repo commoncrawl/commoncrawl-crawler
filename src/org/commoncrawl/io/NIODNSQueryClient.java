@@ -19,6 +19,7 @@
 package org.commoncrawl.io;
 
 import java.net.InetAddress;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 
 /**
@@ -53,6 +54,6 @@ public interface NIODNSQueryClient {
   void DNSResultsAvailable();
 
   /** task competed **/
-  void done(NIODNSResolver source, FutureTask<NIODNSQueryResult> task);
+  void done(NIODNSResolver source, Future<NIODNSQueryResult> future);
 
 }

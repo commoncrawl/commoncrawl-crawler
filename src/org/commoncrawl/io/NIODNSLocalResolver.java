@@ -21,8 +21,6 @@ package org.commoncrawl.io;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Date;
-import java.util.LinkedList;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -40,11 +38,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
 import org.commoncrawl.async.EventLoop;
 import org.commoncrawl.async.Timer;
-import org.commoncrawl.common.Environment;
 import org.commoncrawl.io.NIODNSCache.Node;
 import org.commoncrawl.io.NIODNSQueryClient.Status;
+import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.IPAddressUtils;
-import org.commoncrawl.util.IntrusiveList;
+import org.commoncrawl.util.IntrusiveList.IntrusiveListElement;
 import org.xbill.DNS.ARecord;
 import org.xbill.DNS.CNAMERecord;
 import org.xbill.DNS.DClass;
@@ -56,7 +54,7 @@ import org.xbill.DNS.Record;
 import org.xbill.DNS.ResolverConfig;
 import org.xbill.DNS.ReverseMap;
 import org.xbill.DNS.Section;
-import org.xbill.DNS.TCPClient;
+import org.xbill.DNS.SimpleResolver;
 import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 import org.xbill.DNS.WireParseException;
@@ -72,11 +70,28 @@ import org.xbill.DNS.WireParseException;
  * 
  */
 
-public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElement<NIODNSLocalResolver> implements
-    NIODNSResolver {
+public final class NIODNSLocalResolver extends NIODNSResolver {
+
+  
+  /** cache hit counter **/
+  private long               _cacheHits                      = 0;
+
+  private long               _cacheMisses                    = 0;
+
+  private long               _queryCount                     = 0;
+
+
+  /** logging **/
+  static final Log           LOG                             = LogFactory
+                                                                 .getLog(NIODNSLocalResolver.class);
 
   /** custom completion service **/
-  public class DNSExecutorCompletionService implements CompletionService<NIODNSQueryResult> {
+  public class DNSExecutorCompletionService implements
+      CompletionService<NIODNSQueryResult> {
+
+    private final Executor                              executor;
+    private final BlockingQueue<Future<NIODNSQueryResult>> completionQueue;
+    private final EventLoop                             eventLoop;
 
     /**
      * FutureTask extension to enqueue upon completion
@@ -90,7 +105,6 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
         super(t, r);
       }
 
-      @Override
       protected void done() {
 
         // completionQueue.add(this);
@@ -119,18 +133,23 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
                 if (client != null) {
 
                   if (qResult.success()) {
-                    client.AddressResolutionSuccess(qResult._source, qResult.getHostName(), qResult.getCName(), qResult
+                    client.AddressResolutionSuccess(qResult._source, qResult
+                        .getHostName(), qResult.getCName(), qResult
                         .getAddress(), qResult.getTTL());
                   } else {
-                    client.AddressResolutionFailure(qResult._source, qResult.getHostName(), qResult.getStatus(),
-                        qResult.getErrorDescription());
+                    client.AddressResolutionFailure(qResult._source, qResult
+                        .getHostName(), qResult.getStatus(), qResult
+                        .getErrorDescription());
                   }
                   client.done(qResult._source, QueueingFuture.this);
                 } else {
                   if (qResult.getHostName() != null)
-                    LOG.error("Client no Longer Exists for DNS Resolution Request:" + qResult.getHostName());
+                    LOG
+                        .error("Client no Longer Exists for DNS Resolution Request:"
+                            + qResult.getHostName());
                   else
-                    LOG.error("Client no Longer Exists for DNS Resolution Request");
+                    LOG
+                        .error("Client no Longer Exists for DNS Resolution Request");
                 }
               }
             } else {
@@ -141,11 +160,6 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
         }));
       }
     }
-
-    private final Executor executor;
-    private final BlockingQueue<Future<NIODNSQueryResult>> completionQueue;
-
-    private final EventLoop eventLoop;
 
     /**
      * Creates an ExecutorCompletionService using the supplied executor for base
@@ -162,14 +176,6 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       this.executor = executor;
       this.completionQueue = new LinkedBlockingQueue<Future<NIODNSQueryResult>>();
       this.eventLoop = eventLoop;
-    }
-
-    public Future<NIODNSQueryResult> poll() {
-      return completionQueue.poll();
-    }
-
-    public Future<NIODNSQueryResult> poll(long timeout, TimeUnit unit) throws InterruptedException {
-      return completionQueue.poll(timeout, unit);
     }
 
     public Future<NIODNSQueryResult> submit(Callable<NIODNSQueryResult> task) {
@@ -192,81 +198,127 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
       return completionQueue.take();
     }
 
+    public Future<NIODNSQueryResult> poll() {
+      return completionQueue.poll();
+    }
+
+    public Future<NIODNSQueryResult> poll(long timeout, TimeUnit unit)
+        throws InterruptedException {
+      return completionQueue.poll(timeout, unit);
+    }
+
+  }
+
+  /** EventLoop under which this resolver is operating **/
+  private EventLoop                    _eventLoop;
+
+  /** thread pool */
+  private ExecutorService              _threadPool                    = null;
+  /** high priority requests thread pool **/
+  private ExecutorService              _highPriorityThreadPool        = null;
+
+  /** completion service - for supporting psuedo async dns query model */
+  private DNSExecutorCompletionService _completionService;
+  /** high priority completion service */
+  private DNSExecutorCompletionService _highPriorityCompletionService = null;
+
+  /** use tcp (vs. udp) for dns queries **/
+  private boolean                      _useTCP                        = true;
+
+  /** dns server address **/
+  private String                       _dnsServerAddress              = "127.0.0.1";
+
+  /** context object **/
+  private Object                       _context;
+
+  /** NIODNSResolver Constructor **/
+  public NIODNSLocalResolver(EventLoop eventLoop,
+      ExecutorService dnsThreadPool, boolean useTCP) {
+    lookupNameServer();
+    _eventLoop = eventLoop;
+    _threadPool = dnsThreadPool;
+    _completionService = new DNSExecutorCompletionService(_eventLoop,
+        _threadPool);
+    _useTCP = useTCP;
+    _dnsCache.enableIPAddressTracking();
   }
 
   /**
-   * DNSQuery - internal class used to encapsulate an active DNS Query Request
-   * 
-   */
-  private static class DNSQuery implements Callable<NIODNSQueryResult> {
-
-    private String _hostName = null;
-    private NIODNSQueryClient _client;
-    private int _timeoutValue;
-    private NIODNSLocalResolver _resolver;
-    private int _flags;
-
-    public static final int Flag_SkipCache = 1 << 0;
-    public static final int Flag_UseTCP = 1 << 1;
-    public static final int Flag_HighPriority = 1 << 2;
-
-    /**
-     * constructor
-     * 
-     * @param client
-     *          - query client callback interface
-     * @param hostName
-     *          - host name to query for
-     */
-    public DNSQuery(NIODNSQueryClient client, NIODNSLocalResolver resolver, String hostName, int flags, int timeoutValue) {
-
-      _hostName = hostName;
-      _client = client;
-      _flags = flags;
-      _timeoutValue = timeoutValue;
-      _resolver = resolver;
-    }
-
-    /**
-     * 
-     * overloaded from Callbale - primary work routine - called from worker
-     * thread
-     * 
-     */
-    public NIODNSQueryResult call() throws Exception {
-
-      NIODNSQueryResult result = null;
-
-      try {
-        result = _resolver.doDNSQuery(_client, _hostName, (_flags & DNSQuery.Flag_UseTCP) != 0,
-            (_flags & DNSQuery.Flag_SkipCache) != 0, _timeoutValue);
-      } catch (Exception e) {
-        LOG.error(StringUtils.stringifyException(e));
-        throw e;
-      }
-      return result;
-    }
-
+   * NIODNSResolver Constructor - This version takes a server address as a
+   * parameter
+   **/
+  public NIODNSLocalResolver(String serverAddress, EventLoop eventLoop,
+      ExecutorService dnsThreadPool, ExecutorService highPriorityThreadPool,
+      boolean useTCP) {
+    _dnsServerAddress = serverAddress;
+    _eventLoop = eventLoop;
+    _threadPool = dnsThreadPool;
+    _highPriorityThreadPool = highPriorityThreadPool;
+    _completionService = new DNSExecutorCompletionService(_eventLoop,
+        _threadPool);
+    _highPriorityCompletionService = new DNSExecutorCompletionService(
+        _eventLoop, _highPriorityThreadPool);
+    _useTCP = useTCP;
+    _dnsCache.enableIPAddressTracking();
   }
 
-  /** dns query logger */
-  public interface Logger {
-    public void logDNSException(String hostName, String exceptionDesc);
-
-    public void logDNSFailure(String hostName, String errorCode);
-
-    public void logDNSQuery(String hostName, InetAddress address, long ttl, String opCName);
+  public int getQueuedItemCount() {
+    if (_threadPool != null) {
+      return ((ThreadPoolExecutor) _threadPool).getQueue().size();
+    }
+    return 0;
   }
 
-  /** ReverseNIODNSQueryResult - the end result of a DNS Query operation */
-  public static class ReverseNIODNSQueryResult {
+  @Override
+  public String toString() {
+    return getClass().getName()+":"+_dnsServerAddress;
+  }
+
+  public Object getContextObject() {
+    return _context;
+  }
+
+  public void setContextObject(Object obj) {
+    _context = obj;
+  }
+
+  /** lookup default nameserver **/
+  private final void lookupNameServer() {
+    String server = ResolverConfig.getCurrentConfig().server();
+    if (server != null) {
+      LOG.info("Using NameServer:" + server);
+      _dnsServerAddress = server;
+    } else {
+      LOG.info("No NameServer Found.Using:" + _dnsServerAddress);
+    }
+  }
+
+  /** set dns server address **/
+  public void setDNSServerAddress(String serverAddressInDottedDecimal) {
+    _dnsServerAddress = serverAddressInDottedDecimal;
+  }
+
+  public long getQueryCount() {
+    return _queryCount;
+  }
+
+  public long getCacheHitCount() {
+    return _cacheHits;
+  }
+
+  public long getCacheMissCount() {
+    return _cacheMisses;
+  }
+
+  /** ReverseDNSQueryResult - the end result of a DNS Query operation */
+  public static class ReverseDNSQueryResult {
 
     /** SUCCESS or FAILURE */
-    private Status _status = Status.RESOLVER_FAILURE;
+    private Status         _status    = Status.RESOLVER_FAILURE;
     /** error description **/
-    private String _errorDesc = "";
+    private String         _errorDesc = "";
     /** the target host name */
-    private InetAddress _targetAddress;
+    private InetAddress    _targetAddress;
     /** the returned PTR Records */
     private Vector<String> _hostNames = new Vector<String>();
 
@@ -281,203 +333,136 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
      * @param hostName
      *          - host name associated with this query
      */
-    ReverseNIODNSQueryResult(InetAddress address) {
+    ReverseDNSQueryResult(InetAddress address) {
 
       _targetAddress = address;
-    }
-
-    public String getErrorDescription() {
-      return _errorDesc;
-    }
-
-    public final Vector<String> getHostNames() {
-      return _hostNames;
-    }
-
-    public final Status getStatus() {
-      return _status;
-    }
-
-    public final InetAddress getTargetAddress() {
-      return _targetAddress;
-    }
-
-    void setErrorDesc(String errorDesc) {
-      _errorDesc = errorDesc;
     }
 
     public final void setStatus(Status theStatus) {
       _status = theStatus;
     }
 
+    public final Status getStatus() {
+      return _status;
+    }
+
     public final boolean success() {
       return _status == Status.SUCCESS;
     }
 
+    public String getErrorDescription() {
+      return _errorDesc;
+    }
+
+    void setErrorDesc(String errorDesc) {
+      _errorDesc = errorDesc;
+    }
+
+    public final InetAddress getTargetAddress() {
+      return _targetAddress;
+    }
+
+    public final Vector<String> getHostNames() {
+      return _hostNames;
+    }
+
+  };
+
+  public ReverseDNSQueryResult doReverseDNSQuery(InetAddress address,
+      boolean useTCP, int timeoutValue) {
+
+    // Ask dnsjava for the inetaddress. Should be in its cache.
+    Message response = null;
+    Exception resolverException = null;
+
+    // check cache first ...
+    ReverseDNSQueryResult result = new ReverseDNSQueryResult(address);
+
+    if (true) {
+
+      try {
+
+        // allocate a simple resolver object ...
+        SimpleResolver resolver = new SimpleResolver(_dnsServerAddress);
+
+        // use tcp if requested ...
+        if (useTCP)
+          resolver.setTCP(true);
+
+        // set the timeout ...
+        resolver.setTimeout(timeoutValue);
+
+        // create appropriate data structures ...
+
+        Name name = ReverseMap.fromAddress(address);
+        Record rec = Record.newRecord(name, Type.PTR, DClass.IN);
+        Message query = Message.newQuery(rec);
+
+        // send it off ...
+        try {
+          response = resolver.send(query);
+        } catch (Exception e) {
+          LOG.error("Reverse DNS Resolution for:" + address
+              + " threw IOException:" + StringUtils.stringifyException(e));
+          resolverException = e;
+        }
+
+        if (response != null && response.getRcode() == Rcode.NOERROR) {
+
+          // get answer
+          Record records[] = response.getSectionArray(Section.ANSWER);
+
+          if (records != null) {
+
+            // walk records ...
+            for (Record record : records) {
+
+              // store CName for later use ...
+              if (record.getType() == Type.PTR) {
+                result.getHostNames().add(
+                    ((PTRRecord) record).getTarget().toString());
+              }
+            }
+          }
+        }
+      } catch (UnknownHostException e) {
+        resolverException = e;
+      }
+
+      if (response == null) {
+        result.setStatus(Status.RESOLVER_FAILURE);
+        LOG
+            .error("Critical Reverse DNS Failure for host:"
+                + address.toString());
+        if (resolverException != null) {
+          LOG.error(CCStringUtils.stringifyException(resolverException));
+          result.setErrorDesc(resolverException.toString());
+        }
+      } else if (response.getRcode() != Rcode.NOERROR) {
+        result.setStatus(Status.SERVER_FAILURE);
+        result.setErrorDesc(Rcode.string(response.getRcode()));
+      } else if (response.getRcode() == Rcode.NOERROR) {
+
+        if (result.getHostNames().size() != 0) {
+          result.setStatus(Status.SUCCESS);
+        } else {
+          result.setStatus(Status.SERVER_FAILURE);
+          result.setErrorDesc("NO PTR RECORDS FOUND");
+        }
+      }
+    }
+    // return result ... will be added to completion queue (to be retrieved via
+    // poll method)...
+    return result;
   }
-
-  public static final int MIN_TTL_VALUE = 60 * 20 * 1000;
-
-  /** cache **/
-  private static NIODNSCache _dnsCache = new NIODNSCache();
-
-  /** inverse cache **/
-  private static NIODNSCache _badHostCache = new NIODNSCache();
-
-  /** cache hit counter **/
-  private long _cacheHits = 0;
-
-  private long _cacheMisses = 0;
-  private long _queryCount = 0;
-
-  private static Logger _logger = null;
-
-  public static final int SERVER_FAIL_BAD_HOST_LIFETIME = 3600 * 1000; // ONE
-                                                                       // HOUR
-                                                                       // BY
-                                                                       // DEFAULT
-
-  public static final int NXDOMAIN_FAIL_BAD_HOST_LIFETIME = 5 * 60 * 1000; // 5
-                                                                           // minutes
-
-  /** logging **/
-  static final Log LOG = LogFactory.getLog(NIODNSLocalResolver.class);
-  /** EventLoop under which this resolver is operating **/
-  private EventLoop _eventLoop;
-
-  /** thread pool */
-  private ExecutorService _threadPool = null;
-  /** high priority requests thread pool **/
-  private ExecutorService _highPriorityThreadPool = null;
-
-  /** completion service - for supporting psuedo async dns query model */
-  private DNSExecutorCompletionService _completionService;
-
-  /** high priority completion service */
-  private DNSExecutorCompletionService _highPriorityCompletionService = null;
-
-  /** use tcp (vs. udp) for dns queries **/
-  private boolean _useTCP = true;
-
-  /** dns server address **/
-  private String _dnsServerAddress = "127.0.0.1";
-
-  /** context object **/
-  private Object _context;
-
-  /**
-   * moved here from simple resolver implementation to allow support for
-   * multiple 'resolver' objects (bound to distinct dns servers)
-   **/
-  LinkedList<TCPClient> _recycledClients = new LinkedList<TCPClient>();
-
-  private static long TTL_DELTA_MIN = 1000 * 60 * 10; // min ttl lifetime is 10
-                                                      // minutes for us
 
   private static final int MAX_DNS_RETRIES = 1;
 
-  public static NIODNSQueryResult checkCache(NIODNSQueryClient client, String hostName) throws UnknownHostException {
+  public NIODNSQueryResult doDNSQuery(NIODNSQueryClient client, String hostName,
+      boolean useTCP, boolean noCache, int timeoutValue) {
 
-    NIODNSCache.DNSResult result = _dnsCache.getIPAddressForHost(hostName);
-
-    if (result != null) {
-
-      // get delta between time to live and now ...
-      long ttlDelta = result.getTTL() - System.currentTimeMillis();
-
-      // if theoretically this ip address has expired
-      if (ttlDelta < 0) {
-        if (Math.abs(ttlDelta) > TTL_DELTA_MIN) {
-          return null;
-        }
-      }
-
-      /*
-       * if (Environment.detailLogEnabled()) {
-       * LOG.info("Cache HIT for host:"+hostName
-       * +" ip:"+IPAddressUtils.IntegerToIPAddressString
-       * (result.getIPAddress())); }
-       */
-
-      NIODNSQueryResult queryResult = new NIODNSQueryResult(null, client, hostName);
-
-      queryResult.setAddress(IPAddressUtils.IntegerToInetAddress(result.getIPAddress()));
-      queryResult.setCName(result.getCannonicalName());
-      queryResult.setTTL(result.getTTL());
-      queryResult.setStatus(Status.SUCCESS);
-
-      return queryResult;
-    }
-
-    // check bad host cache ...
-    Node resolvedNode = _badHostCache.findNode(hostName);
-
-    if (resolvedNode != null) {
-      if (Environment.detailLogEnabled())
-        LOG.info("Found in Bad Host Cache:" + hostName + " ttl:" + new Date(resolvedNode.getTimeToLive()));
-    }
-    // IFF found and the bad node has not expired ...
-    if (resolvedNode != null && resolvedNode.getTimeToLive() >= System.currentTimeMillis()) {
-
-      if (Environment.detailLogEnabled())
-        LOG.info("Host:" + hostName + " Identified as Bad Host via Cache");
-
-      NIODNSQueryResult queryResult = new NIODNSQueryResult(null, client, hostName);
-
-      queryResult.setStatus(Status.SERVER_FAILURE);
-      queryResult.setErrorDesc("Failed via Bad Host Cache");
-
-      return queryResult;
-    }
-
-    return null;
-  }
-
-  public static NIODNSCache getBadHostCache() {
-    return _badHostCache;
-  }
-
-  public static NIODNSCache getDNSCache() {
-    return _dnsCache;
-  }
-
-  public static Logger getLogger() {
-    return _logger;
-  }
-
-  public static void setLogger(Logger logger) {
-    _logger = logger;
-  }
-
-  /** NIODNSResolver Constructor **/
-  public NIODNSLocalResolver(EventLoop eventLoop, ExecutorService dnsThreadPool, boolean useTCP) {
-    lookupNameServer();
-    _eventLoop = eventLoop;
-    _threadPool = dnsThreadPool;
-    _completionService = new DNSExecutorCompletionService(_eventLoop, _threadPool);
-    _useTCP = useTCP;
-    _dnsCache.enableIPAddressTracking();
-  }
-
-  /**
-   * NIODNSResolver Constructor - This version takes a server address as a
-   * parameter
-   **/
-  public NIODNSLocalResolver(String serverAddress, EventLoop eventLoop, ExecutorService dnsThreadPool,
-      ExecutorService highPriorityThreadPool, boolean useTCP) {
-    _dnsServerAddress = serverAddress;
-    _eventLoop = eventLoop;
-    _threadPool = dnsThreadPool;
-    _highPriorityThreadPool = highPriorityThreadPool;
-    _completionService = new DNSExecutorCompletionService(_eventLoop, _threadPool);
-    _highPriorityCompletionService = new DNSExecutorCompletionService(_eventLoop, _highPriorityThreadPool);
-    _useTCP = useTCP;
-    _dnsCache.enableIPAddressTracking();
-  }
-
-  public NIODNSQueryResult doDNSQuery(NIODNSQueryClient client, String hostName, boolean useTCP, boolean noCache,
-      int timeoutValue) {
-
+    useTCP = false;
+    
     // check cache first ...
     NIODNSQueryResult result = null;
     int retryCount = 0;
@@ -517,8 +502,9 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
 
         try {
 
+          SimpleResolver resolver = new SimpleResolver(_dnsServerAddress);
           // allocate a simple resolver object ...
-          NIODNSSimpleResolverImpl resolver = new NIODNSSimpleResolverImpl(this, _dnsServerAddress);
+          //NIODNSSimpleResolverImpl resolver = new NIODNSSimpleResolverImpl(this, _dnsServerAddress);
 
           // use tcp if requested ...
           if (useTCP)
@@ -537,7 +523,8 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
             response = resolver.send(query);
           } catch (IOException e) {
             if (_logger != null)
-              _logger.logDNSException(hostName, StringUtils.stringifyException(e));
+              _logger.logDNSException(hostName, StringUtils
+                  .stringifyException(e));
 
             resolverException = e;
             if (retryCount++ != MAX_DNS_RETRIES) {
@@ -571,9 +558,10 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
                 // otherwise look for A record
                 else if (record.getType() == Type.A && address == null) {
                   address = ((ARecord) record).getAddress();
-                  expireTime = Math.max((System.currentTimeMillis() + (((ARecord) record).getTTL() * 1000)), System
-                      .currentTimeMillis()
-                      + MIN_TTL_VALUE);
+                  expireTime = Math.max(
+                      (System.currentTimeMillis() + (((ARecord) record)
+                          .getTTL() * 1000)), System.currentTimeMillis()
+                          + MIN_TTL_VALUE);
                 }
               }
             }
@@ -582,8 +570,9 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
               // LOG.info("Caching DNS Entry for Host:" + hostName);
               // update dns cache ...
               if (!noCache)
-                _dnsCache.cacheIPAddressForHost(hostName, IPAddressUtils.IPV4AddressToInteger(address.getAddress()),
-                    expireTime, cname);
+                _dnsCache.cacheIPAddressForHost(hostName, IPAddressUtils
+                    .IPV4AddressToInteger(address.getAddress()), expireTime,
+                    cname);
             }
           }
         } catch (TextParseException e) {
@@ -601,13 +590,16 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
             if (resolverException != null
                 && (resolverException instanceof TextParseException || resolverException instanceof WireParseException)) {
               result.setStatus(Status.SERVER_FAILURE);
-              result.setErrorDesc(StringUtils.stringifyException(resolverException));
+              result.setErrorDesc(StringUtils
+                  .stringifyException(resolverException));
             } else {
               result.setStatus(Status.RESOLVER_FAILURE);
               if (resolverException != null) {
                 if (_logger != null)
-                  _logger.logDNSException(hostName, StringUtils.stringifyException(resolverException));
-                result.setErrorDesc(StringUtils.stringifyException(resolverException));
+                  _logger.logDNSException(hostName, StringUtils
+                      .stringifyException(resolverException));
+                result.setErrorDesc(StringUtils
+                    .stringifyException(resolverException));
               } else {
                 if (_logger != null)
                   _logger.logDNSException(hostName, "Response was NULL");
@@ -617,7 +609,8 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
             result.setStatus(Status.SERVER_FAILURE);
             result.setErrorDesc(Rcode.string(response.getRcode()));
             if (_logger != null)
-              _logger.logDNSFailure(hostName, Rcode.string(response.getRcode()));
+              _logger
+                  .logDNSFailure(hostName, Rcode.string(response.getRcode()));
           } else if (response.getRcode() == Rcode.NOERROR) {
 
             if (address != null) {
@@ -645,8 +638,9 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     // if result is server failure ... and not via bad host cache ...
     if (!resultViaCache && result.getStatus() == Status.SERVER_FAILURE) {
       if (result.getErrorDescription().equals("NXDOMAIN")) {
-        _badHostCache.cacheIPAddressForHost(hostName, 0, System.currentTimeMillis() + NXDOMAIN_FAIL_BAD_HOST_LIFETIME,
-            null);
+        _badHostCache.cacheIPAddressForHost(hostName, 0, System
+            .currentTimeMillis()
+            + NXDOMAIN_FAIL_BAD_HOST_LIFETIME, null);
       }
     }
 
@@ -655,126 +649,87 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
     return result;
   }
 
-  public ReverseNIODNSQueryResult doReverseDNSQuery(InetAddress address, boolean useTCP, int timeoutValue) {
+  /**
+   * DNSQuery - internal class used to encapsulate an active DNS Query Request
+   * 
+   */
+  private static class DNSQuery implements Callable<NIODNSQueryResult> {
 
-    // Ask dnsjava for the inetaddress. Should be in its cache.
-    Message response = null;
-    Exception resolverException = null;
+    private String              _hostName         = null;
+    private NIODNSQueryClient   _client;
+    private int                 _timeoutValue;
+    private NIODNSLocalResolver _resolver;
+    private int                 _flags;
 
-    // check cache first ...
-    ReverseNIODNSQueryResult result = new ReverseNIODNSQueryResult(address);
+    static final int     Flag_SkipCache    = 1 << 0;
+    static final int     Flag_UseTCP       = 1 << 1;
+    static final int     Flag_HighPriority = 1 << 2;
 
-    if (true) {
+    /**
+     * constructor
+     * 
+     * @param client
+     *          - query client callback interface
+     * @param hostName
+     *          - host name to query for
+     */
+    public DNSQuery(NIODNSQueryClient client, NIODNSLocalResolver resolver,
+        String hostName, int flags, int timeoutValue) {
+
+      _hostName = hostName;
+      _client = client;
+      _flags = flags;
+      _timeoutValue = timeoutValue;
+      _resolver = resolver;
+    }
+
+    /**
+     * 
+     * overloaded from Callbale - primary work routine - called from worker
+     * thread
+     * 
+     */
+    public NIODNSQueryResult call() throws Exception {
+
+      NIODNSQueryResult result = null;
 
       try {
-
-        // allocate a simple resolver object ...
-        NIODNSSimpleResolverImpl resolver = new NIODNSSimpleResolverImpl(this, _dnsServerAddress);
-
-        // use tcp if requested ...
-        if (useTCP)
-          resolver.setTCP(true);
-
-        // set the timeout ...
-        resolver.setTimeout(timeoutValue);
-
-        // create appropriate data structures ...
-
-        Name name = ReverseMap.fromAddress(address);
-        Record rec = Record.newRecord(name, Type.PTR, DClass.IN);
-        Message query = Message.newQuery(rec);
-
-        // send it off ...
-        try {
-          response = resolver.send(query);
-        } catch (Exception e) {
-          LOG
-              .error("Reverse DNS Resolution for:" + address + " threw IOException:"
-                  + StringUtils.stringifyException(e));
-          resolverException = e;
-        }
-
-        if (response != null && response.getRcode() == Rcode.NOERROR) {
-
-          // get answer
-          Record records[] = response.getSectionArray(Section.ANSWER);
-
-          if (records != null) {
-
-            // walk records ...
-            for (Record record : records) {
-
-              // store CName for later use ...
-              if (record.getType() == Type.PTR) {
-                result.getHostNames().add(((PTRRecord) record).getTarget().toString());
-              }
-            }
-          }
-        }
-      } catch (UnknownHostException e) {
-        resolverException = e;
+        result = _resolver.doDNSQuery(_client, _hostName,
+            (_flags & DNSQuery.Flag_UseTCP) != 0,
+            (_flags & DNSQuery.Flag_SkipCache) != 0, _timeoutValue);
+      } catch (Exception e) {
+        LOG.error(StringUtils.stringifyException(e));
+        throw e;
       }
-
-      if (response == null) {
-        result.setStatus(Status.RESOLVER_FAILURE);
-        LOG.error("Critical Reverse DNS Failure for host:" + address.toString());
-        if (resolverException != null) {
-          LOG.error(StringUtils.stringifyException(resolverException));
-          result.setErrorDesc(resolverException.toString());
-        }
-      } else if (response.getRcode() != Rcode.NOERROR) {
-        result.setStatus(Status.SERVER_FAILURE);
-        result.setErrorDesc(Rcode.string(response.getRcode()));
-      } else if (response.getRcode() == Rcode.NOERROR) {
-
-        if (result.getHostNames().size() != 0) {
-          result.setStatus(Status.SUCCESS);
-        } else {
-          result.setStatus(Status.SERVER_FAILURE);
-          result.setErrorDesc("NO PTR RECORDS FOUND");
-        }
-      }
+      return result;
     }
-    // return result ... will be added to completion queue (to be retrieved via
-    // poll method)...
-    return result;
-  }
 
-  public long getCacheHitCount() {
-    return _cacheHits;
-  }
-
-  public long getCacheMissCount() {
-    return _cacheMisses;
-  }
-
-  public Object getContextObject() {
-    return _context;
-  }
-
-  public String getName() {
-    return _dnsServerAddress;
-  }
-
-  public long getQueryCount() {
-    return _queryCount;
   };
 
-  public int getQueuedItemCount() {
-    if (_threadPool != null) {
-      return ((ThreadPoolExecutor) _threadPool).getQueue().size();
+  /**
+   * queue a DNS resolution request
+   * 
+   * @param client
+   *          - the callback interface
+   * @param theHost
+   *          - the host name to query for
+   * @return
+   * @throws IOException
+   */
+  public Future<NIODNSQueryResult> resolve(NIODNSQueryClient client,
+      String theHost, boolean noCache, boolean highPriorityRequest,
+      int timeoutValue) throws IOException {
+    int flags = (noCache) ? DNSQuery.Flag_SkipCache : 0;
+    if (_useTCP) {
+      flags |= DNSQuery.Flag_UseTCP;
     }
-    return 0;
-  }
 
-  /** lookup default nameserver **/
-  private final void lookupNameServer() {
-    String server = ResolverConfig.getCurrentConfig().server();
-    if (server != null) {
-      LOG.info("Using NameServer:" + server);
-      _dnsServerAddress = server;
-    } else {
-      LOG.info("No NameServer Found.Using:" + _dnsServerAddress);
+    if (!highPriorityRequest || _highPriorityCompletionService == null)
+      return _completionService.submit(new DNSQuery(client, this, theHost,
+          flags, timeoutValue));
+    else {
+      return _highPriorityCompletionService.submit(new DNSQuery(client, this,
+          theHost, flags, timeoutValue));
     }
   }
 
@@ -806,38 +761,5 @@ public final class NIODNSLocalResolver extends IntrusiveList.IntrusiveListElemen
         qResult.fireCallback();
       }
     }
-  }
-
-  /**
-   * queue a DNS resolution request
-   * 
-   * @param client
-   *          - the callback interface
-   * @param theHost
-   *          - the host name to query for
-   * @return
-   * @throws IOException
-   */
-  public Future<NIODNSQueryResult> resolve(NIODNSQueryClient client, String theHost, boolean noCache,
-      boolean highPriorityRequest, int timeoutValue) throws IOException {
-    int flags = (noCache) ? DNSQuery.Flag_SkipCache : 0;
-    if (_useTCP) {
-      flags |= DNSQuery.Flag_UseTCP;
-    }
-
-    if (!highPriorityRequest || _highPriorityCompletionService == null)
-      return _completionService.submit(new DNSQuery(client, this, theHost, flags, timeoutValue));
-    else {
-      return _highPriorityCompletionService.submit(new DNSQuery(client, this, theHost, flags, timeoutValue));
-    }
-  };
-
-  public void setContextObject(Object obj) {
-    _context = obj;
-  }
-
-  /** set dns server address **/
-  public void setDNSServerAddress(String serverAddressInDottedDecimal) {
-    _dnsServerAddress = serverAddressInDottedDecimal;
   }
 }

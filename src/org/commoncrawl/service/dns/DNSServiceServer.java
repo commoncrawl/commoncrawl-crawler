@@ -34,25 +34,26 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.Vector;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.log4j.DailyRollingFileAppender;
 import org.apache.log4j.Layout;
 import org.apache.log4j.spi.LoggingEvent;
 import org.commoncrawl.async.Timer;
 import org.commoncrawl.crawl.common.internal.CrawlEnvironment;
+import org.commoncrawl.io.NIODNSAsyncResolver;
+import org.commoncrawl.io.NIODNSQueryLogger;
 import org.commoncrawl.io.NIODNSQueryResult;
 import org.commoncrawl.io.NIODNSCache;
-import org.commoncrawl.io.NIODNSLocalResolver;
 import org.commoncrawl.io.NIODNSQueryClient;
 import org.commoncrawl.io.NIODNSResolver;
 import org.commoncrawl.io.NIODNSCache.Node;
@@ -77,6 +78,8 @@ import org.commoncrawl.util.IntrusiveList;
 import org.commoncrawl.util.JVMStats;
 import org.commoncrawl.util.URLUtils;
 
+import com.google.common.collect.Lists;
+
 /**
  * 
  * @author rana
@@ -88,7 +91,7 @@ implements DNSService,
            DirectoryServiceCallback,
            AsyncClientChannel.ConnectionCallback,
            AsyncServerChannel.ConnectionCallback, 
-           NIODNSLocalResolver.Logger {
+           NIODNSQueryLogger {
 
   private static class CustomLoggerLayout extends Layout { 
     
@@ -116,7 +119,9 @@ implements DNSService,
   static final int     CACHE_CHECKPOINT_INTERVAL = 60 * 60 * 1000; // checkpoint the caches every 60 minutes or so
   static final int     FULL_STATS_DUMP_INTERVAL = 60 * 60 * 1000;
   /** the max age for a checkpointed terminal node **/
-  static final int     DEFAULT_MAX_CHECKPOINT_ITEM_AGE = 30 * 60 * 1000; // 30 minutes  
+  static final int     DEFAULT_MAX_CHECKPOINT_ITEM_AGE = 30 * 60 * 1000; // 30 minutes
+  static final int     DEFAULT_RESOLVER_QUEUE_SIZE = 20;
+  
   
   static final String  GOOD_NAMES_CACHE_CHECKPOINT_FILE = "dnsServiceGoodNamesCheckpoint.log";
   static final String  BAD_NAMES_CACHE_CHECKPOINT_FILE  = "dnsServiceBadNamesCheckpoint.log";
@@ -125,8 +130,9 @@ implements DNSService,
   CustomLogger _DNSFailureLog;
   CustomLogger _DNSFailureDetailLog;
   String       _serversFile;
-  IntrusiveList<NIODNSLocalResolver> _resolvers = new IntrusiveList<NIODNSLocalResolver>();
-  NIODNSLocalResolver _nextResolver = null;
+  //IntrusiveList<NIODNSResolver> _resolvers = new IntrusiveList<NIODNSResolver>();
+  PriorityQueue<NIODNSResolver> _resolverQueue;
+  //NIODNSLocalResolver _nextResolver = null;
   Timer        _statsTimer = null;
   Timer        _checkpointTimer = null;
   long         _directCacheHits=0;
@@ -135,6 +141,7 @@ implements DNSService,
   DNSRewriteFilter _rewriteFilter;
   long        _directoryServiceCallbackCookie = 0;
   long        _lastFullStatsDumpTime = -1;
+  int         _resolverQueueSize = DEFAULT_RESOLVER_QUEUE_SIZE; 
   
   AsyncClientChannel _directoryServiceChannel;
   DirectoryServiceServer.AsyncStub _directoryServiceStub;
@@ -192,7 +199,7 @@ implements DNSService,
       _DNSSuccessLog.addAppender(new DailyRollingFileAppender(new CustomLoggerLayout(),getLogDirectory() + "/dnsServiceDNSSuccess.log","yyyy-MM-dd"));
       _DNSFailureLog.addAppender(new DailyRollingFileAppender(new CustomLoggerLayout(),getLogDirectory() + "/dnsServiceDNSFailures.log","yyyy-MM-dd"));
       _DNSFailureDetailLog.addAppender(new DailyRollingFileAppender(new CustomLoggerLayout(),getLogDirectory() + "/dnsServiceDNSFailuresDetail.log","yyyy-MM-dd"));
-      NIODNSLocalResolver.setLogger(this);
+      NIODNSResolver.setLogger(this);
       
       if (_serversFile == null) {
         LOG.fatal("Servers file (--servers) is NULL!");
@@ -203,11 +210,6 @@ implements DNSService,
       // parse server file 
       parseServersFile();
       
-      if (_resolvers.size() == 0) { 
-        LOG.fatal("No Slave DNS Servers Specified in Servers File!");
-        return false;
-      }
-
 
       // create server channel ... 
       AsyncServerChannel channel = new AsyncServerChannel(this, this.getEventLoop(),this.getServerAddress(),this);
@@ -248,7 +250,7 @@ implements DNSService,
         @Override
         public void timerFired(Timer timer) {
           LOG.info("Cache Checkpoint Timer Fired");
-          checkpointDNSCache(NIODNSLocalResolver.getDNSCache(),getGoodNamesCheckpointFileName(),
+          checkpointDNSCache(NIODNSResolver.getDNSCache(),getGoodNamesCheckpointFileName(),
               new NIODNSCache.LoadFilter() {
 
             @Override
@@ -281,7 +283,7 @@ implements DNSService,
             }
           });
               
-          checkpointDNSCache(NIODNSLocalResolver.getBadHostCache(),getBadNamesCheckpointFileName(),null);
+          checkpointDNSCache(NIODNSResolver.getBadHostCache(),getBadNamesCheckpointFileName(),null);
         } 
       });
       
@@ -313,6 +315,9 @@ implements DNSService,
           }
         }
       }
+      else if (argv[i].equalsIgnoreCase("--queueSize")) {
+        _resolverQueueSize = Integer.parseInt(argv[++i]);
+      }
     }
     return (_serversFile != null && _directoryServiceAddress != null);
   }
@@ -341,8 +346,11 @@ implements DNSService,
     protected boolean _skipCache = false;
   }
   
+  AtomicInteger _activeAsyncRequests = new AtomicInteger();
   @Override
   public void doQuery(final AsyncContext<DNSQueryInfo, DNSQueryResponse> rpcContext) throws RPCException {
+    
+    _activeAsyncRequests.incrementAndGet();
     
     NIODNSQueryClientWithHopCount queryClient = new NIODNSQueryClientWithHopCount() {
 
@@ -350,7 +358,7 @@ implements DNSService,
       public void AddressResolutionFailure(NIODNSResolver eventSource,String hostName, Status status,String errorDesc) {
         
         if (eventSource != null) { 
-          rpcContext.getOutput().setSourceServer(((NIODNSLocalResolver)eventSource).getName());
+          rpcContext.getOutput().setSourceServer(eventSource.toString());
         }
         else { 
           rpcContext.getOutput().setSourceServer("CACHE");
@@ -365,12 +373,13 @@ implements DNSService,
             
             if (session != null) { 
 	            try {
-	              session.queuedWorkItems.add(getNextResolver((NIODNSLocalResolver)eventSource).resolve(this,_hostName,_skipCache,rpcContext.getInput().getIsHighPriorityRequest(),DEFAULT_DNS_TIMEOUT));
+	              session.queuedWorkItems.add(getNextResolver().resolve(this,_hostName,_skipCache,rpcContext.getInput().getIsHighPriorityRequest(),DEFAULT_DNS_TIMEOUT));
 	            } catch (IOException e) {
 	              LOG.error(CCStringUtils.stringifyException(e));
 	              rpcContext.setErrorDesc(CCStringUtils.stringifyException(e));
 	              rpcContext.setStatus(AsyncRequest.Status.Error_RequestFailed);
 	              try {
+	                _activeAsyncRequests.decrementAndGet();
 	                rpcContext.completeRequest();
 	              } catch (RPCException e1) {
 	                LOG.error(CCStringUtils.stringifyException(e1));
@@ -392,6 +401,7 @@ implements DNSService,
         
         rpcContext.setStatus(org.commoncrawl.rpc.base.internal.AsyncRequest.Status.Success);
         try {
+          _activeAsyncRequests.decrementAndGet();
           rpcContext.completeRequest();
         } catch (RPCException e) {
           LOG.error(CCStringUtils.stringifyException(e));
@@ -402,7 +412,7 @@ implements DNSService,
       public void AddressResolutionSuccess(NIODNSResolver eventSource,String hostName, String cName, InetAddress address, long addressTTL) {
         
         if (eventSource != null) { 
-          rpcContext.getOutput().setSourceServer(((NIODNSLocalResolver)eventSource).getName());
+          rpcContext.getOutput().setSourceServer(eventSource.toString());
         }
         else { 
           rpcContext.getOutput().setSourceServer("CACHE");
@@ -416,6 +426,7 @@ implements DNSService,
         }
         rpcContext.setStatus(org.commoncrawl.rpc.base.internal.AsyncRequest.Status.Success);
         try {
+          _activeAsyncRequests.decrementAndGet();
           rpcContext.completeRequest();
         } catch (RPCException e) {
           LOG.error(CCStringUtils.stringifyException(e));
@@ -429,10 +440,10 @@ implements DNSService,
       }
 
       @Override
-      public void done(NIODNSResolver eventSource,FutureTask<org.commoncrawl.io.NIODNSQueryResult> task) {
+      public void done(NIODNSResolver eventSource,Future<NIODNSQueryResult> future) {
         
         if (eventSource != null) { 
-          rpcContext.getOutput().setSourceServer(((NIODNSLocalResolver)eventSource).getName());
+          rpcContext.getOutput().setSourceServer(eventSource.toString());
         }
         else { 
           rpcContext.getOutput().setSourceServer("CACHE");
@@ -440,7 +451,7 @@ implements DNSService,
         
         DNSServiceSession session = getSessionForClient(rpcContext.getClientChannel());
         if (session != null) { 
-          session.queuedWorkItems.remove(task);
+          session.queuedWorkItems.remove(future);
         }
       } 
   
@@ -468,7 +479,7 @@ implements DNSService,
       }
       
        
-      final NIODNSQueryResult cachedResult = (!skipCache) ? NIODNSLocalResolver.checkCache(queryClient, dnsName) : null;
+      final NIODNSQueryResult cachedResult = (!skipCache) ? NIODNSResolver.checkCache(queryClient, dnsName) : null;
       
       if (cachedResult != null) { 
         _eventLoop.setTimer(new Timer(0,false,new Timer.Callback() {
@@ -489,13 +500,14 @@ implements DNSService,
         queryClient._hostName = dnsName;
         queryClient._skipCache = skipCache;
         
-        session.queuedWorkItems.add(getNextResolver(null).resolve(queryClient,dnsName,skipCache,rpcContext.getInput().getIsHighPriorityRequest(),DEFAULT_DNS_TIMEOUT));
+        session.queuedWorkItems.add(getNextResolver().resolve(queryClient,dnsName,skipCache,rpcContext.getInput().getIsHighPriorityRequest(),DEFAULT_DNS_TIMEOUT));
       }
     }
     catch (IOException e) { 
       LOG.error(CCStringUtils.stringifyException(e));
       rpcContext.setErrorDesc(CCStringUtils.stringifyException(e));
       rpcContext.setStatus(AsyncRequest.Status.Error_RequestFailed);
+      _activeAsyncRequests.decrementAndGet();
       rpcContext.completeRequest();
     }
   }
@@ -523,11 +535,14 @@ implements DNSService,
   
   private void publishStats() { 
     
+    /*
     LOG.info("**Resolver Stats. DirectCacheHits:" +_directCacheHits + ")**");
-    for (NIODNSLocalResolver resolver : _resolvers) { 
-      String resolverStats = "Resolver:" + resolver.getName() + " QueueSize:" + resolver.getQueuedItemCount() + " CacheHits:" + resolver.getCacheHitCount();
+    for (NIODNSResolver resolver : _resolvers) { 
+      String resolverStats = "Resolver:" + resolver + " QueueSize:" + resolver.getQueuedItemCount() + " CacheHits:" + resolver.getCacheHitCount()
+          +" OutstandingAsyncReq:" + _activeAsyncRequests.get();
       LOG.info(resolverStats);
     }
+    */
     
     if (_lastFullStatsDumpTime == -1) {
       _lastFullStatsDumpTime = System.currentTimeMillis();
@@ -539,9 +554,9 @@ implements DNSService,
         long timeStart = System.currentTimeMillis();
         
         LOG.info("Dumping Hot IP nodes - Locking Cache");
-        synchronized (NIODNSLocalResolver.getDNSCache()) {
+        synchronized (NIODNSResolver.getDNSCache()) {
           
-          NIODNSCache cache = NIODNSLocalResolver.getDNSCache();
+          NIODNSCache cache = NIODNSResolver.getDNSCache();
           
           List<Node> terminalIPNodes = new Vector<Node>();
           cache.collectTerminalIPNodes(terminalIPNodes);
@@ -598,26 +613,13 @@ implements DNSService,
     public LinkedList<Future<NIODNSQueryResult>> queuedWorkItems = new LinkedList<Future<org.commoncrawl.io.NIODNSQueryResult>>(); 
   }
   
-  NIODNSLocalResolver getResolverForName(String hostName) { 
-    int resolverNumber = hostName.hashCode() % _resolvers.size();
-    int i=0;
-    for (NIODNSLocalResolver resolver : _resolvers) {
-      if (i++ == resolverNumber)
-        return resolver;
-    }
-    return null;
-  }
-  
-  NIODNSLocalResolver getNextResolver(NIODNSLocalResolver skipThisResolver) { 
-    NIODNSLocalResolver selectedResolver = null;
-    for (NIODNSLocalResolver resolver : _resolvers) { 
-      if (selectedResolver == null || resolver.getQueuedItemCount() < selectedResolver.getQueuedItemCount()) { 
-        if (skipThisResolver != resolver) { 
-          selectedResolver = resolver;
-        }
-      }
-    }
-    return (selectedResolver == null) ? skipThisResolver : selectedResolver;
+  NIODNSResolver getNextResolver() { 
+    NIODNSResolver selectedResolver = _resolverQueue.remove();
+    selectedResolver.incQueuedCount();
+    _resolverQueue.add(selectedResolver);
+    
+    return selectedResolver;
+    
     /*
     NIODNSResolver resolverOut = (_nextResolver == null) ? _resolvers.getHead() : _nextResolver;
     _nextResolver = (resolverOut.getNext() != null) ? resolverOut.getNext() : null;
@@ -699,8 +701,6 @@ implements DNSService,
             LOG.info("Cache writer thread writing new checkpoint file to path:" + checkpointFileName);
             File oldCheckpointFileName = new File(checkpointFileName.getParentFile(),checkpointFileName.getName() + ".OLD");
             if (checkpointFileName.exists()) {
-              File oldFileNewName = new File(oldCheckpointFileName.getParentFile(),oldCheckpointFileName.getName() + "." + System.currentTimeMillis());
-              oldCheckpointFileName.renameTo(oldFileNewName);
               oldCheckpointFileName.delete();
               checkpointFileName.renameTo(oldCheckpointFileName);
             }
@@ -777,7 +777,7 @@ implements DNSService,
     
     if (checkpointFile.exists()) {
       try{ 
-        loadCacheFromCheckpointFile(NIODNSLocalResolver.getDNSCache(),checkpointFile, new NIODNSCache.LoadFilter() {
+        loadCacheFromCheckpointFile(NIODNSResolver.getDNSCache(),checkpointFile, new NIODNSCache.LoadFilter() {
 
           @Override
           public boolean loadItem(String hostName, String ipAddress,String name, long expireTime,long lastTouchedTime) {
@@ -818,7 +818,7 @@ implements DNSService,
       
       FileReader reader = null;
   
-      NIODNSCache cache = NIODNSLocalResolver.getDNSCache();
+      NIODNSCache cache = NIODNSResolver.getDNSCache();
       
       try {
   
@@ -904,7 +904,7 @@ implements DNSService,
     
     if (checkpointFile.exists()) {
       try{ 
-        loadCacheFromCheckpointFile(NIODNSLocalResolver.getBadHostCache(),checkpointFile,new NIODNSCache.LoadFilter() {
+        loadCacheFromCheckpointFile(NIODNSResolver.getBadHostCache(),checkpointFile,new NIODNSCache.LoadFilter() {
 
           @Override
           public boolean loadItem(String hostName, String ipAddress,String name, long expireTime,long lastTouchedTime) {
@@ -927,7 +927,7 @@ implements DNSService,
       
       FileReader reader = null;
   
-      NIODNSCache cache = NIODNSLocalResolver.getBadHostCache();
+      NIODNSCache cache = NIODNSResolver.getBadHostCache();
       
       try {
   
@@ -949,12 +949,12 @@ implements DNSService,
             
             if (errorCode.length() != 0) {
               if (errorCode.equals("NXDOMAIN")) {
-                cache.cacheIPAddressForHost(hostName,0,System.currentTimeMillis() + NIODNSLocalResolver.NXDOMAIN_FAIL_BAD_HOST_LIFETIME,null);
+                cache.cacheIPAddressForHost(hostName,0,System.currentTimeMillis() + NIODNSResolver.NXDOMAIN_FAIL_BAD_HOST_LIFETIME,null);
                 
   
               }
               else { 
-                cache.cacheIPAddressForHost(hostName,0,System.currentTimeMillis() + NIODNSLocalResolver.SERVER_FAIL_BAD_HOST_LIFETIME ,null);
+                cache.cacheIPAddressForHost(hostName,0,System.currentTimeMillis() + NIODNSResolver.SERVER_FAIL_BAD_HOST_LIFETIME ,null);
               }
             }
           }
@@ -1007,18 +1007,25 @@ implements DNSService,
     int serverCount = 0;
     
     LOG.info("Loading servers file");
+    ArrayList<String> servers = Lists.newArrayList();
     while ((dnsServerAddress = reader.readLine()) != null) {
       if (!dnsServerAddress.startsWith("#")) {
-        int ipAddress = IPAddressUtils.IPV4AddressToInteger(InetAddress.getByName(dnsServerAddress).getAddress());
-        LOG.info("Added DNS Resolver with IP:" + IPAddressUtils.IntegerToIPAddressString(ipAddress) + " to list.");
-        _resolvers.addTail(
-            new NIODNSLocalResolver(
-                IPAddressUtils.IntegerToIPAddressString(ipAddress),
-                getEventLoop(),
-                Executors.newFixedThreadPool(20),
-                Executors.newFixedThreadPool(15),
-                true));
+        servers.add(InetAddress.getByName(dnsServerAddress).getHostAddress());
       }
+    }
+    
+    LOG.info("Servers list is:" + servers);
+    
+    if (servers.size() == 0) { 
+      throw new IOException("Empty Servers List!");
+    }
+    
+    // allocate resolver queue 
+    _resolverQueue = new PriorityQueue<NIODNSResolver>(_resolverQueueSize);
+    
+    // populate resolvers queue 
+    for (int i=0;i<_resolverQueueSize;++i) { 
+      _resolverQueue.add(new NIODNSAsyncResolver(_eventLoop, servers.get(i%servers.size())));
     }
   }
 

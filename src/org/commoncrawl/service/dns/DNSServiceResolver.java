@@ -36,12 +36,12 @@ import org.commoncrawl.service.dns.DNSService;
 import org.commoncrawl.util.CCStringUtils;
 import org.commoncrawl.util.IPAddressUtils;
 
-/** a resolver conforming to the NIODNSResolver Intfc that use the 
+/** a resolver conforming to the NIODNSResolver Intfc that uses the 
  * dns service for dns resolution services 
  * 
  * @author rana 
  */
-public class DNSServiceResolver implements NIODNSResolver{
+public class DNSServiceResolver extends NIODNSResolver{
 
   static final Log LOG = LogFactory.getLog(DNSServiceResolver.class);
   
