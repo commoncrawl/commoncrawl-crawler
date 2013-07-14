@@ -34,6 +34,14 @@ public class NIOBufferListOutputStream extends OutputStream {
   private final int capacity() {
     return (_buffer != null) ? _buffer.remaining() : 0;
   }
+  
+  /** 
+   * query the amount of data buffered in this stream's active bytebuffer
+   * @return bytes in active bytebuffer
+   */
+  public final int buffered() { 
+    return (_buffer != null) ? _buffer.position() : 0;
+  }
 
   // @Override
   @Override
@@ -44,7 +52,7 @@ public class NIOBufferListOutputStream extends OutputStream {
     }
     _target.flush();
   }
-
+  
   private final void grow() throws IOException {
     synchronized (this) {
 
