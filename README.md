@@ -1,5 +1,5 @@
 This is the primary repository for the services & map-reduce jobs used to produce the 
-CommonCrawl web corpus. 
+CommonCrawl web corpus from 2008 to 2012. 
 
 ## Tree Structure 
 
